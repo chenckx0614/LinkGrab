@@ -26,9 +26,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,10 +87,12 @@ fun SettingsScreen(
         when (val result = updateResult) {
             is UpdateResult.UpToDate -> {
                 Toast.makeText(context, "已是最新版本 v${result.currentVersion}", Toast.LENGTH_SHORT).show()
+                kotlinx.coroutines.delay(500)
                 viewModel.dismissUpdate()
             }
             is UpdateResult.CheckFailed -> {
                 Toast.makeText(context, "检查失败: ${result.error}", Toast.LENGTH_SHORT).show()
+                kotlinx.coroutines.delay(500)
                 viewModel.dismissUpdate()
             }
             else -> {}
@@ -318,41 +322,54 @@ fun SettingsScreen(
     }
 
     // Update dialog (miuix style)
-    val showUpdateDialog = updateResult is UpdateResult.UpdateAvailable
-    val updateInfo = updateResult as? UpdateResult.UpdateAvailable
-
-    top.yukonga.miuix.kmp.overlay.OverlayDialog(
-        show = showUpdateDialog,
-        title = "发现新版本",
-        summary = updateInfo?.let { "v${it.currentVersion} → v${it.latestVersion}" } ?: "",
-        onDismissRequest = { viewModel.dismissUpdate() },
-    ) {
-        Column(modifier = Modifier.padding(top = 8.dp)) {
-            if (updateInfo != null && updateInfo.releaseNotes.isNotEmpty()) {
-                Text(
-                    text = updateInfo.releaseNotes,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 200.dp)
-                        .padding(bottom = 16.dp),
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Button(onClick = { viewModel.dismissUpdate() }) {
-                    Text("稍后")
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(onClick = {
-                    updateInfo?.downloadUrl?.let { url ->
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    updateResult?.let { result ->
+        if (result is UpdateResult.UpdateAvailable) {
+            var showDialog by remember { mutableStateOf(true) }
+            if (showDialog) {
+                top.yukonga.miuix.kmp.overlay.OverlayDialog(
+                    show = true,
+                    title = "发现新版本",
+                    summary = "v${result.currentVersion} → v${result.latestVersion}",
+                    onDismissRequest = {
+                        showDialog = false
+                        viewModel.dismissUpdate()
+                    },
+                ) {
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        if (result.releaseNotes.isNotEmpty()) {
+                            Text(
+                                text = result.releaseNotes,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp)
+                                    .padding(bottom = 16.dp),
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            Button(onClick = {
+                                showDialog = false
+                                viewModel.dismissUpdate()
+                            }) {
+                                Text("稍后")
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(onClick = {
+                                try {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.downloadUrl)))
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
+                                }
+                                showDialog = false
+                                viewModel.dismissUpdate()
+                            }) {
+                                Text("去更新")
+                            }
+                        }
                     }
-                    viewModel.dismissUpdate()
-                }) {
-                    Text("去更新")
                 }
             }
         }

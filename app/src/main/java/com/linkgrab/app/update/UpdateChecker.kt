@@ -57,13 +57,19 @@ class UpdateChecker {
             val response = client.newCall(request).execute()
             val body = response.body?.string() ?: return null
 
-            if (response.code != 200) return null
+            if (response.code != 200) {
+                Log.d(TAG, "Gitee API returned ${response.code}")
+                return null
+            }
 
             val release = json.decodeFromString<GiteeRelease>(body)
             val latestVersion = release.tag_name.removePrefix("v")
 
             // Skip if tag is not a valid version (e.g. "apk")
-            if (!latestVersion.contains(".")) return null
+            if (!latestVersion.contains(".")) {
+                Log.d(TAG, "Gitee tag is not a version: ${release.tag_name}")
+                return null
+            }
 
             val releaseNotes = release.body ?: ""
             val downloadUrl = release.html_url ?: GITEE_RELEASES_URL
