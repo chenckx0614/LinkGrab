@@ -17,6 +17,8 @@ import com.linkgrab.app.data.model.Platform
 import com.linkgrab.app.data.repository.ParseRepository
 import com.linkgrab.app.data.repository.SettingsRepository
 import com.linkgrab.app.notification.LiveUpdatesHelper
+import com.linkgrab.app.update.UpdateChecker
+import com.linkgrab.app.update.UpdateResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +54,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _predictiveBack = MutableStateFlow(0)
     val predictiveBack: StateFlow<Int> = _predictiveBack.asStateFlow()
 
+    private val _updateResult = MutableStateFlow<UpdateResult?>(null)
+    val updateResult: StateFlow<UpdateResult?> = _updateResult.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val updateChecker = UpdateChecker()
+
     private val httpClient = OkHttpClient()
 
     init {
@@ -65,6 +75,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _predictiveBack.value = mode
             }
         }
+        // Auto check for updates on startup
+        checkForUpdate()
     }
 
     fun setColorMode(mode: Int) {
@@ -139,6 +151,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteHistoryById(id: Long) {
         viewModelScope.launch { historyRepository.deleteById(id) }
+    }
+
+    // Update check
+    fun checkForUpdate() {
+        viewModelScope.launch {
+            _isCheckingUpdate.value = true
+            _updateResult.value = updateChecker.checkForUpdate()
+            _isCheckingUpdate.value = false
+        }
+    }
+
+    fun dismissUpdate() {
+        _updateResult.value = null
     }
 
     fun clearError() {

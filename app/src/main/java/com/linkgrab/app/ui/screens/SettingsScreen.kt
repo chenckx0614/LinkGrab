@@ -8,12 +8,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,6 +23,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -40,9 +44,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.linkgrab.app.BuildConfig
 import com.linkgrab.app.R
+import com.linkgrab.app.update.UpdateResult
 import com.linkgrab.app.viewmodel.MainViewModel
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -61,6 +67,8 @@ fun SettingsScreen(
     val colorMode by viewModel.colorMode.collectAsState()
     val liveUpdatesEnabled by viewModel.liveUpdatesEnabled.collectAsState()
     val predictiveBack by viewModel.predictiveBack.collectAsState()
+    val updateResult by viewModel.updateResult.collectAsState()
+    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
 
@@ -135,6 +143,29 @@ fun SettingsScreen(
                             viewModel.setPredictiveBack(if (enabled) 1 else 2)
                         },
                     )
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+
+            // Update check
+            item {
+                Text(text = "关于", style = MiuixTheme.textStyles.title1, modifier = Modifier.padding(bottom = 8.dp))
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.checkForUpdate() }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(text = "检查更新", style = MiuixTheme.textStyles.title2, modifier = Modifier.weight(1f))
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        } else {
+                            Icon(MiuixIcons.ChevronForward, contentDescription = "检查")
+                        }
+                    }
                 }
             }
 
@@ -253,5 +284,47 @@ fun SettingsScreen(
 
             item { Spacer(modifier = Modifier.height(32.dp)) }
         }
+    }
+
+    // Update available dialog
+    when (val result = updateResult) {
+        is UpdateResult.UpdateAvailable -> {
+            androidx.compose.ui.window.Dialog(onDismissRequest = { viewModel.dismissUpdate() }) {
+                Card(modifier = Modifier.padding(24.dp)) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(text = "发现新版本", style = MiuixTheme.textStyles.title2)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "v${result.currentVersion} → v${result.latestVersion}",
+                            color = MiuixTheme.colorScheme.primary,
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = "更新内容：", style = MiuixTheme.textStyles.title2)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = result.releaseNotes.ifEmpty { "暂无更新说明" },
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()),
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            Button(onClick = { viewModel.dismissUpdate() }) { Text("稍后") }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(onClick = {
+                                uriHandler.openUri(result.downloadUrl)
+                                viewModel.dismissUpdate()
+                            }) { Text("去更新") }
+                        }
+                    }
+                }
+            }
+        }
+        is UpdateResult.UpToDate -> {
+            // Already up to date - no dialog needed, just a toast
+        }
+        is UpdateResult.CheckFailed -> {
+            // Check failed - no dialog needed
+        }
+        null -> {}
     }
 }

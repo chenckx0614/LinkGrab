@@ -13,6 +13,18 @@
    cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/LinkGrab-v{版本号}.apk
    ```
 4. **更新 `CLAUDE.md`** 底部的版本历史表
+5. **Push 到 GitHub 和 Gitee**：
+   ```bash
+   git add -A && git commit -m "v{版本号}: {更新摘要}"
+   git push origin main
+   git push gitee main
+   ```
+6. **创建 GitHub Release 并上传 APK**：
+   ```bash
+   gh release create v{版本号} app/build/outputs/apk/debug/LinkGrab-v{版本号}.apk \
+     --title "LinkGrab v{版本号}" \
+     --notes "{更新内容列表}"
+   ```
 
 版本号格式：`major.minor.patch`（如 1.2.1），versionCode 递增。
 
@@ -102,6 +114,7 @@ linkgrab/app/src/main/java/com/linkgrab/app/
 
 | 版本 | 日期 | 内容 |
 |------|------|------|
+| 1.2.2 | 2026-06-19 | 检查更新功能，启动自动检测，跳转Gitee下载 |
 | 1.2.1 | 2026-06-19 | 历史记录模块，修复返回栈，修复模糊遮挡 |
 | 1.2.0 | 2026-06-19 | v1.2 大版本：历史记录 + DataStore持久化 |
 | 1.1.9 | 2026-06-18 | 全面屏沉浸式，版本号动态读取 |
