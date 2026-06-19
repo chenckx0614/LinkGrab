@@ -29,6 +29,7 @@ data class UpdateLogItem(
 )
 
 private val updateLogs = listOf(
+    UpdateLogItem("1.2.4", "2026-06-19", listOf("优化设置页UI排版", "分组展示更清晰")),
     UpdateLogItem("1.2.3", "2026-06-19", listOf("修复检查更新检测不到版本", "已是最新版提示", "双平台Release")),
     UpdateLogItem("1.2.2", "2026-06-19", listOf("新增检查更新功能", "启动自动检测版本")),
     UpdateLogItem("1.2.1", "2026-06-19", listOf("新增历史记录模块", "修复返回栈导航", "修复高斯模糊遮挡文字")),
