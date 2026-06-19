@@ -34,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -349,7 +351,9 @@ fun SettingsScreen(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(onClick = {
-                    uriHandler.openUri(updateInfo?.downloadUrl ?: "")
+                    updateInfo?.downloadUrl?.let { url ->
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    }
                     viewModel.dismissUpdate()
                 }) {
                     Text("去更新")
