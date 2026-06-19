@@ -35,27 +35,42 @@ class UpdateChecker {
             val currentVersion = BuildConfig.VERSION_NAME
             Log.d(TAG, "Current version: $currentVersion")
 
+            // Try Gitee API first, fallback to GitHub
+            val result = tryGiteeApi(currentVersion)
+            if (result != null) return@withContext result
+
+            // Fallback: try GitHub API
+            tryGithubApi(currentVersion)
+        } catch (e: Exception) {
+            Log.e(TAG, "Check failed: ${e.message}")
+            UpdateResult.CheckFailed(error = e.message ?: "网络连接失败")
+        }
+    }
+
+    private fun tryGiteeApi(currentVersion: String): UpdateResult? {
+        return try {
             val request = Request.Builder()
                 .url(GITEE_API)
                 .header("Accept", "application/json")
                 .build()
 
             val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: throw Exception("Empty response")
+            val body = response.body?.string() ?: return null
 
-            if (response.code != 200) {
-                throw Exception("HTTP ${response.code}")
-            }
+            if (response.code != 200) return null
 
             val release = json.decodeFromString<GiteeRelease>(body)
             val latestVersion = release.tag_name.removePrefix("v")
+
+            // Skip if tag is not a valid version (e.g. "apk")
+            if (!latestVersion.contains(".")) return null
+
             val releaseNotes = release.body ?: ""
             val downloadUrl = release.html_url ?: GITEE_RELEASES_URL
 
-            Log.d(TAG, "Latest version: $latestVersion")
+            Log.d(TAG, "Gitee latest: $latestVersion")
 
             if (isNewerVersion(latestVersion, currentVersion)) {
-                Log.d(TAG, "Update available: $currentVersion -> $latestVersion")
                 UpdateResult.UpdateAvailable(
                     currentVersion = currentVersion,
                     latestVersion = latestVersion,
@@ -63,12 +78,41 @@ class UpdateChecker {
                     downloadUrl = downloadUrl,
                 )
             } else {
-                Log.d(TAG, "Up to date")
                 UpdateResult.UpToDate(currentVersion = currentVersion)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Check failed: ${e.message}")
-            UpdateResult.CheckFailed(error = e.message ?: "Unknown error")
+            Log.d(TAG, "Gitee API failed: ${e.message}")
+            null
+        }
+    }
+
+    private fun tryGithubApi(currentVersion: String): UpdateResult {
+        val request = Request.Builder()
+            .url("https://api.github.com/repos/chenckx0614/LinkGrab/releases/latest")
+            .header("Accept", "application/json")
+            .build()
+
+        val response = client.newCall(request).execute()
+        val body = response.body?.string() ?: throw Exception("Empty response")
+
+        if (response.code != 200) throw Exception("HTTP ${response.code}")
+
+        val release = json.decodeFromString<GiteeRelease>(body)
+        val latestVersion = release.tag_name.removePrefix("v")
+        val releaseNotes = release.body ?: ""
+        val downloadUrl = release.html_url ?: "https://github.com/chenckx0614/LinkGrab/releases"
+
+        Log.d(TAG, "GitHub latest: $latestVersion")
+
+        return if (isNewerVersion(latestVersion, currentVersion)) {
+            UpdateResult.UpdateAvailable(
+                currentVersion = currentVersion,
+                latestVersion = latestVersion,
+                releaseNotes = releaseNotes,
+                downloadUrl = downloadUrl,
+            )
+        } else {
+            UpdateResult.UpToDate(currentVersion = currentVersion)
         }
     }
 

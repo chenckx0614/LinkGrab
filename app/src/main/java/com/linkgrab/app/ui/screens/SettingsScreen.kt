@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -283,6 +284,21 @@ fun SettingsScreen(
             }
 
             item { Spacer(modifier = Modifier.height(32.dp)) }
+        }
+    }
+
+    // Show toast for up-to-date
+    LaunchedEffect(updateResult) {
+        when (val result = updateResult) {
+            is UpdateResult.UpToDate -> {
+                android.widget.Toast.makeText(context, "已是最新版本 v${result.currentVersion}", android.widget.Toast.LENGTH_SHORT).show()
+                viewModel.dismissUpdate()
+            }
+            is UpdateResult.CheckFailed -> {
+                android.widget.Toast.makeText(context, "检查失败: ${result.error}", android.widget.Toast.LENGTH_SHORT).show()
+                viewModel.dismissUpdate()
+            }
+            else -> {}
         }
     }
 

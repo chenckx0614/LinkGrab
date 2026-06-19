@@ -29,7 +29,8 @@ data class UpdateLogItem(
 )
 
 private val updateLogs = listOf(
-    UpdateLogItem("1.2.2", "2026-06-19", listOf("新增检查更新功能", "启动自动检测版本", "跳转Gitee下载更新")),
+    UpdateLogItem("1.2.3", "2026-06-19", listOf("修复检查更新检测不到版本", "已是最新版提示", "双平台Release")),
+    UpdateLogItem("1.2.2", "2026-06-19", listOf("新增检查更新功能", "启动自动检测版本")),
     UpdateLogItem("1.2.1", "2026-06-19", listOf("新增历史记录模块", "修复返回栈导航", "修复高斯模糊遮挡文字")),
     UpdateLogItem("1.2.0", "2026-06-19", listOf("v1.2 大版本：历史记录 + Room数据库")),
     UpdateLogItem("1.1.9", "2026-06-18", listOf("全面屏沉浸式适配", "版本号动态读取")),
