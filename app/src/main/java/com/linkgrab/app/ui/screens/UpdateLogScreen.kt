@@ -29,6 +29,7 @@ data class UpdateLogItem(
 )
 
 private val updateLogs = listOf(
+    UpdateLogItem("1.2.6", "2026-06-19", listOf("修复去更新跳转链接")),
     UpdateLogItem("1.2.5", "2026-06-19", listOf("更新弹窗改为miuix风格")),
     UpdateLogItem("1.2.4", "2026-06-19", listOf("优化设置页UI排版", "分组展示更清晰")),
     UpdateLogItem("1.2.3", "2026-06-19", listOf("修复检查更新检测不到版本", "已是最新版提示", "双平台Release")),
