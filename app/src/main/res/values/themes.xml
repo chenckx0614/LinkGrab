@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base app theme for edge-to-edge display -->
+    <style name="Theme.LinkGrab" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Transparent status bar -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- Transparent navigation bar -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Transparent navigation bar divider -->
+        <item name="android:navigationBarDividerColor">@android:color/transparent</item>
+        <!-- Draw behind system bars -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <!-- Light status bar icons for light theme -->
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- Light navigation bar icons for light theme -->
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!-- Dark theme variant -->
+    <style name="Theme.LinkGrab.Dark" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarDividerColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>
