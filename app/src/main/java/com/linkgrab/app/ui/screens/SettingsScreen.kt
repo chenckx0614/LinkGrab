@@ -266,7 +266,7 @@ fun SettingsScreen(
                 // Description
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "一款媒体下载工具，支持解析抖音、小红书的分享链接，获取无水印图片和视频。",
+                        text = "这里可以下载无水印的抖音视频或小红书图片。",
                         color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier.padding(16.dp),
                     )
