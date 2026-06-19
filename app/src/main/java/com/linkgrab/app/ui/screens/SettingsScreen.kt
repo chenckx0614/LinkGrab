@@ -10,7 +10,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -75,12 +74,6 @@ fun SettingsScreen(
     val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()
 
-    val scrollProgress by remember {
-        derivedStateOf {
-            if (listState.firstVisibleItemIndex > 0) 1f else 0f
-        }
-    }
-
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -102,9 +95,12 @@ fun SettingsScreen(
         }
     }
 
+    val backdrop = rememberBlurBackdrop()
+    val blurActive = backdrop != null
+
     Scaffold(
         topBar = {
-            Box(modifier = blurredBarModifier(scrollProgress)) {
+            BlurredBar(backdrop = backdrop, blurEnabled = blurActive) {
                 TopAppBar(
                     title = "设置",
                     largeTitle = "设置",

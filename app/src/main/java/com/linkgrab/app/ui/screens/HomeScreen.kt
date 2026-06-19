@@ -4,7 +4,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -52,12 +51,6 @@ fun HomeScreen(
     val scrollBehavior = MiuixScrollBehavior()
     val listState = rememberLazyListState()
 
-    val scrollProgress by remember {
-        derivedStateOf {
-            if (listState.firstVisibleItemIndex > 0) 1f else 0f
-        }
-    }
-
     LaunchedEffect(initialShareText) {
         if (!initialShareText.isNullOrBlank()) {
             inputUrl = initialShareText
@@ -78,10 +71,13 @@ fun HomeScreen(
         }
     }
 
+    val backdrop = rememberBlurBackdrop()
+    val blurActive = backdrop != null
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            Box(modifier = blurredBarModifier(scrollProgress)) {
+            BlurredBar(backdrop = backdrop, blurEnabled = blurActive) {
                 TopAppBar(
                     title = "LinkGrab",
                     largeTitle = "LinkGrab",

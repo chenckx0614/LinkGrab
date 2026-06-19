@@ -25,7 +25,9 @@ import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import com.linkgrab.app.ui.screens.BlurredBar
 import com.linkgrab.app.ui.screens.HistoryScreen
+import com.linkgrab.app.ui.screens.rememberBlurBackdrop
 import com.linkgrab.app.ui.screens.HomeScreen
 import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
@@ -54,10 +56,14 @@ fun AppNavigation(
 
     val showBottomBar = currentDestination?.route in bottomNavRoutes
 
+    val backdrop = rememberBlurBackdrop()
+    val blurActive = backdrop != null
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
+                BlurredBar(backdrop = backdrop, blurEnabled = blurActive) {
                 NavigationBar(defaultWindowInsetsPadding = false) {
                     NavigationBarItem(
                         icon = MiuixIcons.Image,
@@ -86,6 +92,7 @@ fun AppNavigation(
                         },
                     )
                 }
+                } // BlurredBar
             }
         },
     ) { innerPadding ->
