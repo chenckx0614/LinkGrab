@@ -319,49 +319,43 @@ fun SettingsScreen(
         }
     }
 
-    // Update dialog
-    when (val result = updateResult) {
-        is UpdateResult.UpdateAvailable -> {
-            androidx.compose.ui.window.Dialog(onDismissRequest = { viewModel.dismissUpdate() }) {
-                Card(modifier = Modifier.padding(24.dp)) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text(text = "发现新版本", style = MiuixTheme.textStyles.title2)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "v${result.currentVersion} → v${result.latestVersion}",
-                            color = MiuixTheme.colorScheme.primary,
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(text = "更新内容：", style = MiuixTheme.textStyles.title2)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = result.releaseNotes.ifEmpty { "暂无更新说明" },
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            modifier = Modifier
-                                .heightIn(max = 200.dp)
-                                .padding(bottom = 4.dp),
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            Button(onClick = { viewModel.dismissUpdate() }) {
-                                Text("稍后")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(onClick = {
-                                uriHandler.openUri(result.downloadUrl)
-                                viewModel.dismissUpdate()
-                            }) {
-                                Text("去更新")
-                            }
-                        }
-                    }
+    // Update dialog (miuix style)
+    val showUpdateDialog = updateResult is UpdateResult.UpdateAvailable
+    val updateInfo = updateResult as? UpdateResult.UpdateAvailable
+
+    top.yukonga.miuix.kmp.overlay.OverlayDialog(
+        show = showUpdateDialog,
+        title = "发现新版本",
+        summary = updateInfo?.let { "v${it.currentVersion} → v${it.latestVersion}" } ?: "",
+        onDismissRequest = { viewModel.dismissUpdate() },
+    ) {
+        Column(modifier = Modifier.padding(top = 8.dp)) {
+            if (updateInfo != null && updateInfo.releaseNotes.isNotEmpty()) {
+                Text(
+                    text = updateInfo.releaseNotes,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                        .padding(bottom = 16.dp),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Button(onClick = { viewModel.dismissUpdate() }) {
+                    Text("稍后")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(onClick = {
+                    uriHandler.openUri(updateInfo?.downloadUrl ?: "")
+                    viewModel.dismissUpdate()
+                }) {
+                    Text("去更新")
                 }
             }
         }
-        else -> {}
     }
 }
 
