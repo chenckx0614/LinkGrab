@@ -321,57 +321,35 @@ fun SettingsScreen(
         }
     }
 
-    // Update dialog (miuix style)
+    // Update dialog
     updateResult?.let { result ->
         if (result is UpdateResult.UpdateAvailable) {
-            var showDialog by remember { mutableStateOf(true) }
-            if (showDialog) {
-                top.yukonga.miuix.kmp.overlay.OverlayDialog(
-                    show = true,
-                    title = "发现新版本",
-                    summary = "v${result.currentVersion} → v${result.latestVersion}",
-                    onDismissRequest = {
-                        showDialog = false
-                        viewModel.dismissUpdate()
-                    },
-                ) {
-                    Column(modifier = Modifier.padding(top = 8.dp)) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { viewModel.dismissUpdate() },
+                title = { Text("发现新版本") },
+                text = {
+                    Column {
+                        Text("v${result.currentVersion} → v${result.latestVersion}")
                         if (result.releaseNotes.isNotEmpty()) {
-                            Text(
-                                text = result.releaseNotes,
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = 200.dp)
-                                    .padding(bottom = 16.dp),
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            Button(onClick = {
-                                showDialog = false
-                                viewModel.dismissUpdate()
-                            }) {
-                                Text("稍后")
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(onClick = {
-                                try {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.downloadUrl)))
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-                                }
-                                showDialog = false
-                                viewModel.dismissUpdate()
-                            }) {
-                                Text("去更新")
-                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(result.releaseNotes)
                         }
                     }
-                }
-            }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        try {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.downloadUrl)))
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
+                        }
+                        viewModel.dismissUpdate()
+                    }) { Text("去更新") }
+                },
+                dismissButton = {
+                    Button(onClick = { viewModel.dismissUpdate() }) { Text("稍后") }
+                },
+            )
         }
     }
 }

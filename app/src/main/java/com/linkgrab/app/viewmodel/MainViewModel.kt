@@ -75,8 +75,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _predictiveBack.value = mode
             }
         }
-        // Auto check for updates on startup
-        checkForUpdate()
     }
 
     fun setColorMode(mode: Int) {

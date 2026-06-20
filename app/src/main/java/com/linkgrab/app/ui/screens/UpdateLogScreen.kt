@@ -29,6 +29,7 @@ data class UpdateLogItem(
 )
 
 private val updateLogs = listOf(
+    UpdateLogItem("1.2.10", "2026-06-20", listOf("修复进入设置页闪退", "关闭启动自动检测更新", "对话框改为Material3组件")),
     UpdateLogItem("1.2.9", "2026-06-19", listOf("更新关于页介绍文案")),
     UpdateLogItem("1.2.8", "2026-06-19", listOf("修复检查更新闪退")),
     UpdateLogItem("1.2.7", "2026-06-19", listOf("顶栏/底栏miuix高斯模糊效果")),
