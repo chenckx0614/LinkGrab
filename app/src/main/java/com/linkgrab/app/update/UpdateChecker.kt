@@ -72,8 +72,6 @@ class UpdateChecker {
             }
 
             val releaseNotes = release.body ?: ""
-            val downloadUrl = release.html_url ?: GITEE_RELEASES_URL
-
             Log.d(TAG, "Gitee latest: $latestVersion")
 
             if (isNewerVersion(latestVersion, currentVersion)) {
@@ -81,7 +79,7 @@ class UpdateChecker {
                     currentVersion = currentVersion,
                     latestVersion = latestVersion,
                     releaseNotes = releaseNotes,
-                    downloadUrl = downloadUrl,
+                    downloadUrl = GITEE_RELEASES_URL,
                 )
             } else {
                 UpdateResult.UpToDate(currentVersion = currentVersion)
