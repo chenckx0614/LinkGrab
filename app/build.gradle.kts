@@ -13,8 +13,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 31
-        versionName = "1.2.10"
+        versionCode = 32
+        versionName = "1.2.11"
     }
 
     buildTypes {
