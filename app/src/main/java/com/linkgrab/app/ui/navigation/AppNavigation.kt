@@ -70,12 +70,16 @@ fun AppNavigation(
     val showBottomBar = currentDestination?.route in bottomNavRoutes
     val context = LocalContext.current
     val guideShown by viewModel.guideShown.collectAsState()
+    var guideChecked by remember { mutableStateOf(false) }
 
-    // Check if guide should be shown
-    LaunchedEffect(guideShown) {
-        if (!guideShown) {
-            navController.navigate(Screen.Guide.route) {
-                popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+    // Only check once on first composition
+    LaunchedEffect(Unit) {
+        if (!guideChecked) {
+            guideChecked = true
+            if (!guideShown) {
+                navController.navigate(Screen.Guide.route) {
+                    popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+                }
             }
         }
     }
