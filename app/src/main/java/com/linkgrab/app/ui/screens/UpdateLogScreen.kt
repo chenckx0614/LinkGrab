@@ -29,6 +29,17 @@ data class UpdateLogItem(
 )
 
 private val updateLogs = listOf(
+    UpdateLogItem("1.4.1", "2026-06-20", listOf(
+        "历史记录支持按平台筛选",
+        "下载进度百分比显示",
+        "首次打开引导页",
+    )),
+    UpdateLogItem("1.4.0", "2026-06-20", listOf(
+        "图片预览双指缩放+拖拽",
+        "复制无水印链接",
+        "下载完成震动反馈",
+        "批量选择下载",
+    )),
     UpdateLogItem("1.3.0", "2026-06-20", listOf(
         "v1.3 大版本：代码全面清理 + Bug 修复",
         "下载接入 Live Updates 通知（进度+完成提示）",

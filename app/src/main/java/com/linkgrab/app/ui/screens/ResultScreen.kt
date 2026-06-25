@@ -319,8 +319,10 @@ fun ResultScreen(
                                 }
                             }, modifier = Modifier.weight(1f),
                                 enabled = downloadState !is DownloadState.Downloading && result.videoUrl != null) {
-                                if (downloadState is DownloadState.Downloading) CircularProgressIndicator(modifier = Modifier.height(20.dp))
-                                else Text("下载视频")
+                                if (downloadState is DownloadState.Downloading) {
+                                    val progress = (downloadState as DownloadState.Downloading).progress
+                                    Text("下载中 $progress%")
+                                } else Text("下载视频")
                             }
                         }
                     }

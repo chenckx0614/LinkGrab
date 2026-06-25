@@ -59,6 +59,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
 
+    private val _guideShown = MutableStateFlow(false)
+    val guideShown: StateFlow<Boolean> = _guideShown.asStateFlow()
+
     private val updateChecker = UpdateChecker()
 
     private val httpClient = OkHttpClient.Builder()
@@ -77,6 +80,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             settingsRepository.liveUpdatesEnabled.collect { _liveUpdatesEnabled.value = it }
+        }
+        viewModelScope.launch {
+            settingsRepository.guideShown.collect { _guideShown.value = it }
         }
         // 启动时检查更新
         viewModelScope.launch {
@@ -101,6 +107,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleLiveUpdates(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setLiveUpdatesEnabled(enabled) }
+    }
+
+    fun markGuideShown() {
+        viewModelScope.launch { settingsRepository.setGuideShown() }
     }
 
     // ==================== Parse ====================
@@ -169,7 +179,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun downloadImage(context: Context, url: String, filename: String) {
         val jobId = ++downloadJobCount
         viewModelScope.launch {
-            _downloadState.value = DownloadState.Downloading
+            _downloadState.value = DownloadState.Downloading(0)
             if (_liveUpdatesEnabled.value) {
                 liveUpdatesHelper.startProgress(title = "LinkGrab", content = "下载图片中...", indeterminate = true)
             }
@@ -206,7 +216,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun downloadVideo(context: Context, url: String, filename: String) {
         val jobId = ++downloadJobCount
         viewModelScope.launch {
-            _downloadState.value = DownloadState.Downloading
+            _downloadState.value = DownloadState.Downloading(0)
             if (_liveUpdatesEnabled.value) {
                 liveUpdatesHelper.startProgress(title = "LinkGrab", content = "下载视频中...", indeterminate = true)
             }
@@ -217,8 +227,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         .build()
                     val response = httpClient.newCall(request).execute()
                     val body = response.body ?: throw Exception("Empty response")
-                    saveVideoToGallery(context, body.byteStream(), filename)
-                    body.close()
+                    val contentLength = body.contentLength()
+                    val inputStream = body.byteStream()
+
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Video.Media.DISPLAY_NAME, filename)
+                        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/LinkGrab")
+                            put(MediaStore.Video.Media.IS_PENDING, 1)
+                        }
+                    }
+                    val resolver = context.contentResolver
+                    val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
+                        ?: throw Exception("Failed to create file")
+
+                    resolver.openOutputStream(uri)?.use { out ->
+                        val buffer = ByteArray(8192)
+                        var bytesRead: Int
+                        var totalRead = 0L
+                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                            out.write(buffer, 0, bytesRead)
+                            totalRead += bytesRead
+                            if (contentLength > 0) {
+                                val progress = ((totalRead * 100) / contentLength).toInt()
+                                if (downloadJobCount == jobId) {
+                                    _downloadState.value = DownloadState.Downloading(progress)
+                                    if (_liveUpdatesEnabled.value) {
+                                        liveUpdatesHelper.updateProgress(title = "LinkGrab", content = "下载视频: $progress%", progress = progress, maxProgress = 100)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    inputStream.close()
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        contentValues.clear()
+                        contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
+                        resolver.update(uri, contentValues, null, null)
+                    }
                 }
                 if (downloadJobCount == jobId) {
                     _downloadState.value = DownloadState.Success
@@ -311,7 +359,7 @@ data class ParseUiState(
 
 sealed class DownloadState {
     data object Idle : DownloadState()
-    data object Downloading : DownloadState()
+    data class Downloading(val progress: Int = 0) : DownloadState()
     data object Success : DownloadState()
     data class Error(val message: String) : DownloadState()
 }

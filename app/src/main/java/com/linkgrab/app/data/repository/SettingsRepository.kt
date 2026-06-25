@@ -17,6 +17,7 @@ class SettingsRepository(private val context: Context) {
         private val COLOR_MODE_KEY = intPreferencesKey("color_mode")
         private val PREDICTIVE_BACK_KEY = intPreferencesKey("predictive_back")
         private val LIVE_UPDATES_KEY = intPreferencesKey("live_updates")
+        private val GUIDE_SHOWN_KEY = intPreferencesKey("guide_shown")
     }
 
     val colorMode: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -29,6 +30,10 @@ class SettingsRepository(private val context: Context) {
 
     val liveUpdatesEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[LIVE_UPDATES_KEY] == 1
+    }
+
+    val guideShown: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[GUIDE_SHOWN_KEY] == 1
     }
 
     suspend fun setColorMode(mode: Int) {
@@ -46,6 +51,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setLiveUpdatesEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[LIVE_UPDATES_KEY] = if (enabled) 1 else 0
+        }
+    }
+
+    suspend fun setGuideShown() {
+        context.dataStore.edit { preferences ->
+            preferences[GUIDE_SHOWN_KEY] = 1
         }
     }
 }

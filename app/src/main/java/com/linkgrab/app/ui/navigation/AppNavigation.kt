@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import com.linkgrab.app.ui.screens.GuideScreen
 import com.linkgrab.app.ui.screens.HistoryScreen
 import com.linkgrab.app.ui.screens.HomeScreen
 import com.linkgrab.app.ui.screens.ResultScreen
@@ -45,6 +47,7 @@ import com.linkgrab.app.ui.screens.UpdateLogScreen
 import com.linkgrab.app.viewmodel.MainViewModel
 
 sealed class Screen(val route: String, val title: String) {
+    data object Guide : Screen("guide", "引导")
     data object Home : Screen("home", "首页")
     data object Result : Screen("result", "解析结果")
     data object Settings : Screen("settings", "设置")
@@ -66,6 +69,16 @@ fun AppNavigation(
 
     val showBottomBar = currentDestination?.route in bottomNavRoutes
     val context = LocalContext.current
+    val guideShown by viewModel.guideShown.collectAsState()
+
+    // Check if guide should be shown
+    LaunchedEffect(guideShown) {
+        if (!guideShown) {
+            navController.navigate(Screen.Guide.route) {
+                popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+            }
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -107,6 +120,17 @@ fun AppNavigation(
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding),
         ) {
+            composable(Screen.Guide.route) {
+                GuideScreen(
+                    onFinished = {
+                        viewModel.markGuideShown()
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Guide.route) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
             // Bottom nav tabs - no animation
             composable(
                 Screen.Home.route,
