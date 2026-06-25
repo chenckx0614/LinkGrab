@@ -14,17 +14,25 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import kotlin.coroutines.resume
 
 /**
  * Multi-strategy parser:
  * - Douyin: Ucmao API → Direct HTML → WebView(peanutdl)
- * - Xiaohongshu: WebView(tools.emmmm.dev) → Direct HTML
+ * - Xiaohongshu: Direct HTML (fast, 1-2s) → WebView(tools.emmmm.dev, fallback)
  */
 class WebViewParser(private val context: Context) {
 
     private val ucmaoParser = UcmaoParser()
+
+    private val httpClient = OkHttpClient.Builder()
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .build()
 
     companion object {
         private val DOUYIN_PATTERN = Pattern.compile(
@@ -90,9 +98,14 @@ class WebViewParser(private val context: Context) {
         }
     }
 
-    // ==================== Xiaohongshu ====================
+    // ==================== Xiaohongshu (fast primary + slow fallback) ====================
 
     private suspend fun parseXiaohongshu(url: String): Result<MediaResult> {
+        // Strategy 1: Direct HTTP (fast, ~1-2s)
+        val directResult = parseXiaohongshuDirect(url)
+        if (directResult.isSuccess) return directResult
+
+        // Strategy 2: WebView fallback (slow, ~12s)
         return try {
             parseWithWebView(
                 pageUrl = "https://tools.emmmm.dev/xiaohongshu?lang=zh-Hans",
@@ -110,9 +123,7 @@ class WebViewParser(private val context: Context) {
                 })()""".trimIndent()
             )
         } catch (e: Exception) {
-            val directResult = parseXiaohongshuDirect(url)
-            if (directResult.isSuccess) directResult
-            else Result.failure(Exception("解析小红书失败: ${e.message}"))
+            Result.failure(Exception("解析小红书失败: ${e.message}"))
         }
     }
 
@@ -120,12 +131,11 @@ class WebViewParser(private val context: Context) {
 
     private suspend fun parseDouyinDirect(url: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         try {
-            val client = OkHttpClient.Builder().followRedirects(true).followSslRedirects(true).build()
             val request = Request.Builder().url(url)
                 .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
                 .header("Referer", "https://www.douyin.com/")
                 .build()
-            val response = client.newCall(request).execute()
+            val response = httpClient.newCall(request).execute()
             val html = response.body?.string() ?: throw Exception("空响应")
 
             val patterns = listOf(
@@ -147,48 +157,115 @@ class WebViewParser(private val context: Context) {
         }
     }
 
+    /**
+     * 直接请求小红书页面提取图片（快速，1-2秒）
+     */
     private suspend fun parseXiaohongshuDirect(url: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         try {
-            val client = OkHttpClient.Builder().followRedirects(true).followSslRedirects(true).build()
             val request = Request.Builder().url(url)
-                .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
                 .header("Referer", "https://www.xiaohongshu.com/")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "zh-CN,zh;q=0.9")
                 .build()
-            val response = client.newCall(request).execute()
+
+            val response = httpClient.newCall(request).execute()
             val html = response.body?.string() ?: throw Exception("空响应")
 
-            val imagePattern = Pattern.compile("""https?://[^\s"'<>]+\.(?:jpg|jpeg|png|webp)[^\s"'<>]*""")
-            val matcher = imagePattern.matcher(html)
             val images = mutableListOf<String>()
-            while (matcher.find()) {
-                val imgUrl = matcher.group()
-                if (!imgUrl.contains("avatar") && !imgUrl.contains("icon") && !imgUrl.contains("logo")
-                    && !imgUrl.contains("emoji") && !imgUrl.contains("sticker")
-                    && !imgUrl.contains("180x180") && !imgUrl.contains("thumbnail")) {
-                    images.add(imgUrl)
+
+            // Method 1: Extract from __INITIAL_STATE__ JSON
+            val statePattern = Pattern.compile("""window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*""", Pattern.DOTALL)
+            val stateMatcher = statePattern.matcher(html)
+            if (stateMatcher.find()) {
+                val stateJson = stateMatcher.group(1)?.replace("\\u002F", "/")?.replace("\\u0026", "&") ?: ""
+                val imagePattern = Pattern.compile(""""urlDefault"\s*:\s*"([^"]+)"""")
+                val imgMatcher = imagePattern.matcher(stateJson)
+                while (imgMatcher.find()) {
+                    val imgUrl = imgMatcher.group(1) ?: continue
+                    if (isContentImage(imgUrl)) images.add(imgUrl)
                 }
             }
-            if (images.isNotEmpty()) {
-                return@withContext Result.success(MediaResult(type = MediaType.IMAGE, title = "小红书笔记", images = images.distinct().take(20), source = "xiaohongshu"))
+
+            // Method 2: Extract from HTML meta tags
+            if (images.isEmpty()) {
+                val metaPattern = Pattern.compile("""<meta[^>]*content="(https?://[^"]*(?:xhscdn|xiaohongshu|sns)[^"]*\.(?:jpg|jpeg|png|webp)[^"]*)"[^>]*>""")
+                val metaMatcher = metaPattern.matcher(html)
+                while (metaMatcher.find()) {
+                    val imgUrl = metaMatcher.group(1) ?: continue
+                    if (isContentImage(imgUrl)) images.add(imgUrl)
+                }
             }
-            Result.failure(Exception("无法从页面提取图片链接"))
+
+            // Method 3: Extract all xhs CDN image URLs
+            if (images.isEmpty()) {
+                val cdnPattern = Pattern.compile("""https?://[a-z0-9.-]*xhscdn\.com/[^\s"'<>\\]+\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>\\]*)?""")
+                val cdnMatcher = cdnPattern.matcher(html)
+                while (cdnMatcher.find()) {
+                    val imgUrl = cdnMatcher.group() ?: continue
+                    if (isContentImage(imgUrl)) images.add(imgUrl)
+                }
+            }
+
+            if (images.isNotEmpty()) {
+                val title = extractTitle(html)
+                return@withContext Result.success(
+                    MediaResult(
+                        type = MediaType.IMAGE,
+                        title = title,
+                        images = images.distinct().take(20),
+                        source = "xiaohongshu"
+                    )
+                )
+            }
+
+            Result.failure(Exception("无法提取图片"))
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    // ==================== WebView ====================
+    private fun isContentImage(url: String): Boolean {
+        val lower = url.lowercase()
+        return !lower.contains("avatar") &&
+                !lower.contains("icon") &&
+                !lower.contains("logo") &&
+                !lower.contains("emoji") &&
+                !lower.contains("sticker") &&
+                !lower.contains("180x180") &&
+                !lower.contains("thumbnail") &&
+                !lower.contains("fe-platform") &&
+                !lower.contains("fe-static") &&
+                !lower.contains("fe-video")
+    }
+
+    private fun extractTitle(html: String): String {
+        val titlePattern = Pattern.compile("""<title>([^<]+)</title>""")
+        val matcher = titlePattern.matcher(html)
+        return if (matcher.find()) {
+            matcher.group(1)?.replace(" - 小红书", "")?.trim() ?: "小红书笔记"
+        } else {
+            "小红书笔记"
+        }
+    }
+
+    // ==================== WebView Fallback ====================
 
     @SuppressLint("SetJavaScriptEnabled")
     private suspend fun parseWithWebView(
-        pageUrl: String, inputSelector: String, urlToInput: String,
-        buttonSelector: String, resultJs: String,
+        pageUrl: String,
+        inputSelector: String,
+        urlToInput: String,
+        buttonSelector: String,
+        resultJs: String,
     ): Result<MediaResult> = suspendCancellableCoroutine { cont ->
         val handler = Handler(Looper.getMainLooper())
         var webView: WebView? = null
+        var resumed = false
 
         val timeout = Runnable {
-            if (cont.isActive) {
+            if (!resumed && cont.isActive) {
+                resumed = true
                 handler.post { webView?.destroy() }
                 cont.resume(Result.failure(Exception("解析超时")))
             }
@@ -205,9 +282,10 @@ class WebViewParser(private val context: Context) {
                     override fun onPageFinished(view: WebView?, loadedUrl: String?) {
                         super.onPageFinished(view, loadedUrl)
                         handler.postDelayed({
+                            val escapedUrl = urlToInput.replace("'", "\\'")
                             view?.evaluateJavascript("""(function(){
                                 var i=document.querySelector('$inputSelector');
-                                if(i){i.value='$urlToInput';i.dispatchEvent(new Event('input',{bubbles:true}));return 'ok';}
+                                if(i){i.value='$escapedUrl';i.dispatchEvent(new Event('input',{bubbles:true}));return 'ok';}
                                 return 'no_input';
                             })()""") {
                                 handler.postDelayed({
@@ -221,7 +299,10 @@ class WebViewParser(private val context: Context) {
                                                 handler.removeCallbacks(timeout)
                                                 val parsed = parseWebViewResult(result)
                                                 handler.post { webView?.destroy() }
-                                                if (cont.isActive) cont.resume(parsed)
+                                                if (!resumed && cont.isActive) {
+                                                    resumed = true
+                                                    cont.resume(parsed)
+                                                }
                                             }
                                         }, 8_000)
                                     }
@@ -235,6 +316,7 @@ class WebViewParser(private val context: Context) {
         }
 
         cont.invokeOnCancellation {
+            resumed = true
             handler.removeCallbacks(timeout)
             handler.post { webView?.destroy() }
         }
