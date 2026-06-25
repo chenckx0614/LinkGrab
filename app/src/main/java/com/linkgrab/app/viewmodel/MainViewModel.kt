@@ -27,15 +27,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.File
-import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val parseRepository = ParseRepository(application)
-    val settingsRepository = SettingsRepository(application)
+    private val settingsRepository = SettingsRepository(application)
     val liveUpdatesHelper = LiveUpdatesHelper(application)
-    val historyRepository = HistoryRepository(application)
+    private val historyRepository = HistoryRepository(application)
 
     val allHistory = historyRepository.allHistory
 
@@ -62,32 +61,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val updateChecker = UpdateChecker()
 
-    private val httpClient = OkHttpClient()
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .build()
+
+    private var downloadJobCount = 0
 
     init {
         viewModelScope.launch {
-            settingsRepository.colorMode.collect { mode ->
-                _colorMode.value = mode
-            }
+            settingsRepository.colorMode.collect { _colorMode.value = it }
         }
         viewModelScope.launch {
-            settingsRepository.predictiveBack.collect { mode ->
-                _predictiveBack.value = mode
-            }
+            settingsRepository.predictiveBack.collect { _predictiveBack.value = it }
+        }
+        viewModelScope.launch {
+            settingsRepository.liveUpdatesEnabled.collect { _liveUpdatesEnabled.value = it }
         }
     }
 
+    // ==================== Settings ====================
+
     fun setColorMode(mode: Int) {
-        viewModelScope.launch {
-            settingsRepository.setColorMode(mode)
-        }
+        viewModelScope.launch { settingsRepository.setColorMode(mode) }
     }
 
     fun setPredictiveBack(mode: Int) {
-        viewModelScope.launch {
-            settingsRepository.setPredictiveBack(mode)
-        }
+        viewModelScope.launch { settingsRepository.setPredictiveBack(mode) }
     }
+
+    fun toggleLiveUpdates(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setLiveUpdatesEnabled(enabled) }
+    }
+
+    // ==================== Parse ====================
 
     fun parseUrl(url: String) {
         if (url.isBlank()) {
@@ -102,19 +109,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                isLoading = true,
-                error = null,
-                platform = platform
-            )
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, platform = platform)
 
             parseRepository.parse(url)
                 .onSuccess { result ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        result = result
-                    )
-                    // Save to history
+                    _uiState.value = _uiState.value.copy(isLoading = false, result = result)
                     historyRepository.add(
                         HistoryItem(
                             platform = platform.name.lowercase(),
@@ -126,19 +125,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 .onFailure { e ->
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = e.message ?: "解析失败"
-                    )
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = e.message ?: "解析失败")
                 }
         }
     }
 
-    fun clearResult() {
-        _uiState.value = ParseUiState()
-    }
+    fun clearResult() { _uiState.value = ParseUiState() }
+    fun clearError() { _uiState.value = _uiState.value.copy(error = null) }
 
-    // History
+    // ==================== History ====================
+
     fun toggleFavorite(id: Long, favorite: Boolean) {
         viewModelScope.launch { historyRepository.toggleFavorite(id, favorite) }
     }
@@ -147,11 +143,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { historyRepository.delete(item) }
     }
 
-    fun deleteHistoryById(id: Long) {
-        viewModelScope.launch { historyRepository.deleteById(id) }
-    }
+    // ==================== Update ====================
 
-    // Update check
     fun checkForUpdate() {
         viewModelScope.launch {
             _isCheckingUpdate.value = true
@@ -160,105 +153,98 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun dismissUpdate() {
-        _updateResult.value = null
-    }
+    fun dismissUpdate() { _updateResult.value = null }
 
-    fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
-    }
-
-    fun toggleLiveUpdates(enabled: Boolean) {
-        _liveUpdatesEnabled.value = enabled
-    }
-
-    fun testLiveUpdates() {
-        if (!_liveUpdatesEnabled.value) return
-
-        android.util.Log.d("LiveUpdates", "testLiveUpdates() started")
-
-        // Start with indeterminate progress
-        liveUpdatesHelper.startProgress(
-            title = "LinkGrab",
-            content = "正在解析链接...",
-            indeterminate = true,
-        )
-
-        // Simulate progress: 20 seconds, 1 second per step
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(1000) // 1s initial delay
-
-            for (i in 1..20) {
-                kotlinx.coroutines.delay(1000) // 1 second per step
-                val percent = (i * 5).coerceAtMost(100)
-                liveUpdatesHelper.updateProgress(
-                    title = "LinkGrab",
-                    content = "解析进度: $percent%  (${i}/20秒)",
-                    progress = percent,
-                    maxProgress = 100,
-                )
-                android.util.Log.d("LiveUpdates", "Progress: $percent% (${i}/20)")
-            }
-
-            // Finish
-            liveUpdatesHelper.finish(
-                title = "LinkGrab",
-                content = "解析完成！",
-            )
-            android.util.Log.d("LiveUpdates", "Finished")
-        }
-    }
+    // ==================== Download with Live Updates ====================
 
     fun downloadImage(context: Context, url: String, filename: String) {
+        val jobId = ++downloadJobCount
         viewModelScope.launch {
             _downloadState.value = DownloadState.Downloading
+            if (_liveUpdatesEnabled.value) {
+                liveUpdatesHelper.startProgress(title = "LinkGrab", content = "下载图片中...", indeterminate = true)
+            }
             try {
                 withContext(Dispatchers.IO) {
-                    val request = Request.Builder()
-                        .url(url)
+                    val request = Request.Builder().url(url)
                         .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7)")
                         .build()
-
                     val response = httpClient.newCall(request).execute()
-                    val bytes = response.body?.bytes() ?: throw Exception("Empty response")
-
+                    val body = response.body ?: throw Exception("Empty response")
+                    val bytes = body.byteStream().readBytes()
+                    body.close()
                     val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         ?: throw Exception("Failed to decode image")
-
                     saveBitmapToGallery(context, bitmap, filename)
                 }
-                _downloadState.value = DownloadState.Success
+                if (downloadJobCount == jobId) {
+                    _downloadState.value = DownloadState.Success
+                    if (_liveUpdatesEnabled.value) {
+                        liveUpdatesHelper.finish(title = "LinkGrab", content = "图片保存成功")
+                    }
+                }
             } catch (e: Exception) {
-                _downloadState.value = DownloadState.Error(e.message ?: "Download failed")
+                if (downloadJobCount == jobId) {
+                    _downloadState.value = DownloadState.Error(e.message ?: "Download failed")
+                    if (_liveUpdatesEnabled.value) {
+                        liveUpdatesHelper.finish(title = "LinkGrab", content = "下载失败: ${e.message}")
+                    }
+                }
             }
         }
     }
 
     fun downloadVideo(context: Context, url: String, filename: String) {
+        val jobId = ++downloadJobCount
         viewModelScope.launch {
             _downloadState.value = DownloadState.Downloading
+            if (_liveUpdatesEnabled.value) {
+                liveUpdatesHelper.startProgress(title = "LinkGrab", content = "下载视频中...", indeterminate = true)
+            }
             try {
                 withContext(Dispatchers.IO) {
-                    val request = Request.Builder()
-                        .url(url)
+                    val request = Request.Builder().url(url)
                         .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7)")
                         .build()
-
                     val response = httpClient.newCall(request).execute()
                     val body = response.body ?: throw Exception("Empty response")
-
                     saveVideoToGallery(context, body.byteStream(), filename)
+                    body.close()
                 }
-                _downloadState.value = DownloadState.Success
+                if (downloadJobCount == jobId) {
+                    _downloadState.value = DownloadState.Success
+                    if (_liveUpdatesEnabled.value) {
+                        liveUpdatesHelper.finish(title = "LinkGrab", content = "视频保存成功")
+                    }
+                }
             } catch (e: Exception) {
-                _downloadState.value = DownloadState.Error(e.message ?: "Download failed")
+                if (downloadJobCount == jobId) {
+                    _downloadState.value = DownloadState.Error(e.message ?: "Download failed")
+                    if (_liveUpdatesEnabled.value) {
+                        liveUpdatesHelper.finish(title = "LinkGrab", content = "下载失败: ${e.message}")
+                    }
+                }
             }
         }
     }
 
-    fun resetDownloadState() {
-        _downloadState.value = DownloadState.Idle
+    fun resetDownloadState() { _downloadState.value = DownloadState.Idle }
+
+    // ==================== Live Updates Test ====================
+
+    fun testLiveUpdates() {
+        if (!_liveUpdatesEnabled.value) return
+        liveUpdatesHelper.startProgress(title = "LinkGrab", content = "正在解析链接...", indeterminate = true)
+        viewModelScope.launch {
+            for (i in 1..20) {
+                kotlinx.coroutines.delay(1000)
+                liveUpdatesHelper.updateProgress(title = "LinkGrab", content = "解析进度: ${i * 5}%", progress = i * 5, maxProgress = 100)
+            }
+            liveUpdatesHelper.finish(title = "LinkGrab", content = "解析完成！")
+        }
     }
+
+    // ==================== MediaStore ====================
 
     private fun saveBitmapToGallery(context: Context, bitmap: Bitmap, filename: String) {
         val contentValues = ContentValues().apply {
@@ -269,15 +255,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
         }
-
         val resolver = context.contentResolver
         val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
             ?: throw Exception("Failed to create file")
-
-        resolver.openOutputStream(uri)?.use { outputStream ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+        resolver.openOutputStream(uri)?.use { it ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)
         }
-
+        bitmap.recycle()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             contentValues.clear()
             contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
@@ -294,15 +278,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 put(MediaStore.Video.Media.IS_PENDING, 1)
             }
         }
-
         val resolver = context.contentResolver
         val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
             ?: throw Exception("Failed to create file")
-
-        resolver.openOutputStream(uri)?.use { outputStream ->
-            inputStream.copyTo(outputStream)
+        resolver.openOutputStream(uri)?.use { out ->
+            inputStream.copyTo(out)
         }
-
+        inputStream.close()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             contentValues.clear()
             contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)

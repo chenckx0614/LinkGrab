@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -35,14 +34,16 @@ private val Context.historyDataStore by preferencesDataStore("history")
 
 class HistoryRepository(private val context: Context) {
 
+    companion object {
+        private const val MAX_ITEMS = 200
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
     private val historyKey = stringPreferencesKey("history_list")
 
     private val _items = MutableStateFlow<List<HistoryItem>>(emptyList())
     val allHistory: Flow<List<HistoryItem>> = _items.asStateFlow()
-    val favorites: Flow<List<HistoryItem>> = _items.map { list -> list.filter { it.favorite } }
-    val downloaded: Flow<List<HistoryItem>> = _items.map { list -> list.filter { it.downloaded } }
 
     init {
         scope.launch {
@@ -59,6 +60,9 @@ class HistoryRepository(private val context: Context) {
     suspend fun add(item: HistoryItem) {
         val current = _items.value.toMutableList()
         current.add(0, item)
+        while (current.size > MAX_ITEMS) {
+            current.removeLast()
+        }
         _items.value = current
         save()
     }
@@ -68,21 +72,9 @@ class HistoryRepository(private val context: Context) {
         save()
     }
 
-    suspend fun deleteById(id: Long) {
-        _items.value = _items.value.filter { it.id != id }
-        save()
-    }
-
     suspend fun toggleFavorite(id: Long, favorite: Boolean) {
         _items.value = _items.value.map {
             if (it.id == id) it.copy(favorite = favorite) else it
-        }
-        save()
-    }
-
-    suspend fun markDownloaded(id: Long, localPath: String = "") {
-        _items.value = _items.value.map {
-            if (it.id == id) it.copy(downloaded = true, localPath = localPath) else it
         }
         save()
     }
