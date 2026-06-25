@@ -70,11 +70,12 @@ fun AppNavigation(
     val showBottomBar = currentDestination?.route in bottomNavRoutes
     val context = LocalContext.current
     val guideShown by viewModel.guideShown.collectAsState()
+    val dataLoaded by viewModel.dataLoaded.collectAsState()
     var guideChecked by remember { mutableStateOf(false) }
 
-    // Only check once on first composition
-    LaunchedEffect(Unit) {
-        if (!guideChecked) {
+    // Only check after DataStore has loaded
+    LaunchedEffect(dataLoaded) {
+        if (dataLoaded && !guideChecked) {
             guideChecked = true
             if (!guideShown) {
                 navController.navigate(Screen.Guide.route) {

@@ -29,6 +29,8 @@ data class UpdateLogItem(
 )
 
 private val updateLogs = listOf(
+    UpdateLogItem("1.4.3", "2026-06-20", listOf("修复引导页每次都显示的问题")),
+    UpdateLogItem("1.4.2", "2026-06-20", listOf("引导页UI优化", "大图标+分页指示器")),
     UpdateLogItem("1.4.1", "2026-06-20", listOf(
         "历史记录支持按平台筛选",
         "下载进度百分比显示",

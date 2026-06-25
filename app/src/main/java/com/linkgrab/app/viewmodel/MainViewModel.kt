@@ -59,8 +59,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isCheckingUpdate = MutableStateFlow(false)
     val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
 
-    private val _guideShown = MutableStateFlow(false)
+    private val _guideShown = MutableStateFlow(true) // 默认 true，等 DataStore 加载后再决定
     val guideShown: StateFlow<Boolean> = _guideShown.asStateFlow()
+
+    private val _dataLoaded = MutableStateFlow(false)
+    val dataLoaded: StateFlow<Boolean> = _dataLoaded.asStateFlow()
 
     private val updateChecker = UpdateChecker()
 
@@ -82,7 +85,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.liveUpdatesEnabled.collect { _liveUpdatesEnabled.value = it }
         }
         viewModelScope.launch {
-            settingsRepository.guideShown.collect { _guideShown.value = it }
+            settingsRepository.guideShown.collect {
+                _guideShown.value = it
+                _dataLoaded.value = true
+            }
         }
         // 启动时检查更新
         viewModelScope.launch {
