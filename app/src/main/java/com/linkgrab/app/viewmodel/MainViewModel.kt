@@ -78,6 +78,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settingsRepository.liveUpdatesEnabled.collect { _liveUpdatesEnabled.value = it }
         }
+        // 启动时检查更新
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2000) // 延迟2秒避免影响启动
+            try {
+                _updateResult.value = updateChecker.checkForUpdate()
+            } catch (e: Exception) {
+                // 静默失败，不崩溃
+            }
+        }
     }
 
     // ==================== Settings ====================

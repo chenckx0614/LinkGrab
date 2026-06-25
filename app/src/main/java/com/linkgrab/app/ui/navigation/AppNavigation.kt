@@ -1,31 +1,43 @@
 package com.linkgrab.app.ui.navigation
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.NavigationBar
 import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Settings
-import com.linkgrab.app.ui.screens.BlurredBar
 import com.linkgrab.app.ui.screens.HistoryScreen
-import com.linkgrab.app.ui.screens.rememberBlurBackdrop
 import com.linkgrab.app.ui.screens.HomeScreen
 import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
@@ -53,16 +65,13 @@ fun AppNavigation(
     val currentDestination = navBackStackEntry?.destination
 
     val showBottomBar = currentDestination?.route in bottomNavRoutes
-
-    val backdrop = rememberBlurBackdrop()
-    val blurActive = backdrop != null
+    val context = LocalContext.current
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
-                BlurredBar(backdrop = backdrop, blurEnabled = blurActive) {
-                NavigationBar(defaultWindowInsetsPadding = false) {
+                NavigationBar(defaultWindowInsetsPadding = false, showDivider = false) {
                     NavigationBarItem(
                         icon = MiuixIcons.Image,
                         label = "首页",
@@ -90,7 +99,6 @@ fun AppNavigation(
                         },
                     )
                 }
-                } // BlurredBar
             }
         },
     ) { innerPadding ->
@@ -166,6 +174,49 @@ fun AppNavigation(
                     onParseUrl = { url ->
                         viewModel.parseUrl(url)
                         navController.popBackStack()
+                    },
+                )
+            }
+        }
+    }
+
+    // 启动时更新弹窗（全局，不依赖设置页）
+    val updateResult by viewModel.updateResult.collectAsState()
+    updateResult?.let { result ->
+        if (result is com.linkgrab.app.update.UpdateResult.UpdateAvailable) {
+            var showDialog by remember { mutableStateOf(true) }
+            if (showDialog) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = {
+                        showDialog = false
+                        viewModel.dismissUpdate()
+                    },
+                    title = { Text("发现新版本") },
+                    text = {
+                        Column {
+                            Text("v${result.currentVersion} → v${result.latestVersion}")
+                            if (result.releaseNotes.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(result.releaseNotes)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            try {
+                                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(result.downloadUrl)))
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
+                            }
+                            showDialog = false
+                            viewModel.dismissUpdate()
+                        }) { Text("去更新") }
+                    },
+                    dismissButton = {
+                        Button(onClick = {
+                            showDialog = false
+                            viewModel.dismissUpdate()
+                        }) { Text("稍后") }
                     },
                 )
             }
