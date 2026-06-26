@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="parse_link"
+        android:enabled="true"
+        android:icon="@drawable/ic_notification"
+        android:shortcutShortLabel="@string/shortcut_parse"
+        android:shortcutLongLabel="@string/shortcut_parse_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.linkgrab.app"
+            android:targetClass="com.linkgrab.app.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="history"
+        android:enabled="true"
+        android:icon="@drawable/ic_notification"
+        android:shortcutShortLabel="@string/shortcut_history"
+        android:shortcutLongLabel="@string/shortcut_history_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.linkgrab.app"
+            android:targetClass="com.linkgrab.app.MainActivity" />
+    </shortcut>
+</shortcuts>

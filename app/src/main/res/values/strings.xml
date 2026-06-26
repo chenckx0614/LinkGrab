@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">LinkGrab</string>
+    <string name="shortcut_parse">解析链接</string>
+    <string name="shortcut_parse_long">解析抖音/小红书链接</string>
+    <string name="shortcut_history">历史记录</string>
+    <string name="shortcut_history_long">查看解析历史</string>
 </resources>

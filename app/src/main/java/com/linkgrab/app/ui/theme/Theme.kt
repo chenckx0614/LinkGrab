@@ -47,3 +47,10 @@ fun LinkGrabTheme(
         )
     }
 }
+
+@Composable
+fun isInDarkTheme(): Boolean = when (LocalColorMode.current) {
+    1 -> false
+    2 -> true
+    else -> isSystemInDarkTheme()
+}

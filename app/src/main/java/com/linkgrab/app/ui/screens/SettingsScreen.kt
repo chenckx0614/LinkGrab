@@ -10,6 +10,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +47,7 @@ import androidx.core.content.ContextCompat
 import com.linkgrab.app.BuildConfig
 import com.linkgrab.app.R
 import com.linkgrab.app.update.UpdateResult
+import com.linkgrab.app.ui.theme.isInDarkTheme
 import com.linkgrab.app.viewmodel.MainViewModel
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.Card
@@ -369,6 +371,7 @@ private fun SocialLinkItem(
     name: String,
     onClick: () -> Unit,
 ) {
+    val isDark = isInDarkTheme()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -376,13 +379,19 @@ private fun SocialLinkItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Image(
-            painter = painterResource(id = iconRes),
-            contentDescription = name,
+        Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(RoundedCornerShape(10.dp)),
-        )
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (isDark) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(id = iconRes),
+                contentDescription = name,
+                modifier = Modifier.size(32.dp),
+            )
+        }
         Spacer(modifier = Modifier.width(14.dp))
         Text(text = name, style = MiuixTheme.textStyles.title2)
     }

@@ -144,6 +144,15 @@ fun HomeScreen(
             item { Spacer(modifier = Modifier.height(12.dp)) }
 
             item {
+                // Error message with retry
+                if (uiState.error != null) {
+                    Text(
+                        text = uiState.error!!,
+                        color = MiuixTheme.colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                }
+
                 Button(
                     onClick = { viewModel.parseUrl(inputUrl) },
                     modifier = Modifier.fillMaxWidth(),
