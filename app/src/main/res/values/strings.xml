@@ -5,4 +5,6 @@
     <string name="shortcut_parse_long">解析抖音/小红书链接</string>
     <string name="shortcut_history">历史记录</string>
     <string name="shortcut_history_long">查看解析历史</string>
+    <string name="process_text_label">用 LinkGrab 解析</string>
+    <string name="widget_description">快速解析抖音/小红书链接</string>
 </resources>
