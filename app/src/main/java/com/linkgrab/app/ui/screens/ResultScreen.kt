@@ -140,8 +140,11 @@ fun ResultScreen(
             )
         },
     ) { innerPadding ->
+        // Show shimmer when no result yet
         if (result == null) {
-            LaunchedEffect(Unit) { onBack() }
+            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                ResultLoadingSkeleton()
+            }
             return@Scaffold
         }
 

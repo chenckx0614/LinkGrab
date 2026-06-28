@@ -13,8 +13,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 56
-        versionName = "1.5.0"
+        versionCode = 57
+        versionName = "1.5.1"
     }
 
     buildTypes {
@@ -85,4 +85,13 @@ dependencies {
 
     // WorkManager
     implementation(libs.work.runtime)
+
+    // Accompanist - Permissions
+    implementation(libs.accompanist.permissions)
+
+    // Landscapist - Image Loading
+    implementation(libs.landscapist.glide)
+
+    // Shimmer - Loading Animation
+    implementation(libs.compose.shimmer)
 }

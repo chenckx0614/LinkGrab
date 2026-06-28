@@ -80,6 +80,12 @@ fun HomeScreen(
             )
         },
     ) { innerPadding ->
+        // Show shimmer loading when parsing
+        if (uiState.isLoading) {
+            ParseLoadingSkeleton()
+            return@Scaffold
+        }
+
         LazyColumn(
             state = listState,
             modifier = Modifier
