@@ -98,33 +98,127 @@ class WebViewParser(private val context: Context) {
         }
     }
 
-    // ==================== Xiaohongshu (fast primary + slow fallback) ====================
+    // ==================== Xiaohongshu (WebView direct load) ====================
 
     private suspend fun parseXiaohongshu(url: String): Result<MediaResult> {
         // Strategy 1: Direct HTTP (fast, ~1-2s)
         val directResult = parseXiaohongshuDirect(url)
         if (directResult.isSuccess) return directResult
 
-        // Strategy 2: WebView fallback (slow, ~12s)
+        // Strategy 2: WebView directly load xiaohongshu page (most reliable)
         return try {
-            parseWithWebView(
-                pageUrl = "https://tools.emmmm.dev/xiaohongshu?lang=zh-Hans",
-                inputSelector = """input[type="text"], input[type="url"], textarea""",
-                urlToInput = url,
-                buttonSelector = """button[type="submit"], button""",
-                resultJs = """(function(){
-                    var is=document.querySelectorAll('img[src*="xhscdn"],img[src*="xiaohongshu"],img[src*="sns"]');
-                    var urls=[];
-                    is.forEach(function(i){
-                        var s=i.src||i.getAttribute('src');
-                        if(s&&!s.includes('avatar')&&!s.includes('icon')&&!s.includes('logo'))urls.push(s);
-                    });
-                    return JSON.stringify({t:'i',u:urls.slice(0,20)});
-                })()""".trimIndent()
-            )
+            loadXhsPageInWebView(url)
         } catch (e: Exception) {
             Result.failure(Exception("解析小红书失败: ${e.message}"))
         }
+    }
+
+    /**
+     * 直接在 WebView 中加载小红书页面，等待 JS 渲染后提取图片
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private suspend fun loadXhsPageInWebView(url: String): Result<MediaResult> = suspendCancellableCoroutine { cont ->
+        val handler = Handler(Looper.getMainLooper())
+        var webView: WebView? = null
+        var resumed = false
+
+        val timeout = Runnable {
+            if (!resumed && cont.isActive) {
+                resumed = true
+                handler.post { webView?.destroy() }
+                cont.resume(Result.failure(Exception("解析超时")))
+            }
+        }
+        handler.postDelayed(timeout, 20_000)
+
+        val extractJs = """(function(){
+            var urls = [];
+            // 方法1: 所有 xhscdn 图片
+            document.querySelectorAll('img').forEach(function(img) {
+                var src = img.src || img.getAttribute('src') || '';
+                if (src && (src.includes('xhscdn') || src.includes('sns-webpic') || src.includes('ci.xiaohongshu'))
+                    && !src.includes('avatar') && !src.includes('icon') && !src.includes('logo')
+                    && !src.includes('fe-platform') && !src.includes('fe-static')) {
+                    urls.push(src);
+                }
+            });
+            // 方法2: swiper 轮播图
+            document.querySelectorAll('.swiper-slide img, [class*="slide"] img').forEach(function(img) {
+                var src = img.src || img.getAttribute('src') || '';
+                if (src && !urls.includes(src) && (src.includes('xhscdn') || src.includes('sns-webpic'))) urls.push(src);
+            });
+            // 方法3: 背景图
+            document.querySelectorAll('[style*="background-image"]').forEach(function(el) {
+                var style = el.getAttribute('style') || '';
+                var match = style.match(/url\("?([^")\s]+)"?\)/);
+                if (match && match[1] && (match[1].includes('xhscdn') || match[1].includes('sns-webpic')) && !urls.includes(match[1])) urls.push(match[1]);
+            });
+            var title = document.title || '小红书笔记';
+            return JSON.stringify({title: title, images: urls});
+        })()""".trimIndent()
+
+        fun tryExtract(attempt: Int, view: WebView?) {
+            if (resumed || view == null) return
+            view.evaluateJavascript(extractJs) { result ->
+                val mediaResult = parseXhsResultJson(result)
+                if (mediaResult != null && mediaResult.images.isNotEmpty()) {
+                    if (!resumed && cont.isActive) {
+                        resumed = true
+                        handler.removeCallbacks(timeout)
+                        handler.post { webView?.destroy() }
+                        cont.resume(Result.success(mediaResult))
+                    }
+                } else if (attempt < 4) {
+                    handler.postDelayed({ tryExtract(attempt + 1, view) }, 2_500)
+                } else {
+                    if (!resumed && cont.isActive) {
+                        resumed = true
+                        handler.removeCallbacks(timeout)
+                        handler.post { webView?.destroy() }
+                        cont.resume(Result.failure(Exception("未找到图片")))
+                    }
+                }
+            }
+        }
+
+        handler.post {
+            webView = WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, loadedUrl: String?) {
+                        super.onPageFinished(view, loadedUrl)
+                        handler.postDelayed({ tryExtract(0, view) }, 4_000)
+                    }
+                }
+                loadUrl(url)
+            }
+        }
+
+        cont.invokeOnCancellation {
+            resumed = true
+            handler.removeCallbacks(timeout)
+            handler.post { webView?.destroy() }
+        }
+    }
+
+    private fun parseXhsResultJson(jsonStr: String?): MediaResult? {
+        if (jsonStr == null) return null
+        val clean = jsonStr.trim().removeSurrounding("\"").replace("\\\"", "\"").replace("\\\\", "\\")
+        return try {
+            val titleMatch = """"title"\s*:\s*"([^"]*?)"""".toRegex().find(clean)
+            val imagesMatch = """"images"\s*:\s*\[([^\]]*)]""".toRegex().find(clean)
+            val title = titleMatch?.groupValues?.get(1) ?: "小红书笔记"
+            val imagesStr = imagesMatch?.groupValues?.get(1) ?: ""
+            val images = """"([^"]+)"""".toRegex().findAll(imagesStr).map { it.groupValues[1] }.toList()
+                .filter { it.contains("xhscdn") || it.contains("sns-webpic") || it.contains("ci.xiaohongshu") }
+
+            if (images.isNotEmpty()) {
+                MediaResult(type = MediaType.IMAGE, title = title, images = images.distinct().take(20), source = "xiaohongshu")
+            } else null
+        } catch (e: Exception) { null }
     }
 
     // ==================== Direct HTML Parsing ====================
