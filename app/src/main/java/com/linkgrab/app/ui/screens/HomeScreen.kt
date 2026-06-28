@@ -70,19 +70,14 @@ fun HomeScreen(
         }
     }
 
-    val backdrop = rememberBlurBackdrop()
-    val blurActive = backdrop != null
-
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            BlurredBar(backdrop = backdrop, blurEnabled = blurActive) {
-                TopAppBar(
-                    title = "LinkGrab",
-                    largeTitle = "LinkGrab",
-                    scrollBehavior = scrollBehavior,
-                )
-            }
+            TopAppBar(
+                title = "LinkGrab",
+                largeTitle = "LinkGrab",
+                scrollBehavior = scrollBehavior,
+            )
         },
     ) { innerPadding ->
         LazyColumn(
@@ -144,7 +139,6 @@ fun HomeScreen(
             item { Spacer(modifier = Modifier.height(12.dp)) }
 
             item {
-                // Error message with retry
                 if (uiState.error != null) {
                     Text(
                         text = uiState.error!!,
@@ -163,7 +157,7 @@ fun HomeScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(12.dp)) }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
 
             item {
                 Button(

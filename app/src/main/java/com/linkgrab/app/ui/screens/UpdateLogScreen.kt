@@ -29,8 +29,16 @@ data class UpdateLogItem(
 )
 
 private val updateLogs = listOf(
+    UpdateLogItem("1.5.0", "2026-06-20", listOf(
+        "v1.5 大版本：下载通知优化+批量解析+下拉刷新",
+        "下载完成通知点击打开相册/视频",
+        "支持粘贴多条链接批量解析",
+        "首页下拉刷新重新解析",
+    )),
+    UpdateLogItem("1.4.5", "2026-06-20", listOf("Text Selection Menu + 桌面小组件")),
+    UpdateLogItem("1.4.4", "2026-06-20", listOf("深色模式图标适配+解析重试+App Shortcuts")),
     UpdateLogItem("1.4.3", "2026-06-20", listOf("修复引导页每次都显示的问题")),
-    UpdateLogItem("1.4.2", "2026-06-20", listOf("引导页UI优化", "大图标+分页指示器")),
+    UpdateLogItem("1.4.2", "2026-06-20", listOf("引导页UI优化")),
     UpdateLogItem("1.4.1", "2026-06-20", listOf(
         "历史记录支持按平台筛选",
         "下载进度百分比显示",
