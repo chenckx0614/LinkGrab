@@ -99,6 +99,7 @@ class XhsMultiSiteParser(private val context: Context) {
 
     /**
      * Try direct HTTP request to extract images.
+     * Looks for sns-webpic CDN URLs which are the actual content images.
      */
     private suspend fun tryDirectHttp(url: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         try {
@@ -113,26 +114,41 @@ class XhsMultiSiteParser(private val context: Context) {
 
             val images = mutableListOf<String>()
 
-            // Try __INITIAL_STATE__
-            val statePattern = Pattern.compile("""window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*""", Pattern.DOTALL)
-            val stateMatcher = statePattern.matcher(html)
-            if (stateMatcher.find()) {
-                val stateJson = stateMatcher.group(1)?.replace("\\u002F", "/")?.replace("\\u0026", "&") ?: ""
-                val imgPattern = Pattern.compile(""""urlDefault"\s*:\s*"([^"]+)"""")
-                val imgMatcher = imgPattern.matcher(stateJson)
-                while (imgMatcher.find()) {
-                    val imgUrl = imgMatcher.group(1)?.replace("\\u002F", "/") ?: continue
-                    if (isContentImage(imgUrl)) images.add(imgUrl)
+            // 1. Look for sns-webpic CDN URLs (actual content images)
+            val webpicPattern = Pattern.compile("""https?://sns-webpic[a-z0-9.-]*\.xhscdn\.com/[^\s"'<>\\]+""")
+            val webpicMatcher = webpicPattern.matcher(html)
+            while (webpicMatcher.find()) {
+                val imgUrl = webpicMatcher.group() ?: continue
+                // Skip watermarked versions (contain !nd_dft_)
+                if (!imgUrl.contains("!nd_dft_")) {
+                    images.add(imgUrl)
                 }
             }
 
-            // Try CDN URLs
+            // 2. Try __INITIAL_STATE__
             if (images.isEmpty()) {
-                val cdnPattern = Pattern.compile("""https?://[a-z0-9.-]*xhscdn\.com/[^\s"'<>\\]+\.(?:jpg|jpeg|png|webp)(?:\?[^\s"'<>\\]*)?""")
+                val statePattern = Pattern.compile("""window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*""", Pattern.DOTALL)
+                val stateMatcher = statePattern.matcher(html)
+                if (stateMatcher.find()) {
+                    val stateJson = stateMatcher.group(1)?.replace("\\u002F", "/")?.replace("\\u0026", "&") ?: ""
+                    val imgPattern = Pattern.compile(""""urlDefault"\s*:\s*"([^"]+)"""")
+                    val imgMatcher = imgPattern.matcher(stateJson)
+                    while (imgMatcher.find()) {
+                        val imgUrl = imgMatcher.group(1)?.replace("\\u002F", "/") ?: continue
+                        if (isContentImage(imgUrl)) images.add(imgUrl)
+                    }
+                }
+            }
+
+            // 3. Try generic xhscdn URLs
+            if (images.isEmpty()) {
+                val cdnPattern = Pattern.compile("""https?://[a-z0-9.-]*xhscdn\.com/[^\s"'<>\\]+""")
                 val cdnMatcher = cdnPattern.matcher(html)
                 while (cdnMatcher.find()) {
                     val imgUrl = cdnMatcher.group() ?: continue
-                    if (isContentImage(imgUrl)) images.add(imgUrl)
+                    if (isContentImage(imgUrl) && !imgUrl.contains("!nd_dft_")) {
+                        images.add(imgUrl)
+                    }
                 }
             }
 
