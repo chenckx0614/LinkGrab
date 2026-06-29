@@ -26,6 +26,7 @@ import kotlin.coroutines.resume
 class WebViewParser(private val context: Context) {
 
     private val ucmaoParser = UcmaoParser()
+    private val xhsMultiSiteParser = XhsMultiSiteParser(context)
 
     private val httpClient = OkHttpClient.Builder()
         .followRedirects(true)
@@ -98,19 +99,11 @@ class WebViewParser(private val context: Context) {
         }
     }
 
-    // ==================== Xiaohongshu (WebView direct load) ====================
+    // ==================== Xiaohongshu (multi-site) ====================
 
     private suspend fun parseXiaohongshu(url: String): Result<MediaResult> {
-        // Strategy 1: Direct HTTP (fast, ~1-2s)
-        val directResult = parseXiaohongshuDirect(url)
-        if (directResult.isSuccess) return directResult
-
-        // Strategy 2: WebView directly load xiaohongshu page (most reliable)
-        return try {
-            loadXhsPageInWebView(url)
-        } catch (e: Exception) {
-            Result.failure(Exception("解析小红书失败: ${e.message}"))
-        }
+        // Use multi-site parser: tries multiple sites and picks the fastest
+        return xhsMultiSiteParser.parse(url)
     }
 
     /**
