@@ -36,6 +36,7 @@ import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import com.linkgrab.app.ui.screens.GuideScreen
@@ -43,12 +44,14 @@ import com.linkgrab.app.ui.screens.HistoryScreen
 import com.linkgrab.app.ui.screens.HomeScreen
 import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
+import com.linkgrab.app.ui.screens.ToolboxScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
 import com.linkgrab.app.viewmodel.MainViewModel
 
 sealed class Screen(val route: String, val title: String) {
     data object Guide : Screen("guide", "引导")
     data object Home : Screen("home", "首页")
+    data object Toolbox : Screen("toolbox", "工具箱")
     data object Result : Screen("result", "解析结果")
     data object Settings : Screen("settings", "设置")
     data object UpdateLog : Screen("update_log", "更新日志")
@@ -56,7 +59,7 @@ sealed class Screen(val route: String, val title: String) {
 }
 
 // Bottom nav routes - no animation for these
-private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Settings.route)
+private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Toolbox.route, Screen.Settings.route)
 
 @Composable
 fun AppNavigation(
@@ -99,6 +102,19 @@ fun AppNavigation(
                         onClick = {
                             navController.navigate(Screen.Home.route) {
                                 popUpTo(Screen.Home.route) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        },
+                    )
+                    NavigationBarItem(
+                        icon = MiuixIcons.GridView,
+                        label = "工具箱",
+                        selected = currentDestination?.hierarchy?.any {
+                            it.route == Screen.Toolbox.route
+                        } == true,
+                        onClick = {
+                            navController.navigate(Screen.Toolbox.route) {
+                                popUpTo(Screen.Home.route)
                                 launchSingleTop = true
                             }
                         },
@@ -153,6 +169,14 @@ fun AppNavigation(
                     initialShareText = initialShareText,
                 )
             }
+            composable(
+                Screen.Toolbox.route,
+                enterTransition = { fadeIn(tween(0)) },
+                exitTransition = { fadeOut(tween(0)) },
+            ) {
+                ToolboxScreen()
+            }
+
             composable(
                 Screen.Settings.route,
                 enterTransition = { fadeIn(tween(0)) },
