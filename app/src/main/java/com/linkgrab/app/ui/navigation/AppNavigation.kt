@@ -42,10 +42,12 @@ import top.yukonga.miuix.kmp.icon.extended.Settings
 import com.linkgrab.app.ui.screens.GuideScreen
 import com.linkgrab.app.ui.screens.HistoryScreen
 import com.linkgrab.app.ui.screens.HomeScreen
+import com.linkgrab.app.ui.screens.ImageConvertScreen
 import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
+import com.linkgrab.app.ui.screens.VideoToAudioScreen
 import com.linkgrab.app.viewmodel.MainViewModel
 
 sealed class Screen(val route: String, val title: String) {
@@ -56,6 +58,8 @@ sealed class Screen(val route: String, val title: String) {
     data object Settings : Screen("settings", "设置")
     data object UpdateLog : Screen("update_log", "更新日志")
     data object History : Screen("history", "历史记录")
+    data object VideoToAudio : Screen("video_to_audio", "视频转音频")
+    data object ImageConvert : Screen("image_convert", "图片转格式")
 }
 
 // Bottom nav routes - no animation for these
@@ -174,7 +178,10 @@ fun AppNavigation(
                 enterTransition = { fadeIn(tween(0)) },
                 exitTransition = { fadeOut(tween(0)) },
             ) {
-                ToolboxScreen()
+                ToolboxScreen(
+                    onNavigateToVideoToAudio = { navController.navigate(Screen.VideoToAudio.route) },
+                    onNavigateToImageConvert = { navController.navigate(Screen.ImageConvert.route) },
+                )
             }
 
             composable(
@@ -213,6 +220,24 @@ fun AppNavigation(
                 UpdateLogScreen(
                     onBack = { navController.popBackStack() },
                 )
+            }
+            composable(
+                Screen.VideoToAudio.route,
+                enterTransition = { slideInHorizontally(tween(300)) { it } },
+                exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
+                popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
+                popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+            ) {
+                VideoToAudioScreen(onBack = { navController.popBackStack() })
+            }
+            composable(
+                Screen.ImageConvert.route,
+                enterTransition = { slideInHorizontally(tween(300)) { it } },
+                exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
+                popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
+                popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+            ) {
+                ImageConvertScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Screen.History.route,

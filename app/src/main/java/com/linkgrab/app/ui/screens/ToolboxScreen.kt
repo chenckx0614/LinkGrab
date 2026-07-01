@@ -26,7 +26,10 @@ import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun ToolboxScreen() {
+fun ToolboxScreen(
+    onNavigateToVideoToAudio: () -> Unit = {},
+    onNavigateToImageConvert: () -> Unit = {},
+) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -46,7 +49,7 @@ fun ToolboxScreen() {
 
             item {
                 Text(
-                    text = "更多工具",
+                    text = "媒体工具",
                     style = MiuixTheme.textStyles.title1,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
@@ -56,23 +59,13 @@ fun ToolboxScreen() {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     ToolboxItem(
                         title = "视频转音频",
-                        description = "从视频中提取音频文件",
-                        onClick = { },
+                        description = "从视频中提取音频，保存为 M4A 格式",
+                        onClick = onNavigateToVideoToAudio,
                     )
                     ToolboxItem(
-                        title = "图片压缩",
-                        description = "压缩图片体积，保持画质",
-                        onClick = { },
-                    )
-                    ToolboxItem(
-                        title = "视频裁剪",
-                        description = "裁剪视频时长",
-                        onClick = { },
-                    )
-                    ToolboxItem(
-                        title = "GIF 制作",
-                        description = "从视频制作 GIF 动图",
-                        onClick = { },
+                        title = "图片转格式",
+                        description = "转换图片格式：JPG / PNG / WebP / BMP",
+                        onClick = onNavigateToImageConvert,
                     )
                 }
             }
