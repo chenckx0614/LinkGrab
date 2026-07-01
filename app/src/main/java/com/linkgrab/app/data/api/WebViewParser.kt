@@ -26,7 +26,6 @@ import kotlin.coroutines.resume
 class WebViewParser(private val context: Context) {
 
     private val ucmaoParser = UcmaoParser()
-    private val xhsMultiSiteParser = XhsMultiSiteParser(context)
 
     private val httpClient = OkHttpClient.Builder()
         .followRedirects(true)
@@ -99,11 +98,35 @@ class WebViewParser(private val context: Context) {
         }
     }
 
-    // ==================== Xiaohongshu (multi-site) ====================
+    // ==================== Xiaohongshu ====================
 
     private suspend fun parseXiaohongshu(url: String): Result<MediaResult> {
-        // Use multi-site parser: tries multiple sites and picks the fastest
-        return xhsMultiSiteParser.parse(url)
+        // Strategy 1: Direct HTTP (fast, ~1-2s)
+        val directResult = parseXiaohongshuDirect(url)
+        if (directResult.isSuccess) return directResult
+
+        // Strategy 2: WebView with tools.emmmm.dev
+        return try {
+            parseWithWebView(
+                pageUrl = "https://tools.emmmm.dev/xiaohongshu?lang=zh-Hans",
+                inputSelector = """input[type="text"], input[type="url"], textarea""",
+                urlToInput = url,
+                buttonSelector = """button[type="submit"], button""",
+                resultJs = """(function(){
+                    var is=document.querySelectorAll('img[src*="xhscdn"],img[src*="xiaohongshu"],img[src*="sns"]');
+                    var urls=[];
+                    is.forEach(function(i){
+                        var s=i.src||i.getAttribute('src');
+                        if(s&&!s.includes('avatar')&&!s.includes('icon')&&!s.includes('logo'))urls.push(s);
+                    });
+                    return JSON.stringify({t:'i',u:urls.slice(0,20)});
+                })()""".trimIndent()
+            )
+        } catch (e: Exception) {
+            val fallbackResult = parseXiaohongshuDirect(url)
+            if (fallbackResult.isSuccess) fallbackResult
+            else Result.failure(Exception("解析小红书失败: ${e.message}"))
+        }
     }
 
     /**
