@@ -45,6 +45,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.ChevronForward
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -56,7 +57,7 @@ fun HistoryScreen(
 ) {
     val history by viewModel.allHistory.collectAsState(initial = emptyList())
     var showDeleteDialog by remember { mutableStateOf<HistoryItem?>(null) }
-    var filter by remember { mutableStateOf("all") } // all / douyin / xiaohongshu
+    var filter by remember { mutableStateOf("all") }
 
     val filteredHistory = when (filter) {
         "douyin" -> history.filter { it.platform == "douyin" }
@@ -65,9 +66,11 @@ fun HistoryScreen(
     }
 
     Scaffold(
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = "历史记录",
+                largeTitle = "历史记录",
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(MiuixIcons.Back, contentDescription = "返回")
@@ -77,11 +80,14 @@ fun HistoryScreen(
         },
     ) { innerPadding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
         ) {
-            // Platform filter chips
+            // 筛选 chips
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 FilterChip("全部", filter == "all") { filter = "all" }
@@ -119,7 +125,7 @@ fun HistoryScreen(
         }
     }
 
-    // Delete dialog
+    // 删除确认弹窗
     showDeleteDialog?.let { item ->
         androidx.compose.ui.window.Dialog(onDismissRequest = { showDeleteDialog = null }) {
             Card(modifier = Modifier.padding(24.dp)) {
@@ -146,7 +152,7 @@ private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
             .clip(RoundedCornerShape(20.dp))
             .background(if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Text(
             text = text,
@@ -164,9 +170,10 @@ private fun HistoryCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                .padding(12.dp),
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (item.cover.isNotEmpty()) {
@@ -174,12 +181,16 @@ private fun HistoryCard(
                     model = ImageRequest.Builder(LocalContext.current).data(item.cover).crossfade(true).build(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(MiuixTheme.colorScheme.surfaceVariant),
                 )
             } else {
                 Box(
-                    modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(8.dp))
                         .background(MiuixTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -197,6 +208,14 @@ private fun HistoryCard(
                     color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                 )
             }
+
+            // 右箭头
+            Icon(
+                MiuixIcons.ChevronForward,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            )
         }
     }
 }

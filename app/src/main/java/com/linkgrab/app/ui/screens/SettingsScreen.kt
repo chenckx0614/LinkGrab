@@ -240,7 +240,7 @@ fun SettingsScreen(
             item {
                 SectionHeader("关于")
 
-                // Version card
+                // 合并版本+作者+描述为一个卡片
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(
                         modifier = Modifier.padding(20.dp),
@@ -260,18 +260,12 @@ fun SettingsScreen(
                             text = "作者：chenckx",
                             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "这里可以下载无水印的抖音视频或小红书图片。",
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Description
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "这里可以下载无水印的抖音视频或小红书图片。",
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        modifier = Modifier.padding(16.dp),
-                    )
                 }
             }
 

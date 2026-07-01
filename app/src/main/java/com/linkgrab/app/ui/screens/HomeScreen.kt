@@ -3,6 +3,7 @@ package com.linkgrab.app.ui.screens
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,12 +24,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.linkgrab.app.data.model.Platform
 import com.linkgrab.app.viewmodel.MainViewModel
 import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
@@ -80,12 +84,6 @@ fun HomeScreen(
             )
         },
     ) { innerPadding ->
-        // Show shimmer loading when parsing
-        if (uiState.isLoading) {
-            ParseLoadingSkeleton()
-            return@Scaffold
-        }
-
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -95,9 +93,10 @@ fun HomeScreen(
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-
+            // ===== 输入区域 =====
             item {
+                Spacer(modifier = Modifier.height(8.dp))
+
                 val platform = when {
                     inputUrl.contains("douyin.com") || inputUrl.contains("v.douyin.com") -> Platform.DOUYIN
                     inputUrl.contains("xiaohongshu.com") || inputUrl.contains("xhslink.com") -> Platform.XIAOHONGSHU
@@ -106,13 +105,25 @@ fun HomeScreen(
                 if (platform != Platform.UNKNOWN) {
                     Text(
                         text = "检测到: ${platform.displayName}链接",
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        color = MiuixTheme.colorScheme.primary,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
-            }
 
-            item {
+                // 错误提示
+                if (uiState.error != null) {
+                    Text(
+                        text = uiState.error!!,
+                        color = MiuixTheme.colorScheme.error,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MiuixTheme.colorScheme.errorContainer)
+                            .padding(12.dp),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 TextField(
                     value = inputUrl,
                     onValueChange = { inputUrl = it },
@@ -121,9 +132,10 @@ fun HomeScreen(
                 )
             }
 
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-
+            // ===== 操作按钮 =====
             item {
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Button(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -140,18 +152,8 @@ fun HomeScreen(
                 ) {
                     Text("从剪贴板粘贴")
                 }
-            }
 
-            item { Spacer(modifier = Modifier.height(12.dp)) }
-
-            item {
-                if (uiState.error != null) {
-                    Text(
-                        text = uiState.error!!,
-                        color = MiuixTheme.colorScheme.error,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = { viewModel.parseUrl(inputUrl) },
@@ -161,28 +163,33 @@ fun HomeScreen(
                     if (uiState.isLoading) CircularProgressIndicator(modifier = Modifier.height(20.dp))
                     else Text("解析")
                 }
-            }
 
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+                Spacer(modifier = Modifier.height(8.dp))
 
-            item {
                 Button(
                     onClick = { onNavigateToHistory() },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("📋 历史记录")
+                    Text("历史记录")
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(32.dp)) }
-
+            // ===== 使用说明 =====
             item {
-                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = "使用说明", style = MiuixTheme.textStyles.title1)
-                    Text(text = "1. 打开抖音/小红书，找到想要保存的视频或图片", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                    Text(text = "2. 点击分享按钮，复制链接", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                    Text(text = "3. 返回本应用，粘贴链接并点击解析", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                    Text(text = "4. 预览无水印内容，点击下载保存", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(text = "使用说明", style = MiuixTheme.textStyles.title2)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "1. 打开抖音/小红书，找到想要保存的视频或图片", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        Text(text = "2. 点击分享按钮，复制链接", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        Text(text = "3. 返回本应用，粘贴链接并点击解析", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        Text(text = "4. 预览无水印内容，点击下载保存", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    }
                 }
             }
 
