@@ -19,11 +19,25 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = false
         }
     }
 
@@ -68,10 +82,7 @@ dependencies {
     implementation(libs.coil.network.okhttp)
 
     // Network
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.serialization)
     implementation(libs.okhttp)
-    implementation(libs.okhttp.logging)
 
     // Serialization
     implementation(libs.kotlinx.serialization.json)
@@ -83,18 +94,9 @@ dependencies {
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
 
-    // WorkManager
-    implementation(libs.work.runtime)
-
-    // Accompanist - Permissions
-    implementation(libs.accompanist.permissions)
-
-    // Landscapist - Image Loading
-    implementation(libs.landscapist.glide)
-
     // Shimmer - Loading Animation
     implementation(libs.compose.shimmer)
 
-    // FFmpeg Kit - Media processing
-    implementation(libs.ffmpeg.kit.full)
+    // FFmpeg Kit - Media processing (min variant for smaller size)
+    implementation(libs.ffmpeg.kit.min)
 }

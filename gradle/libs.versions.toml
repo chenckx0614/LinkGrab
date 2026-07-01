@@ -52,7 +52,7 @@ accompanist-permissions = { group = "com.google.accompanist", name = "accompanis
 landscapist-glide = { group = "com.github.skydoves", name = "landscapist-glide", version = "2.4.2" }
 compose-shimmer = { group = "com.valentinilk.shimmer", name = "compose-shimmer", version = "1.3.1" }
 
-ffmpeg-kit-full = { group = "com.arthenica", name = "ffmpeg-kit-full", version = "6.0-2" }
+ffmpeg-kit-min = { group = "com.arthenica", name = "ffmpeg-kit-min", version = "6.0-2" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
