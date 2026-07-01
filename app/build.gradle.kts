@@ -13,8 +13,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 64
-        versionName = "1.6.0"
+        versionCode = 65
+        versionName = "1.6.1"
     }
 
     buildTypes {
@@ -94,4 +94,7 @@ dependencies {
 
     // Shimmer - Loading Animation
     implementation(libs.compose.shimmer)
+
+    // FFmpeg Kit - Media processing
+    implementation(libs.ffmpeg.kit.full)
 }

@@ -27,8 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import android.media.MediaExtractor
-import android.media.MediaFormat
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,13 +43,11 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import java.nio.ByteBuffer
 
 @Composable
 fun VideoToAudioScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var isProcessing by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf(0f) }
     var statusText by remember { mutableStateOf("选择视频文件") }
 
     val videoPicker = rememberLauncherForActivityResult(
@@ -57,22 +55,20 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
     ) { uri: Uri? ->
         uri?.let {
             isProcessing = true
-            progress = 0f
             statusText = "正在提取音频..."
 
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            CoroutineScope(Dispatchers.IO).launch {
                 try {
-                    extractAudio(context, it) { p, status ->
-                        progress = p
-                        statusText = status
+                    extractAudioFFmpeg(context, it) { _, text ->
+                        statusText = text
                     }
-                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    withContext(Dispatchers.Main) {
                         isProcessing = false
                         statusText = "提取完成！"
                         Toast.makeText(context, "音频已保存到音乐目录", Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
-                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    withContext(Dispatchers.Main) {
                         isProcessing = false
                         statusText = "提取失败: ${e.message}"
                     }
@@ -130,36 +126,42 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
     }
 }
 
-private suspend fun extractAudio(
+private val videoPicker = mutableStateOf<ActivityResultContracts.GetContent?>(null)
+
+@Composable
+fun rememberVideoPicker(onResult: (Uri?) -> Unit): androidx.activity.result.ActivityResultLauncher<String> {
+    return rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        onResult(uri)
+    }
+}
+
+private suspend fun extractAudioFFmpeg(
     context: android.content.Context,
     videoUri: Uri,
     onProgress: (Float, String) -> Unit,
 ) = withContext(Dispatchers.IO) {
-    val extractor = MediaExtractor()
-    extractor.setDataSource(context, videoUri, null)
-
-    // Find audio track
-    var audioTrackIndex = -1
-    for (i in 0 until extractor.trackCount) {
-        val format = extractor.getTrackFormat(i)
-        val mime = format.getString(MediaFormat.KEY_MIME) ?: ""
-        if (mime.startsWith("audio/")) {
-            audioTrackIndex = i
-            break
+    // Get the actual file path from URI
+    val inputStream = context.contentResolver.openInputStream(videoUri)
+    val tempFile = java.io.File(context.cacheDir, "temp_video_${System.currentTimeMillis()}.mp4")
+    inputStream?.use { input ->
+        tempFile.outputStream().use { output ->
+            input.copyTo(output)
         }
     }
 
-    if (audioTrackIndex == -1) {
-        throw Exception("视频中没有音频轨道")
+    // Output file
+    val outputFile = java.io.File(context.cacheDir, "output_audio_${System.currentTimeMillis()}.m4a")
+
+    // Use FFmpeg to extract audio
+    val command = "-i ${tempFile.absolutePath} -vn -acodec copy ${outputFile.absolutePath}"
+    val session = FFmpegKit.execute(command)
+
+    if (!ReturnCode.isSuccess(session.returnCode)) {
+        tempFile.delete()
+        throw Exception("FFmpeg 执行失败")
     }
 
-    extractor.selectTrack(audioTrackIndex)
-    val format = extractor.getTrackFormat(audioTrackIndex)
-    val mime = format.getString(MediaFormat.KEY_MIME) ?: "audio/mp4a-latm"
-    val sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-    val channelCount = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-
-    // Create output file in Music/LinkGrab
+    // Save to MediaStore
     val contentValues = ContentValues().apply {
         put(MediaStore.Audio.Media.DISPLAY_NAME, "LinkGrab_${System.currentTimeMillis()}.m4a")
         put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4a-latm")
@@ -173,17 +175,9 @@ private suspend fun extractAudio(
     val outputUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, contentValues)
         ?: throw Exception("无法创建文件")
 
-    resolver.openOutputStream(outputUri)?.use { outputStream ->
-        val buffer = ByteArray(1024 * 1024) // 1MB buffer
-        var isEOS = false
-        while (!isEOS) {
-            val sampleSize = extractor.readSampleData(ByteBuffer.wrap(buffer), 0)
-            if (sampleSize < 0) {
-                isEOS = true
-            } else {
-                outputStream.write(buffer, 0, sampleSize)
-                extractor.advance()
-            }
+    resolver.openOutputStream(outputUri)?.use { output ->
+        outputFile.inputStream().use { input ->
+            input.copyTo(output)
         }
     }
 
@@ -193,6 +187,9 @@ private suspend fun extractAudio(
         resolver.update(outputUri, contentValues, null, null)
     }
 
-    extractor.release()
+    // Cleanup
+    tempFile.delete()
+    outputFile.delete()
+
     onProgress(1f, "提取完成！")
 }

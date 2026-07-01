@@ -36,6 +36,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -127,87 +130,34 @@ fun ImageConvertScreen(onBack: () -> Unit) {
             if (selectedUri != null && !isProcessing) {
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Format buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    FormatButton("转 JPG", Modifier.weight(1f)) {
-                        isProcessing = true
-                        statusText = "转换中..."
-                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                convertImage(context, selectedUri!!, "jpg") { p, s ->
-                                    // progress callback
+                    listOf("jpg", "png", "webp", "bmp").forEach { format ->
+                        Button(
+                            onClick = {
+                                isProcessing = true
+                                statusText = "转换为 $format 中..."
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    try {
+                                        convertWithFFmpeg(context, selectedUri!!, format)
+                                        withContext(Dispatchers.Main) {
+                                            isProcessing = false
+                                            statusText = "转换完成！"
+                                            Toast.makeText(context, "${format.uppercase()} 已保存", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        withContext(Dispatchers.Main) {
+                                            isProcessing = false
+                                            statusText = "转换失败: ${e.message}"
+                                        }
+                                    }
                                 }
-                                withContext(Dispatchers.Main) {
-                                    isProcessing = false
-                                    statusText = "转换完成！"
-                                    Toast.makeText(context, "JPG 已保存", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    isProcessing = false
-                                    statusText = "转换失败: ${e.message}"
-                                }
-                            }
-                        }
-                    }
-                    FormatButton("转 PNG", Modifier.weight(1f)) {
-                        isProcessing = true
-                        statusText = "转换中..."
-                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                convertImage(context, selectedUri!!, "png") { _, _ -> }
-                                withContext(Dispatchers.Main) {
-                                    isProcessing = false
-                                    statusText = "转换完成！"
-                                    Toast.makeText(context, "PNG 已保存", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    isProcessing = false
-                                    statusText = "转换失败: ${e.message}"
-                                }
-                            }
-                        }
-                    }
-                    FormatButton("转 WebP", Modifier.weight(1f)) {
-                        isProcessing = true
-                        statusText = "转换中..."
-                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                convertImage(context, selectedUri!!, "webp") { _, _ -> }
-                                withContext(Dispatchers.Main) {
-                                    isProcessing = false
-                                    statusText = "转换完成！"
-                                    Toast.makeText(context, "WebP 已保存", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    isProcessing = false
-                                    statusText = "转换失败: ${e.message}"
-                                }
-                            }
-                        }
-                    }
-                    FormatButton("转 BMP", Modifier.weight(1f)) {
-                        isProcessing = true
-                        statusText = "转换中..."
-                        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                            try {
-                                convertImage(context, selectedUri!!, "bmp") { _, _ -> }
-                                withContext(Dispatchers.Main) {
-                                    isProcessing = false
-                                    statusText = "转换完成！"
-                                    Toast.makeText(context, "BMP 已保存", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                withContext(Dispatchers.Main) {
-                                    isProcessing = false
-                                    statusText = "转换失败: ${e.message}"
-                                }
-                            }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(format.uppercase())
                         }
                     }
                 }
@@ -216,24 +166,17 @@ fun ImageConvertScreen(onBack: () -> Unit) {
     }
 }
 
-@Composable
-private fun FormatButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Button(onClick = onClick, modifier = modifier) {
-        Text(text)
-    }
-}
-
-private suspend fun convertImage(
+private suspend fun convertWithFFmpeg(
     context: android.content.Context,
-    uri: Uri,
+    imageUri: Uri,
     format: String,
-    onProgress: (Float, String) -> Unit,
 ) = withContext(Dispatchers.IO) {
-    val inputStream = context.contentResolver.openInputStream(uri) ?: throw Exception("无法读取图片")
-    val bitmap = BitmapFactory.decodeStream(inputStream)
-    inputStream.close()
-
-    if (bitmap == null) throw Exception("无法解码图片")
+    // Copy image to temp file
+    val inputStream = context.contentResolver.openInputStream(imageUri)
+    val inputFile = java.io.File(context.cacheDir, "input_image_${System.currentTimeMillis()}.tmp")
+    inputStream?.use { input ->
+        inputFile.outputStream().use { output -> input.copyTo(output) }
+    }
 
     val mimeType = when (format) {
         "jpg" -> "image/jpeg"
@@ -243,7 +186,7 @@ private suspend fun convertImage(
         else -> "image/jpeg"
     }
 
-    val ext = format.uppercase()
+    // Save to MediaStore
     val contentValues = ContentValues().apply {
         put(MediaStore.Images.Media.DISPLAY_NAME, "LinkGrab_${System.currentTimeMillis()}.$format")
         put(MediaStore.Images.Media.MIME_TYPE, mimeType)
@@ -257,17 +200,33 @@ private suspend fun convertImage(
     val outputUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
         ?: throw Exception("无法创建文件")
 
-    resolver.openOutputStream(outputUri)?.use { outputStream ->
-        val compressFormat = when (format) {
-            "jpg" -> Bitmap.CompressFormat.JPEG
-            "png" -> Bitmap.CompressFormat.PNG
-            "webp" -> Bitmap.CompressFormat.WEBP_LOSSY
-            else -> Bitmap.CompressFormat.JPEG
-        }
-        bitmap.compress(compressFormat, 95, outputStream)
-    }
+    resolver.openOutputStream(outputUri)?.use { output ->
+        // Use FFmpeg to convert format
+        val command = "-i ${inputFile.absolutePath} -y ${inputFile.parent}/output.${format}"
+        val session = FFmpegKit.execute(command)
 
-    bitmap.recycle()
+        if (!ReturnCode.isSuccess(session.returnCode)) {
+            // Fallback: use Android Bitmap API
+            val bitmap = BitmapFactory.decodeFile(inputFile.absolutePath)
+                ?: throw Exception("无法解码图片")
+
+            val compressFormat = when (format) {
+                "jpg" -> Bitmap.CompressFormat.JPEG
+                "png" -> Bitmap.CompressFormat.PNG
+                "webp" -> Bitmap.CompressFormat.WEBP_LOSSY
+                else -> Bitmap.CompressFormat.JPEG
+            }
+            bitmap.compress(compressFormat, 95, output)
+            bitmap.recycle()
+        } else {
+            // FFmpeg succeeded, copy output file
+            val outputFile = java.io.File(inputFile.parent, "output.${format}")
+            if (outputFile.exists()) {
+                outputFile.inputStream().use { input -> input.copyTo(output) }
+                outputFile.delete()
+            }
+        }
+    }
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         contentValues.clear()
@@ -275,5 +234,5 @@ private suspend fun convertImage(
         resolver.update(outputUri, contentValues, null, null)
     }
 
-    onProgress(1f, "转换完成！")
+    inputFile.delete()
 }
