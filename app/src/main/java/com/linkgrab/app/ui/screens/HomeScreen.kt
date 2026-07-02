@@ -169,7 +169,7 @@ fun HomeScreen(
                             Toast.makeText(context, "剪贴板为空", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().scaleOnPress(),
                 ) {
                     Text("从剪贴板粘贴")
                 }
@@ -182,7 +182,7 @@ fun HomeScreen(
                         vibrateDevice(context)
                         viewModel.parseUrl(inputUrl)
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().scaleOnPress(),
                     enabled = !uiState.isLoading && inputUrl.isNotBlank(),
                 ) {
                     if (uiState.isLoading) CircularProgressIndicator(modifier = Modifier.height(20.dp))
@@ -197,7 +197,7 @@ fun HomeScreen(
                         vibrateDevice(context)
                         onNavigateToHistory()
                     },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().scaleOnPress(),
                 ) {
                     Text("历史记录")
                 }
