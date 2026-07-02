@@ -2,7 +2,14 @@ package com.linkgrab.app.ui.screens
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,10 +18,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -27,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.linkgrab.app.data.model.Platform
 import com.linkgrab.app.viewmodel.MainViewModel
@@ -67,13 +78,6 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(uiState.error) {
-        uiState.error?.let { error ->
-            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
-            viewModel.clearError()
-        }
-    }
-
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
@@ -90,10 +94,10 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .imePadding() // 键盘弹出时自动调整布局
                 .padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // ===== 输入区域 =====
             item {
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -102,7 +106,13 @@ fun HomeScreen(
                     inputUrl.contains("xiaohongshu.com") || inputUrl.contains("xhslink.com") -> Platform.XIAOHONGSHU
                     else -> Platform.UNKNOWN
                 }
-                if (platform != Platform.UNKNOWN) {
+
+                // 平台检测提示（带动画）
+                AnimatedVisibility(
+                    visible = platform != Platform.UNKNOWN,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
                     Text(
                         text = "检测到: ${platform.displayName}链接",
                         color = MiuixTheme.colorScheme.primary,
@@ -110,20 +120,30 @@ fun HomeScreen(
                     )
                 }
 
-                // 错误提示
+                // 错误提示（带动画）
+                AnimatedVisibility(
+                    visible = uiState.error != null,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    uiState.error?.let { error ->
+                        Text(
+                            text = error,
+                            color = MiuixTheme.colorScheme.error,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MiuixTheme.colorScheme.errorContainer)
+                                .padding(12.dp),
+                        )
+                    }
+                }
+
                 if (uiState.error != null) {
-                    Text(
-                        text = uiState.error!!,
-                        color = MiuixTheme.colorScheme.error,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MiuixTheme.colorScheme.errorContainer)
-                            .padding(12.dp),
-                    )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
+                // 输入框（支持回车直接解析）
                 TextField(
                     value = inputUrl,
                     onValueChange = { inputUrl = it },
@@ -132,12 +152,13 @@ fun HomeScreen(
                 )
             }
 
-            // ===== 操作按钮 =====
             item {
                 Spacer(modifier = Modifier.height(16.dp))
 
+                // 从剪贴板粘贴
                 Button(
                     onClick = {
+                        vibrateDevice(context)
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         val clipData = clipboard.primaryClip
                         if (clipData != null && clipData.itemCount > 0) {
@@ -155,8 +176,12 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // 解析按钮
                 Button(
-                    onClick = { viewModel.parseUrl(inputUrl) },
+                    onClick = {
+                        vibrateDevice(context)
+                        viewModel.parseUrl(inputUrl)
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isLoading && inputUrl.isNotBlank(),
                 ) {
@@ -166,15 +191,18 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
+                // 历史记录
                 Button(
-                    onClick = { onNavigateToHistory() },
+                    onClick = {
+                        vibrateDevice(context)
+                        onNavigateToHistory()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("历史记录")
                 }
             }
 
-            // ===== 使用说明 =====
             item {
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -196,4 +224,17 @@ fun HomeScreen(
             item { Spacer(modifier = Modifier.height(32.dp)) }
         }
     }
+}
+
+private fun vibrateDevice(context: Context) {
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            vibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+        }
+    } catch (_: Exception) {}
 }

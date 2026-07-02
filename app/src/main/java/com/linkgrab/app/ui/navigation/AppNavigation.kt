@@ -159,8 +159,8 @@ fun AppNavigation(
             // Bottom nav tabs - no animation
             composable(
                 Screen.Home.route,
-                enterTransition = { fadeIn(tween(0)) },
-                exitTransition = { fadeOut(tween(0)) },
+                enterTransition = { fadeIn(tween(150)) },
+                exitTransition = { fadeOut(tween(150)) },
             ) {
                 HomeScreen(
                     viewModel = viewModel,
@@ -175,8 +175,8 @@ fun AppNavigation(
             }
             composable(
                 Screen.Toolbox.route,
-                enterTransition = { fadeIn(tween(0)) },
-                exitTransition = { fadeOut(tween(0)) },
+                enterTransition = { fadeIn(tween(150)) },
+                exitTransition = { fadeOut(tween(150)) },
             ) {
                 ToolboxScreen(
                     onNavigateToVideoToAudio = { navController.navigate(Screen.VideoToAudio.route) },
@@ -186,8 +186,8 @@ fun AppNavigation(
 
             composable(
                 Screen.Settings.route,
-                enterTransition = { fadeIn(tween(0)) },
-                exitTransition = { fadeOut(tween(0)) },
+                enterTransition = { fadeIn(tween(150)) },
+                exitTransition = { fadeOut(tween(150)) },
             ) {
                 SettingsScreen(
                     viewModel = viewModel,
