@@ -342,13 +342,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun testLiveUpdates() {
         if (!_liveUpdatesEnabled.value) return
+
+        // 诊断日志
+        val sdk = android.os.Build.VERSION.SDK_INT
+        val device = android.os.Build.DEVICE
+        val model = android.os.Build.MODEL
+        val release = android.os.Build.VERSION.RELEASE
+        android.util.Log.i("LiveUpdates", "=== 设备信息 ===")
+        android.util.Log.i("LiveUpdates", "  SDK: $sdk (需要 >= 36)")
+        android.util.Log.i("LiveUpdates", "  设备: $device")
+        android.util.Log.i("LiveUpdates", "  型号: $model")
+        android.util.Log.i("LiveUpdates", "  系统: Android $release")
+        android.util.Log.i("LiveUpdates", "  isAndroid16: ${sdk >= 36}")
+        android.util.Log.i("LiveUpdates", "================")
+
         liveUpdatesHelper.startProgress(title = "LinkGrab", content = "正在解析链接...", indeterminate = true)
+        android.util.Log.i("LiveUpdates", "Foreground service started")
+
         viewModelScope.launch {
             for (i in 1..20) {
                 kotlinx.coroutines.delay(1000)
                 liveUpdatesHelper.updateProgress(title = "LinkGrab", content = "解析进度: ${i * 5}%", progress = i * 5, maxProgress = 100)
             }
             liveUpdatesHelper.finish(title = "LinkGrab", content = "解析完成！")
+            android.util.Log.i("LiveUpdates", "Finished")
         }
     }
 
