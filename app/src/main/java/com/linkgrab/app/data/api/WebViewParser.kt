@@ -145,7 +145,7 @@ class WebViewParser(private val context: Context) {
                 cont.resume(Result.failure(Exception("解析超时")))
             }
         }
-        handler.postDelayed(timeout, 20_000)
+        handler.postDelayed(timeout, 12_000)
 
         val extractJs = """(function(){
             var urls = [];
@@ -185,7 +185,7 @@ class WebViewParser(private val context: Context) {
                         cont.resume(Result.success(mediaResult))
                     }
                 } else if (attempt < 4) {
-                    handler.postDelayed({ tryExtract(attempt + 1, view) }, 2_500)
+                    handler.postDelayed({ tryExtract(attempt + 1, view) }, 650)
                 } else {
                     if (!resumed && cont.isActive) {
                         resumed = true
@@ -206,7 +206,7 @@ class WebViewParser(private val context: Context) {
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, loadedUrl: String?) {
                         super.onPageFinished(view, loadedUrl)
-                        handler.postDelayed({ tryExtract(0, view) }, 4_000)
+                        handler.postDelayed({ tryExtract(0, view) }, 900)
                     }
                 }
                 loadUrl(url)
@@ -283,6 +283,14 @@ class WebViewParser(private val context: Context) {
             val html = response.body?.string() ?: throw Exception("空响应")
 
             val images = mutableListOf<String>()
+
+            // Fast path: social preview images are usually available before the app state.
+            val ogPattern = Pattern.compile("""<meta[^>]+(?:property|name)=[\"']og:image[\"'][^>]+content=[\"']([^\"']+)[\"']|<meta[^>]+content=[\"']([^\"']+)[\"'][^>]+(?:property|name)=[\"']og:image[\"']""", Pattern.CASE_INSENSITIVE)
+            val ogMatcher = ogPattern.matcher(html)
+            while (ogMatcher.find()) {
+                val image = ogMatcher.group(1) ?: ogMatcher.group(2) ?: continue
+                if (isContentImage(image)) images.add(image.replace("\\u002F", "/"))
+            }
 
             // Method 1: Extract from __INITIAL_STATE__ JSON
             val statePattern = Pattern.compile("""window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*""", Pattern.DOTALL)
@@ -380,7 +388,7 @@ class WebViewParser(private val context: Context) {
                 cont.resume(Result.failure(Exception("解析超时")))
             }
         }
-        handler.postDelayed(timeout, 25_000)
+        handler.postDelayed(timeout, 15_000)
 
         handler.post {
             webView = WebView(context).apply {
@@ -391,14 +399,14 @@ class WebViewParser(private val context: Context) {
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, loadedUrl: String?) {
                         super.onPageFinished(view, loadedUrl)
-                        handler.postDelayed({
+                            handler.postDelayed({
                             val escapedUrl = urlToInput.replace("'", "\\'")
                             view?.evaluateJavascript("""(function(){
                                 var i=document.querySelector('$inputSelector');
                                 if(i){i.value='$escapedUrl';i.dispatchEvent(new Event('input',{bubbles:true}));return 'ok';}
                                 return 'no_input';
                             })()""") {
-                                handler.postDelayed({
+                                    handler.postDelayed({
                                     view?.evaluateJavascript("""(function(){
                                         var b=document.querySelector('$buttonSelector');
                                         if(b){b.click();return 'ok';}
@@ -414,11 +422,11 @@ class WebViewParser(private val context: Context) {
                                                     cont.resume(parsed)
                                                 }
                                             }
-                                        }, 8_000)
+                                        }, 2_000)
                                     }
-                                }, 1_000)
+                        }, 350)
                             }
-                        }, 3_000)
+                        }, 1_000)
                     }
                 }
                 loadUrl(pageUrl)

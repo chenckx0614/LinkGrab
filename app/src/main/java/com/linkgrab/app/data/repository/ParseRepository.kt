@@ -1,28 +1,54 @@
 package com.linkgrab.app.data.repository
 
 import android.content.Context
+import com.linkgrab.app.data.api.DouyinParser
 import com.linkgrab.app.data.api.WebViewParser
+import com.linkgrab.app.data.api.XhsParser
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.Platform
 
+/**
+ * Parse pipeline (v2):
+ *
+ * 1. Native parsers ported from wujunwei928/parse-video-py — fast, direct
+ *    HTTP, no third-party web service, and they expose Live Photo streams.
+ * 2. Legacy chain (Ucmao API → direct HTML → third-party WebView pages) is
+ *    kept as a fallback for edge cases the native parsers cannot handle.
+ */
 class ParseRepository(context: Context) {
 
-    private val webViewParser = WebViewParser(context)
+    private val douyinParser = DouyinParser()
+    private val xhsParser = XhsParser()
+    private val legacyParser = WebViewParser(context)
 
     /**
-     * Detect which platform the URL belongs to
+     * Detect which platform the URL belongs to.
      */
     fun detectPlatform(url: String): Platform {
-        val cleanUrl = extractUrl(url)
-        return webViewParser.detectPlatform(cleanUrl)
+        val cleanUrl = extractUrl(url).lowercase()
+        return when {
+            """(douyin\.com|v\.douyin\.com|iesdouyin\.com)/""".toRegex().containsMatchIn(cleanUrl) -> Platform.DOUYIN
+            """(xiaohongshu\.com|xhslink\.com|xslink\.com)/""".toRegex().containsMatchIn(cleanUrl) -> Platform.XIAOHONGSHU
+            else -> Platform.UNKNOWN
+        }
     }
 
     /**
-     * Parse media from share URL
+     * Parse media from a share URL. Native parser first, legacy chain as fallback.
      */
     suspend fun parse(url: String): Result<MediaResult> {
         val cleanUrl = extractUrl(url)
-        return webViewParser.parse(cleanUrl)
+        return when (detectPlatform(cleanUrl)) {
+            Platform.DOUYIN -> {
+                val native = douyinParser.parse(cleanUrl)
+                if (native.isSuccess) native else legacyParser.parse(cleanUrl)
+            }
+            Platform.XIAOHONGSHU -> {
+                val native = xhsParser.parse(cleanUrl)
+                if (native.isSuccess) native else legacyParser.parse(cleanUrl)
+            }
+            Platform.UNKNOWN -> Result.failure(Exception("不支持的链接格式，请输入抖音或小红书链接"))
+        }
     }
 
     /**
@@ -53,7 +79,7 @@ class ParseRepository(context: Context) {
     }
 
     /**
-     * Clean up extracted URL: remove trailing punctuation that's not part of the URL
+     * Clean up extracted URL: remove trailing punctuation that's not part of the URL.
      */
     private fun cleanUrl(url: String): String {
         return url.trimEnd(

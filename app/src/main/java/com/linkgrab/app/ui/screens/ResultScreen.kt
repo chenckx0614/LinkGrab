@@ -194,6 +194,7 @@ fun ResultScreen(
                         modifier = Modifier.weight(1f),
                     ) {
                         itemsIndexed(result.images) { index, imageUrl ->
+                            val isLive = result.isLivePhoto(index)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -216,6 +217,24 @@ fun ResultScreen(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize(),
                                 )
+                                // 实况照片徽标
+                                if (isLive && !selectionMode) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopStart)
+                                            .padding(8.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color.Black.copy(alpha = 0.45f))
+                                            .padding(horizontal = 7.dp, vertical = 3.dp),
+                                    ) {
+                                        Text(
+                                            "实况",
+                                            color = Color.White,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium,
+                                        )
+                                    }
+                                }
                                 if (selectionMode) {
                                     Box(
                                         modifier = Modifier
@@ -239,26 +258,49 @@ fun ResultScreen(
                                         }
                                     }
                                 } else {
-                                    IconButton(
-                                        onClick = {
-                                            val filename = "LinkGrab_${System.currentTimeMillis()}_${index}.jpg"
-                                            viewModel.downloadImage(context, imageUrl, filename)
-                                        },
+                                    Row(
                                         modifier = Modifier
                                             .align(Alignment.BottomEnd)
-                                            .padding(8.dp)
-                                            .size(36.dp)
-                                            .background(
-                                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                                CircleShape,
-                                            ),
+                                            .padding(8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
-                                        Icon(
-                                            Icons.Default.Download,
-                                            contentDescription = "下载",
-                                            modifier = Modifier.size(20.dp),
-                                            tint = iosLabel(),
-                                        )
+                                        // 实况视频下载
+                                        if (isLive) {
+                                            IconButton(
+                                                onClick = {
+                                                    result.livePhotoUrl(index)?.let { liveUrl ->
+                                                        viewModel.downloadVideo(context, liveUrl, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .background(
+                                                        iosBlue().copy(alpha = 0.9f),
+                                                        CircleShape,
+                                                    ),
+                                            ) {
+                                                Text("▶", color = Color.White, fontSize = 13.sp)
+                                            }
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                val filename = "LinkGrab_${System.currentTimeMillis()}_${index}.jpg"
+                                                viewModel.downloadImage(context, imageUrl, filename)
+                                            },
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .background(
+                                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                                    CircleShape,
+                                                ),
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Download,
+                                                contentDescription = "下载",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = iosLabel(),
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -281,14 +323,18 @@ fun ResultScreen(
                         IOS26Button(
                             text = if (selectionMode && selectedImages.isNotEmpty()) "下载选中(${selectedImages.size})" else "下载全部(${result.images.size})",
                             onClick = {
-                                val toDownload = if (selectionMode && selectedImages.isNotEmpty()) {
-                                    selectedImages.map { result.images[it] }
+                                val indices = if (selectionMode && selectedImages.isNotEmpty()) {
+                                    selectedImages.toList()
                                 } else {
-                                    result.images
+                                    result.images.indices.toList()
                                 }
-                                toDownload.forEachIndexed { i, url ->
-                                    val filename = "LinkGrab_${System.currentTimeMillis()}_${i}.jpg"
-                                    viewModel.downloadImage(context, url, filename)
+                                val timestamp = System.currentTimeMillis()
+                                indices.forEach { i ->
+                                    viewModel.downloadImage(context, result.images[i], "LinkGrab_${timestamp}_$i.jpg")
+                                    // 实况照片同时保存实况视频
+                                    result.livePhotoUrl(i)?.let { liveUrl ->
+                                        viewModel.downloadVideo(context, liveUrl, "LinkGrab_Live_${timestamp}_$i.mp4")
+                                    }
                                 }
                                 if (selectionMode) {
                                     selectionMode = false
@@ -409,10 +455,16 @@ fun ResultScreen(
     if (showPreview && result?.type == MediaType.IMAGE) {
         ImagePreviewDialog(
             images = result.images,
+            livePhotos = result.livePhotos,
             initialIndex = selectedImageIndex,
             onDismiss = { showPreview = false },
             onDownload = { index ->
                 viewModel.downloadImage(context, result.images[index], "LinkGrab_${System.currentTimeMillis()}_$index.jpg")
+            },
+            onDownloadLive = { index ->
+                result.livePhotoUrl(index)?.let { liveUrl ->
+                    viewModel.downloadVideo(context, liveUrl, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
+                }
             },
         )
     }
@@ -421,20 +473,40 @@ fun ResultScreen(
 @Composable
 private fun ImagePreviewDialog(
     images: List<String>,
+    livePhotos: Map<Int, String>,
     initialIndex: Int,
     onDismiss: () -> Unit,
     onDownload: (Int) -> Unit,
+    onDownloadLive: (Int) -> Unit,
 ) {
     val context = LocalContext.current
     var currentIndex by remember { mutableIntStateOf(initialIndex) }
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
+    var playingLive by remember { mutableStateOf(false) }
+
+    // 实况播放器（仅当前图片是实况且用户点击播放时创建）
+    val liveUrl = livePhotos[currentIndex]
+    val exoPlayer = remember(currentIndex, playingLive) {
+        if (playingLive && liveUrl != null) {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(MediaItem.fromUri(liveUrl))
+                repeatMode = Player.REPEAT_MODE_ONE
+                prepare()
+                playWhenReady = true
+            }
+        } else null
+    }
+    DisposableEffect(exoPlayer) {
+        onDispose { exoPlayer?.release() }
+    }
 
     LaunchedEffect(currentIndex) {
         scale = 1f
         offsetX = 0f
         offsetY = 0f
+        playingLive = false
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -451,15 +523,22 @@ private fun ImagePreviewDialog(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            AsyncImage(
-                model = ImageRequest.Builder(context).data(images[currentIndex]).crossfade(true).build(),
-                contentDescription = "预览 ${currentIndex + 1}/${images.size}",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offsetX, translationY = offsetY),
-            )
+            if (playingLive && exoPlayer != null) {
+                AndroidView(
+                    factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
+                    modifier = Modifier.fillMaxSize().padding(16.dp),
+                )
+            } else {
+                AsyncImage(
+                    model = ImageRequest.Builder(context).data(images[currentIndex]).crossfade(true).build(),
+                    contentDescription = "预览 ${currentIndex + 1}/${images.size}",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                        .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offsetX, translationY = offsetY),
+                )
+            }
 
             Row(
                 modifier = Modifier
@@ -475,7 +554,30 @@ private fun ImagePreviewDialog(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                 )
-                Row {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // 实况照片：播放/停止切换
+                    if (liveUrl != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (playingLive) iosBlue() else Color.White.copy(alpha = 0.18f))
+                                .clickable { playingLive = !playingLive }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                        ) {
+                            Text(
+                                if (playingLive) "停止" else "实况",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        // 实况视频下载
+                        IconButton(onClick = { onDownloadLive(currentIndex) }) {
+                            Text("▶↓", color = Color.White, fontSize = 14.sp)
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     IconButton(onClick = { onDownload(currentIndex) }) {
                         Icon(Icons.Default.Download, contentDescription = "下载", tint = Color.White)
                     }
