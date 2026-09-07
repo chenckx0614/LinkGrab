@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.linkgrab.app.ui.theme.IOS26BackButton
 import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
@@ -47,7 +48,13 @@ fun UpdateLogScreen(onBack: () -> Unit) {
             Modifier.fillMaxSize().padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { IOS26PageHeader("更新日志", "LinkGrab 的每一次改进。") }
+            item {
+                IOS26BackButton(
+                    onClick = onBack,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+            }
+            item { IOS26PageHeader("更新日志", "LinkGrab 的每一次改进。", topPadding = 20.dp) }
             items(updateLogs.size) { index ->
                 val item = updateLogs[index]
                 IOS26Panel {

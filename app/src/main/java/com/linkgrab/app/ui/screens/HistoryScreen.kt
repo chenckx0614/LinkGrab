@@ -42,6 +42,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.linkgrab.app.data.history.HistoryItem
+import com.linkgrab.app.ui.theme.IOS26BackButton
 import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26Choice
 import com.linkgrab.app.ui.theme.IOS26PageHeader
@@ -54,7 +55,6 @@ import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.viewmodel.MainViewModel
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -66,16 +66,11 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     val filtered = history.filter { filter == "all" || it.platform == filter }
     IOS26Canvas {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-            Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IOS26PageHeader("历史记录", "查看和继续处理已解析的内容")
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Default.ArrowBack, "返回", tint = iosLabel())
-                }
-            }
+            IOS26BackButton(
+                onClick = onBack,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            IOS26PageHeader("历史记录", "查看和继续处理已解析的内容", topPadding = 20.dp)
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

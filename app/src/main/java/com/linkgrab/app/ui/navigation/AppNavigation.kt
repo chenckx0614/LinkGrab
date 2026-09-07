@@ -3,6 +3,7 @@ package com.linkgrab.app.ui.navigation
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -27,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -111,6 +113,7 @@ private fun NavigationBarItem(
     label: String,
     selected: Boolean,
     interaction: MutableInteractionSource,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val visibleLabel = when (icon) {
@@ -121,30 +124,30 @@ private fun NavigationBarItem(
     }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.94f else if (selected) 1f else 0.96f,
-        animationSpec = spring(dampingRatio = 0.75f, stiffness = 750f),
+        targetValue = if (pressed) 0.92f else 1f,
+        animationSpec = spring(dampingRatio = 0.68f, stiffness = 620f),
         label = "tabPressScale",
     )
     val tint by androidx.compose.animation.animateColorAsState(
         targetValue = if (selected) iosBlue() else iosLabel().copy(alpha = 0.55f),
-        animationSpec = tween(180),
+        animationSpec = tween(200),
         label = "tabTint",
     )
     Column(
-        modifier = Modifier
+        modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(18.dp))
             .background(Color.Transparent)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(1.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
         Icon(icon, contentDescription = visibleLabel, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             visibleLabel,
             color = tint,
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
             letterSpacing = (-0.1).sp,
         )
@@ -160,25 +163,21 @@ private fun IOS26BottomBar(
     interaction: MutableInteractionSource,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val barPressed by interaction.collectIsPressedAsState()
     val blueTint = iosBlue()
     BoxWithConstraints(
         modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .height(58.dp)
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 18.dp)
+            .navigationBarsPadding()
+            .height(60.dp)
             .fillMaxWidth()
             .drawBackdrop(
                 backdrop = backdrop,
-                shape = { RoundedCornerShape(28.dp) },
+                shape = { RoundedCornerShape(30.dp) },
                 effects = {
                     vibrancy()
                     blur(16.dp.toPx())
                     lens(24.dp.toPx(), 24.dp.toPx())
-                },
-                layerBlock = {
-                    val scale = if (barPressed) 0.98f else 1f
-                    scaleX = scale
-                    scaleY = scale
                 },
                 highlight = { com.kyant.backdrop.highlight.Highlight.Default },
                 shadow = { Shadow(radius = 14.dp, alpha = 0.22f) },
@@ -188,12 +187,13 @@ private fun IOS26BottomBar(
                     drawRect(Color.White.copy(alpha = 0.05f))
                 },
             )
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .padding(horizontal = 5.dp, vertical = 5.dp),
     ) {
-        val itemWidth = (maxWidth - 8.dp) / 3f
+        // Each tab occupies exactly itemWidth so the indicator stays centered.
+        val itemWidth = (maxWidth - 10.dp) / 3f
         val indicatorOffset by animateDpAsState(
             targetValue = itemWidth * selectedIndex,
-            animationSpec = spring(dampingRatio = 0.75f, stiffness = 550f),
+            animationSpec = spring(dampingRatio = 0.68f, stiffness = 420f),
             label = "ios26TabIndicator",
         )
         Box(
@@ -203,7 +203,7 @@ private fun IOS26BottomBar(
                 .offset(x = indicatorOffset)
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(24.dp) },
+                    shape = { RoundedCornerShape(25.dp) },
                     effects = {
                         vibrancy()
                         blur(10.dp.toPx())
@@ -213,16 +213,16 @@ private fun IOS26BottomBar(
                     innerShadow = { InnerShadow(radius = 4.dp, alpha = 0.22f) },
                     onDrawSurface = {
                         drawRect(Color.White.copy(alpha = 0.20f))
-                        drawRect(blueTint.copy(alpha = 0.12f))
+                        drawRect(blueTint.copy(alpha = 0.10f))
                     },
                 )
         )
         Row(
             modifier = Modifier.fillMaxWidth().fillMaxHeight(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            content = content,
-        )
+        ) {
+            content()
+        }
     }
 }
 
@@ -320,31 +320,32 @@ fun AppNavigation(
                 )
             }
 
-            // Detail pages — iOS 26-style slide with spring-like easing
-            val slideSpec = tween<Float>(280)
+            // Detail pages — iOS 26 push/pop: new page slides in from right with
+            // deceleration curve, old page parallax-shifts left at 1/4 speed.
+            val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
             val slideIn = slideInHorizontally(
-                animationSpec = tween(280),
+                animationSpec = tween(320, easing = iosEasing),
                 initialOffsetX = { it },
             )
             val slideOut = slideOutHorizontally(
-                animationSpec = tween(280),
+                animationSpec = tween(320, easing = iosEasing),
                 targetOffsetX = { -it / 4 },
             )
             val popSlideIn = slideInHorizontally(
-                animationSpec = tween(280),
+                animationSpec = tween(320, easing = iosEasing),
                 initialOffsetX = { -it / 4 },
             )
             val popSlideOut = slideOutHorizontally(
-                animationSpec = tween(280),
+                animationSpec = tween(320, easing = iosEasing),
                 targetOffsetX = { it },
             )
 
             composable(
                 Screen.Result.route,
-                enterTransition = { slideIn + fadeIn(tween(200)) },
-                exitTransition = { slideOut + fadeOut(tween(180)) },
-                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
-                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
+                enterTransition = { slideIn },
+                exitTransition = { slideOut },
+                popEnterTransition = { popSlideIn },
+                popExitTransition = { popSlideOut },
             ) {
                 ResultScreen(
                     viewModel = viewModel,
@@ -353,10 +354,10 @@ fun AppNavigation(
             }
             composable(
                 Screen.UpdateLog.route,
-                enterTransition = { slideIn + fadeIn(tween(200)) },
-                exitTransition = { slideOut + fadeOut(tween(180)) },
-                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
-                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
+                enterTransition = { slideIn },
+                exitTransition = { slideOut },
+                popEnterTransition = { popSlideIn },
+                popExitTransition = { popSlideOut },
             ) {
                 UpdateLogScreen(
                     onBack = { navController.popBackStack() },
@@ -364,28 +365,28 @@ fun AppNavigation(
             }
             composable(
                 Screen.VideoToAudio.route,
-                enterTransition = { slideIn + fadeIn(tween(200)) },
-                exitTransition = { slideOut + fadeOut(tween(180)) },
-                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
-                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
+                enterTransition = { slideIn },
+                exitTransition = { slideOut },
+                popEnterTransition = { popSlideIn },
+                popExitTransition = { popSlideOut },
             ) {
                 VideoToAudioScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Screen.ImageConvert.route,
-                enterTransition = { slideIn + fadeIn(tween(200)) },
-                exitTransition = { slideOut + fadeOut(tween(180)) },
-                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
-                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
+                enterTransition = { slideIn },
+                exitTransition = { slideOut },
+                popEnterTransition = { popSlideIn },
+                popExitTransition = { popSlideOut },
             ) {
                 ImageConvertScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Screen.History.route,
-                enterTransition = { slideIn + fadeIn(tween(200)) },
-                exitTransition = { slideOut + fadeOut(tween(180)) },
-                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
-                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
+                enterTransition = { slideIn },
+                exitTransition = { slideOut },
+                popEnterTransition = { popSlideIn },
+                popExitTransition = { popSlideOut },
             ) {
                 HistoryScreen(
                     viewModel = viewModel,
@@ -408,9 +409,9 @@ fun AppNavigation(
                     backdrop = liquidBackdrop,
                     interaction = tabInteraction,
                 ) {
-                    NavigationBarItem(Icons.Default.Home, "首页", currentDestination?.route == Screen.Home.route, tabInteraction) { navController.navigate(Screen.Home.route) { launchSingleTop = true } }
-                    NavigationBarItem(Icons.Default.Build, "工具箱", currentDestination?.route == Screen.Toolbox.route, tabInteraction) { navController.navigate(Screen.Toolbox.route) { launchSingleTop = true } }
-                    NavigationBarItem(Icons.Default.Settings, "设置", currentDestination?.route == Screen.Settings.route, tabInteraction) { navController.navigate(Screen.Settings.route) { launchSingleTop = true } }
+                    NavigationBarItem(Icons.Default.Home, "首页", currentDestination?.route == Screen.Home.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Home.route) { launchSingleTop = true } }
+                    NavigationBarItem(Icons.Default.Build, "工具箱", currentDestination?.route == Screen.Toolbox.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Toolbox.route) { launchSingleTop = true } }
+                    NavigationBarItem(Icons.Default.Settings, "设置", currentDestination?.route == Screen.Settings.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Settings.route) { launchSingleTop = true } }
                 }
             }
         }

@@ -43,7 +43,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -76,6 +75,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.linkgrab.app.data.model.MediaType
+import com.linkgrab.app.ui.theme.IOS26BackButton
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
@@ -136,16 +136,17 @@ fun ResultScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (selectionMode) {
-                            selectionMode = false
-                            selectedImages = emptySet()
-                        } else {
-                            onBack()
-                        }
-                    }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
+                    IOS26BackButton(
+                        onClick = {
+                            if (selectionMode) {
+                                selectionMode = false
+                                selectedImages = emptySet()
+                            } else {
+                                onBack()
+                            }
+                        },
+                        modifier = Modifier.padding(start = 16.dp),
+                    )
                 },
                 actions = {
                     if (result?.type == MediaType.IMAGE && result.images.size > 1) {

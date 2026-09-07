@@ -383,8 +383,8 @@ fun IOS26LargeTitle(title: String, subtitle: String? = null) {
 }
 
 @Composable
-fun IOS26PageHeader(title: String, subtitle: String? = null) {
-    Column(Modifier.padding(top = 48.dp, bottom = 8.dp)) {
+fun IOS26PageHeader(title: String, subtitle: String? = null, topPadding: androidx.compose.ui.unit.Dp = 48.dp) {
+    Column(Modifier.padding(top = topPadding, bottom = 8.dp)) {
         IOS26LargeTitle(title, subtitle)
     }
 }
@@ -443,4 +443,63 @@ fun IOS26Divider(modifier: Modifier = Modifier) {
         thickness = 0.5.dp,
         color = iosSeparator().copy(alpha = 0.5f),
     )
+}
+
+// MARK: - Back Button (iOS 26 circular glass style)
+
+/**
+ * iOS 26-style back button: circular frosted-glass capsule with a
+ * chevron-left glyph. Press feedback is a quick scale-down plus a
+ * subtle background darkening, matching UIKit's UIHover / touch-down
+ * feel on iOS 26.
+ */
+@Composable
+fun IOS26BackButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.88f else 1f,
+        animationSpec = spring(dampingRatio = 0.65f, stiffness = 700f),
+        label = "ios26BackScale",
+    )
+    val bgAlpha by animateFloatAsState(
+        targetValue = if (pressed) 0.55f else 1f,
+        animationSpec = tween(120),
+        label = "ios26BackBg",
+    )
+    val chevronColor = iosLabel()
+    val glassBg = iosGlass()
+    val glassStroke = iosGlassStroke()
+    Box(
+        modifier = modifier
+            .size(38.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(CircleShape)
+            .background(glassBg.copy(alpha = bgAlpha))
+            .border(0.5.dp, glassStroke, CircleShape)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        // chevron.left — drawn manually for the exact iOS glyph proportions
+        androidx.compose.foundation.Canvas(modifier = Modifier.size(11.dp, 17.dp)) {
+            val strokeWidth = 2.2.dp.toPx()
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(size.width * 0.85f, 0f)
+                lineTo(size.width * 0.15f, size.height / 2f)
+                lineTo(size.width * 0.85f, size.height)
+            }
+            drawPath(
+                path = path,
+                color = chevronColor,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = strokeWidth,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    join = androidx.compose.ui.graphics.StrokeJoin.Round,
+                ),
+            )
+        }
+    }
 }

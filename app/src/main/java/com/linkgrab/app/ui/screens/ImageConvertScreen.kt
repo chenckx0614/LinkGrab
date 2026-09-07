@@ -57,7 +57,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import com.linkgrab.app.ui.theme.IOS26BackButton
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
@@ -102,9 +102,10 @@ fun ImageConvertScreen(onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("图片转格式", fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
+                    IOS26BackButton(
+                        onClick = onBack,
+                        modifier = Modifier.padding(start = 16.dp),
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = iosBackground().copy(alpha = 0.85f),
