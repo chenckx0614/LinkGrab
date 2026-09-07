@@ -7,7 +7,6 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -136,6 +135,7 @@ private fun NavigationBarItem(
     )
     Column(
         modifier = modifier
+            .fillMaxHeight()
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(18.dp))
             .background(Color.Transparent)
@@ -143,12 +143,13 @@ private fun NavigationBarItem(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = visibleLabel, tint = tint, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(2.dp))
+        Icon(icon, contentDescription = visibleLabel, tint = tint, modifier = Modifier.size(21.dp))
+        Spacer(Modifier.height(3.dp))
         Text(
             visibleLabel,
             color = tint,
             fontSize = 10.sp,
+            lineHeight = 10.sp,
             fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
             letterSpacing = (-0.1).sp,
         )
@@ -158,133 +159,88 @@ private fun NavigationBarItem(
 private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Toolbox.route, Screen.Settings.route)
 
 /**
- * iOS 26 / Nexio-style floating dock: a pill-shaped glass container holding
- * the three tabs, plus a detached circular FAB on the right.
+ * iOS 26-style floating dock: a full-width pill glass container with three
+ * tabs. The selection capsule slides with a liquid squash-and-stretch
+ * effect — it elongates along the travel direction while moving and
+ * settles back to its exact item width, like UIKit's liquid-glass tab bar.
  */
 @Composable
 private fun IOS26BottomBar(
     selectedIndex: Int,
     backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     interaction: MutableInteractionSource,
-    onFabClick: () -> Unit,
     content: @Composable RowScope.() -> Unit,
 ) {
-    Row(
+    BoxWithConstraints(
         modifier = Modifier
             .padding(horizontal = 20.dp)
             .padding(bottom = 16.dp)
             .navigationBarsPadding()
             .fillMaxWidth()
-            .height(64.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .height(64.dp)
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedCornerShape(32.dp) },
+                effects = {
+                    vibrancy()
+                    blur(16.dp.toPx())
+                    lens(24.dp.toPx(), 24.dp.toPx())
+                },
+                highlight = { com.kyant.backdrop.highlight.Highlight.Default },
+                shadow = { Shadow(radius = 14.dp, alpha = 0.20f) },
+                innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.16f) },
+                onDrawSurface = {
+                    drawRect(Color.Transparent)
+                    drawRect(Color.White.copy(alpha = 0.05f))
+                },
+            )
+            .padding(horizontal = 6.dp, vertical = 6.dp),
     ) {
-        // ---- Pill container with the sliding selection capsule ----
-        BoxWithConstraints(
+        // Each tab occupies exactly itemWidth so the capsule stays centered.
+        val itemWidth = (maxWidth - 12.dp) / 3f
+
+        // Track the capsule position as a float so we also get its velocity —
+        // velocity drives the liquid stretch while the capsule is traveling.
+        val position = remember { androidx.compose.animation.core.Animatable(0f) }
+        LaunchedEffect(selectedIndex) {
+            position.animateTo(
+                targetValue = selectedIndex.toFloat(),
+                animationSpec = spring(dampingRatio = 0.62f, stiffness = 380f),
+            )
+        }
+        val velocity = position.velocity
+        // Stretch up to +22% width at peak velocity, centered on the capsule.
+        val stretch = 1f + (kotlin.math.abs(velocity).coerceAtMost(5f) / 5f) * 0.22f
+        val capsuleWidth = itemWidth * stretch
+        val capsuleCenter = itemWidth * (position.value + 0.5f)
+        val capsuleOffset = capsuleCenter - capsuleWidth / 2f
+
+        Box(
             modifier = Modifier
-                .weight(1f)
+                .width(capsuleWidth)
                 .fillMaxHeight()
+                .offset(x = capsuleOffset)
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(32.dp) },
+                    shape = { RoundedCornerShape(26.dp) },
                     effects = {
                         vibrancy()
-                        blur(16.dp.toPx())
-                        lens(24.dp.toPx(), 24.dp.toPx())
+                        blur(10.dp.toPx())
+                        lens(18.dp.toPx(), 22.dp.toPx(), chromaticAberration = true)
                     },
-                    highlight = { com.kyant.backdrop.highlight.Highlight.Default },
-                    shadow = { Shadow(radius = 14.dp, alpha = 0.20f) },
-                    innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.16f) },
+                    shadow = { Shadow(radius = 8.dp, alpha = 0.18f) },
+                    innerShadow = { InnerShadow(radius = 4.dp, alpha = 0.20f) },
                     onDrawSurface = {
-                        drawRect(Color.Transparent)
-                        drawRect(Color.White.copy(alpha = 0.05f))
+                        drawRect(Color.White.copy(alpha = 0.22f))
+                        drawRect(Color.Gray.copy(alpha = 0.10f))
                     },
                 )
-                .padding(horizontal = 6.dp, vertical = 6.dp),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Each tab occupies exactly itemWidth so the capsule stays centered.
-            val itemWidth = (maxWidth - 12.dp) / 3f
-            val indicatorOffset by animateDpAsState(
-                targetValue = itemWidth * selectedIndex,
-                animationSpec = spring(dampingRatio = 0.68f, stiffness = 420f),
-                label = "ios26TabIndicator",
-            )
-            Box(
-                modifier = Modifier
-                    .width(itemWidth)
-                    .fillMaxHeight()
-                    .offset(x = indicatorOffset)
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { RoundedCornerShape(26.dp) },
-                        effects = {
-                            vibrancy()
-                            blur(10.dp.toPx())
-                            lens(18.dp.toPx(), 22.dp.toPx(), chromaticAberration = true)
-                        },
-                        shadow = { Shadow(radius = 8.dp, alpha = 0.18f) },
-                        innerShadow = { InnerShadow(radius = 4.dp, alpha = 0.20f) },
-                        onDrawSurface = {
-                            drawRect(Color.White.copy(alpha = 0.22f))
-                            drawRect(Color.Gray.copy(alpha = 0.10f))
-                        },
-                    )
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                content()
-            }
-        }
-
-        Spacer(Modifier.width(14.dp))
-
-        // ---- Detached circular FAB ----
-        IOS26Fab(backdrop = backdrop, interaction = interaction, onClick = onFabClick)
-    }
-}
-
-@Composable
-private fun IOS26Fab(
-    backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
-    interaction: MutableInteractionSource,
-    onClick: () -> Unit,
-) {
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 560f),
-        label = "ios26FabScale",
-    )
-    val blue = iosBlue()
-    Box(
-        modifier = Modifier
-            .size(56.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(CircleShape)
-            .background(blue)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Plus glyph drawn manually for crisp proportions
-        androidx.compose.foundation.Canvas(modifier = Modifier.size(22.dp)) {
-            val stroke = 2.6.dp.toPx()
-            val half = size.minDimension / 2f
-            val arm = size.minDimension * 0.30f
-            drawLine(
-                color = Color.White,
-                start = androidx.compose.ui.geometry.Offset(half - arm, half),
-                end = androidx.compose.ui.geometry.Offset(half + arm, half),
-                strokeWidth = stroke,
-                cap = androidx.compose.ui.graphics.StrokeCap.Round,
-            )
-            drawLine(
-                color = Color.White,
-                start = androidx.compose.ui.geometry.Offset(half, half - arm),
-                end = androidx.compose.ui.geometry.Offset(half, half + arm),
-                strokeWidth = stroke,
-                cap = androidx.compose.ui.graphics.StrokeCap.Round,
-            )
+            content()
         }
     }
 }
@@ -471,16 +427,6 @@ fun AppNavigation(
                     },
                     backdrop = liquidBackdrop,
                     interaction = tabInteraction,
-                    onFabClick = {
-                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString().orEmpty()
-                        if (text.isBlank()) {
-                            Toast.makeText(context, "剪贴板为空", Toast.LENGTH_SHORT).show()
-                        } else {
-                            viewModel.parseUrl(text)
-                            navController.navigate(Screen.Result.route)
-                        }
-                    },
                 ) {
                     NavigationBarItem(Icons.Default.Home, "首页", currentDestination?.route == Screen.Home.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Home.route) { launchSingleTop = true } }
                     NavigationBarItem(Icons.Default.Build, "工具箱", currentDestination?.route == Screen.Toolbox.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Toolbox.route) { launchSingleTop = true } }
