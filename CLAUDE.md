@@ -114,6 +114,7 @@ linkgrab/app/src/main/java/com/linkgrab/app/
 
 | 版本 | 日期 | 内容 |
 |------|------|------|
+| 1.8.2 | 2026-09-07 | 基于 NexioSchedule / HyperOS 4 风格重构全局 UI：紫色主题、液态玻璃面板、Squircle 圆角与深色模式适配 |
 | 1.2.5 | 2026-06-19 | 更新弹窗改为miuix风格 |
 | 1.2.4 | 2026-06-19 | 优化设置页UI排版，分组展示更清晰 |
 | 1.2.3 | 2026-06-19 | 修复检查更新检测，已是最新版提示，双平台Release |
@@ -148,3 +149,11 @@ linkgrab/app/src/main/java/com/linkgrab/app/
 - ucmao API 需要 Vigenere 密码认证
 - 口令链接提取支持抖音/小红书分享口令格式
 - Live Updates 需要前台服务才能在 Android 16 上岛
+- Live Updates 闇€瑕佸墠鍙版湇鍔℃墠鑳藉湪 Android 16 涓婂矝
+
+## 2026-08-13 维护规范补充
+
+- UI 重构优先检索 GitHub 开源实现和参考项目，评估 license、维护状态与 Compose 兼容性后再决定是否引入。
+- 液态玻璃优先复用现有 Miuix blur；如需真实 backdrop blur、折射或色散，再评估 Cloudy / AndroidLiquidGlass 等方案。
+- Android 16 Live Updates 必须同时具备 POST_NOTIFICATIONS、POST_PROMOTED_NOTIFICATIONS、ongoing、CATEGORY_PROGRESS、promoted ongoing 请求和前台服务。
+- 每次修改后必须更新版本号、更新日志、构建带版本号 APK，并完成编译验证。

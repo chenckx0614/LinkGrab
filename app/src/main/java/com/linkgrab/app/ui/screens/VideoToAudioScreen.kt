@@ -44,16 +44,22 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import com.linkgrab.app.ui.theme.NexioButton
+import com.linkgrab.app.ui.theme.NexioIconCapsule
+import com.linkgrab.app.ui.theme.NexioPanel
+import com.linkgrab.app.ui.theme.nexioInk
+import com.linkgrab.app.ui.theme.nexioSecondary
 
 data class AudioFormat(val name: String, val ext: String, val desc: String)
 
@@ -66,6 +72,7 @@ private val audioFormats = listOf(
 )
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun VideoToAudioScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var isProcessing by remember { mutableStateOf(false) }
@@ -102,10 +109,10 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = "视频转音频",
+                title = { Text("视频转音频") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(MiuixIcons.Back, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
             )
@@ -121,86 +128,75 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
         ) {
             Spacer(modifier = Modifier.height(40.dp))
 
-            // Icon
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(MiuixTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("🎵", fontSize = 36.sp)
-            }
+            NexioIconCapsule("🎵", MaterialTheme.colorScheme.primary)
 
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
                 text = "视频转音频",
-                style = MiuixTheme.textStyles.title1,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
+                color = nexioInk(),
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "从视频中提取音频文件",
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                color = nexioSecondary(),
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Format selection
-            Text(
-                text = "输出格式",
-                style = MiuixTheme.textStyles.title2,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            NexioPanel(Modifier.fillMaxWidth()) {
+                Text(
+                    text = "输出格式",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = nexioInk(),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                audioFormats.chunked(3).forEach { row ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        row.forEach { format ->
-                            FormatChip(
-                                format = format,
-                                selected = selectedFormat == format,
-                                onClick = { selectedFormat = format },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        // Fill remaining space
-                        repeat(3 - row.size) {
-                            Spacer(modifier = Modifier.weight(1f))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    audioFormats.chunked(3).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            row.forEach { format ->
+                                FormatChip(
+                                    format = format,
+                                    selected = selectedFormat == format,
+                                    onClick = { selectedFormat = format },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                            repeat(3 - row.size) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
                         }
                     }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = statusText,
+                    color = if (statusText.contains("失败")) MaterialTheme.colorScheme.error
+                    else nexioSecondary(),
+                )
+
+                if (isProcessing) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(48.dp))
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Status
-            Text(
-                text = statusText,
-                color = if (statusText.contains("失败")) MiuixTheme.colorScheme.error
-                else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-
-            if (isProcessing) {
-                Spacer(modifier = Modifier.height(16.dp))
-                CircularProgressIndicator(modifier = Modifier.size(48.dp))
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Action button
-            Button(
+            NexioButton(
+                text = "选择视频文件",
                 onClick = { videoPicker.launch("video/*") },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                enabled = !isProcessing,
-            ) {
-                Text("选择视频文件", style = MiuixTheme.textStyles.button)
-            }
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -212,16 +208,18 @@ private fun FormatChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val background by androidx.compose.animation.animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = androidx.compose.animation.core.tween(180),
+        label = "audioChipBg",
+    )
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(
-                if (selected) MiuixTheme.colorScheme.primaryContainer
-                else MiuixTheme.colorScheme.surfaceVariant
-            )
+            .background(background)
             .border(
                 width = if (selected) 2.dp else 0.dp,
-                color = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.outline,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 shape = RoundedCornerShape(12.dp),
             )
             .clickable(onClick = onClick)
@@ -231,12 +229,12 @@ private fun FormatChip(
         Text(
             text = format.name,
             fontWeight = FontWeight.Bold,
-            color = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
         )
         Text(
             text = format.desc,
             fontSize = 10.sp,
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else nexioSecondary(),
         )
     }
 }

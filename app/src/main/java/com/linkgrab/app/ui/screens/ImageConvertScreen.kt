@@ -46,16 +46,23 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import com.linkgrab.app.ui.theme.NexioButton
+import com.linkgrab.app.ui.theme.NexioIconCapsule
+import com.linkgrab.app.ui.theme.NexioOutlinedButton
+import com.linkgrab.app.ui.theme.NexioPanel
+import com.linkgrab.app.ui.theme.nexioInk
+import com.linkgrab.app.ui.theme.nexioSecondary
 
 data class ImageFormat(val name: String, val ext: String, val mimeType: String)
 
@@ -67,6 +74,7 @@ private val imageFormats = listOf(
 )
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun ImageConvertScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
@@ -85,10 +93,10 @@ fun ImageConvertScreen(onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = "图片转格式",
+                title = { Text("图片转格式") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(MiuixIcons.Back, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
             )
@@ -104,33 +112,24 @@ fun ImageConvertScreen(onBack: () -> Unit) {
         ) {
             Spacer(modifier = Modifier.height(40.dp))
 
-            // Icon
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(MiuixTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("🖼️", fontSize = 36.sp)
-            }
+            NexioIconCapsule("🖼", MaterialTheme.colorScheme.primary)
 
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
                 text = "图片转格式",
-                style = MiuixTheme.textStyles.title1,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
+                color = nexioInk(),
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "转换图片格式 (JPG/PNG/WebP/BMP)",
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                color = nexioSecondary(),
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Preview
             selectedUri?.let { uri ->
                 AsyncImage(
                     model = uri,
@@ -139,63 +138,62 @@ fun ImageConvertScreen(onBack: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(180.dp)
-                        .clip(RoundedCornerShape(12.dp)),
+                        .clip(RoundedCornerShape(20.dp)),
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Format selection
-            Text(
-                text = "目标格式",
-                style = MiuixTheme.textStyles.title2,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            NexioPanel(Modifier.fillMaxWidth()) {
+                Text(
+                    text = "目标格式",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = nexioInk(),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                imageFormats.forEach { format ->
-                    FormatChipSmall(
-                        format = format,
-                        selected = selectedFormat == format,
-                        onClick = { selectedFormat = format },
-                        modifier = Modifier.weight(1f),
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    imageFormats.forEach { format ->
+                        FormatChipSmall(
+                            format = format,
+                            selected = selectedFormat == format,
+                            onClick = { selectedFormat = format },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Status
-            Text(
-                text = statusText,
-                color = if (statusText.contains("失败")) MiuixTheme.colorScheme.error
-                else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
-
-            if (isProcessing) {
                 Spacer(modifier = Modifier.height(16.dp))
-                CircularProgressIndicator(modifier = Modifier.size(48.dp))
+
+                Text(
+                    text = statusText,
+                    color = if (statusText.contains("失败")) MaterialTheme.colorScheme.error
+                    else nexioSecondary(),
+                )
+
+                if (isProcessing) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Action buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Button(
+                NexioOutlinedButton(
+                    text = "选择图片",
                     onClick = { imagePicker.launch("image/*") },
-                    modifier = Modifier.weight(1f).height(52.dp),
-                    enabled = !isProcessing,
-                ) {
-                    Text("选择图片")
-                }
+                    modifier = Modifier.weight(1f),
+                )
 
-                Button(
+                NexioButton(
+                    text = "转换",
                     onClick = {
                         selectedUri?.let { uri ->
                             isProcessing = true
@@ -217,11 +215,9 @@ fun ImageConvertScreen(onBack: () -> Unit) {
                             }
                         }
                     },
-                    modifier = Modifier.weight(1f).height(52.dp),
+                    modifier = Modifier.weight(1f),
                     enabled = selectedUri != null && !isProcessing,
-                ) {
-                    Text("转换")
-                }
+                )
             }
         }
     }
@@ -234,17 +230,19 @@ private fun FormatChipSmall(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val background by androidx.compose.animation.animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = androidx.compose.animation.core.tween(180),
+        label = "formatChipBg",
+    )
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(
-                if (selected) MiuixTheme.colorScheme.primaryContainer
-                else MiuixTheme.colorScheme.surfaceVariant
-            )
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
             .border(
                 width = if (selected) 2.dp else 0.dp,
-                color = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.outline,
-                shape = RoundedCornerShape(10.dp),
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                shape = RoundedCornerShape(12.dp),
             )
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp),
@@ -253,7 +251,7 @@ private fun FormatChipSmall(
         Text(
             text = format.name,
             fontWeight = FontWeight.Bold,
-            color = if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.onSurface,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
         )
     }
 }

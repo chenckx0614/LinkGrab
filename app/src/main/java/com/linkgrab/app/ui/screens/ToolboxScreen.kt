@@ -1,115 +1,58 @@
 package com.linkgrab.app.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ChevronForward
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.ui.unit.sp
+import com.linkgrab.app.ui.theme.NexioCanvas
+import com.linkgrab.app.ui.theme.NexioPageHeader
+import com.linkgrab.app.ui.theme.NexioPanel
+import com.linkgrab.app.ui.theme.nexioInk
+import com.linkgrab.app.ui.theme.nexioSecondary
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 
 @Composable
-fun ToolboxScreen(
-    onNavigateToVideoToAudio: () -> Unit = {},
-    onNavigateToImageConvert: () -> Unit = {},
-) {
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = "工具箱",
-                largeTitle = "工具箱",
-            )
-        },
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-        ) {
-            item { Spacer(modifier = Modifier.height(8.dp)) }
-
+fun ToolboxScreen(onNavigateToVideoToAudio: () -> Unit = {}, onNavigateToImageConvert: () -> Unit = {}) {
+    NexioCanvas {
+        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
             item {
-                Text(
-                    text = "媒体工具",
-                    style = MiuixTheme.textStyles.title1,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
+                NexioPageHeader("工具", "为已经保存的内容，准备下一步。")
             }
-
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    ToolboxItem(
-                        title = "视频转音频",
-                        description = "从视频中提取音频，保存为 M4A 格式",
-                        onClick = onNavigateToVideoToAudio,
-                    )
-                    ToolboxItem(
-                        title = "图片转格式",
-                        description = "转换图片格式：JPG / PNG / WebP / BMP",
-                        onClick = onNavigateToImageConvert,
-                    )
+                NexioPanel(Modifier.fillMaxWidth()) {
+                    ToolRow("视频转音频", "提取音频并保存到音乐资料库", onNavigateToVideoToAudio)
+                    androidx.compose.material3.HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+                    ToolRow("图片转换", "转换 JPG、PNG、WebP 或 BMP", onNavigateToImageConvert)
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(20.dp)) }
-
-            item {
-                Text(
-                    text = "更多功能即将推出...",
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-            }
-
-            item { Spacer(modifier = Modifier.height(32.dp)) }
+            item { Text("更多工具会在这里出现", color = nexioSecondary(), modifier = Modifier.padding(horizontal = 6.dp)); Spacer(Modifier.padding(bottom = 100.dp)) }
         }
     }
 }
 
 @Composable
-private fun ToolboxItem(
-    title: String,
-    description: String,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MiuixTheme.textStyles.title2)
-            Text(
-                text = description,
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
+private fun ToolRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = nexioInk(), fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = nexioSecondary(), fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
         }
-        Icon(
-            MiuixIcons.ChevronForward,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
+        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = nexioSecondary(), modifier = Modifier.size(20.dp))
     }
 }

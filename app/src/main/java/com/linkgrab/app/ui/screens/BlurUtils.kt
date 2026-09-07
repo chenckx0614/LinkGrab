@@ -1,58 +1,22 @@
 package com.linkgrab.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
-import top.yukonga.miuix.kmp.blur.BlurDefaults
-import top.yukonga.miuix.kmp.blur.LayerBackdrop
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.isRuntimeShaderSupported
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.ui.graphics.Color
+import com.linkgrab.app.ui.theme.NexioSurfaceDark
+import com.linkgrab.app.ui.theme.NexioSurfaceLight
+import com.linkgrab.app.ui.theme.isInDarkTheme
 
-/**
- * Create a blur backdrop. Returns null if runtime shader is not supported.
- */
-@Composable
-fun rememberBlurBackdrop(): LayerBackdrop? {
-    if (!isRuntimeShaderSupported()) return null
-    val surfaceColor = MiuixTheme.colorScheme.surface
-    return rememberLayerBackdrop {
-        drawRect(surfaceColor)
-        drawContent()
-    }
-}
-
-/**
- * Wrap bar content with Gaussian blur effect.
- */
 @Composable
 fun BlurredBar(
-    backdrop: LayerBackdrop?,
+    backdrop: Any? = null,
     blurEnabled: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Box(
-        modifier = if (blurEnabled && backdrop != null) {
-            modifier.textureBlur(
-                backdrop = backdrop,
-                shape = RectangleShape,
-                blurRadius = 25f,
-                colors = BlurDefaults.blurColors(
-                    blendColors = listOf(
-                        BlendColorEntry(color = MiuixTheme.colorScheme.surface.copy(0.8f)),
-                    ),
-                ),
-            )
-        } else {
-            modifier
-        },
-    ) {
-        content()
-    }
+    val base = if (isInDarkTheme()) NexioSurfaceDark else NexioSurfaceLight
+    val alpha = if (blurEnabled) 0.70f else 0.92f
+    Box(modifier.background(base.copy(alpha = alpha))) { content() }
 }

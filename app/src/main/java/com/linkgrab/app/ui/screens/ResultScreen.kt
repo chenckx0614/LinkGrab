@@ -30,8 +30,19 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,31 +61,30 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import androidx.compose.ui.viewinterop.AndroidView
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.linkgrab.app.data.model.MediaType
+import com.linkgrab.app.ui.theme.NexioButton
+import com.linkgrab.app.ui.theme.NexioIconCapsule
+import com.linkgrab.app.ui.theme.NexioOutlinedButton
+import com.linkgrab.app.ui.theme.NexioPanel
+import com.linkgrab.app.ui.theme.NexioSquircleSmall
+import com.linkgrab.app.ui.theme.nexioInk
+import com.linkgrab.app.ui.theme.nexioSecondary
 import com.linkgrab.app.viewmodel.DownloadState
 import com.linkgrab.app.viewmodel.MainViewModel
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun ResultScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
@@ -86,7 +96,6 @@ fun ResultScreen(
 
     var selectedImageIndex by remember { mutableIntStateOf(0) }
     var showPreview by remember { mutableStateOf(false) }
-    // 批量选择模式
     var selectionMode by remember { mutableStateOf(false) }
     var selectedImages by remember { mutableStateOf(setOf<Int>()) }
 
@@ -94,7 +103,6 @@ fun ResultScreen(
         onDispose { viewModel.clearResult() }
     }
 
-    // Download feedback with vibration
     LaunchedEffect(downloadState) {
         when (val state = downloadState) {
             is DownloadState.Success -> {
@@ -114,7 +122,7 @@ fun ResultScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = if (selectionMode) "已选 ${selectedImages.size} 项" else "解析结果",
+                title = { Text(if (selectionMode) "已选 ${selectedImages.size} 项" else "解析结果") },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (selectionMode) {
@@ -124,7 +132,7 @@ fun ResultScreen(
                             onBack()
                         }
                     }) {
-                        Icon(MiuixIcons.Back, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
@@ -133,14 +141,13 @@ fun ResultScreen(
                             selectionMode = !selectionMode
                             selectedImages = emptySet()
                         }) {
-                            Text(if (selectionMode) "取消" else "选择", style = MiuixTheme.textStyles.button)
+                            Text(if (selectionMode) "取消" else "选择", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 },
             )
         },
     ) { innerPadding ->
-        // Show shimmer when no result yet
         if (result == null) {
             Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
                 ResultLoadingSkeleton()
@@ -152,11 +159,10 @@ fun ResultScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 20.dp),
         ) {
             when (result.type) {
                 MediaType.IMAGE -> {
-                    // Image grid
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
                         contentPadding = PaddingValues(bottom = 80.dp),
@@ -169,8 +175,8 @@ fun ResultScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MiuixTheme.colorScheme.surfaceVariant)
+                                    .clip(NexioSquircleSmall)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
                                     .clickable {
                                         if (selectionMode) {
                                             selectedImages = if (selectedImages.contains(index))
@@ -193,12 +199,12 @@ fun ResultScreen(
                                             .align(Alignment.TopStart)
                                             .padding(8.dp)
                                             .size(24.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(if (selectedImages.contains(index)) MiuixTheme.colorScheme.primary else Color.Black.copy(alpha = 0.4f)),
+                                            .clip(CircleShape)
+                                            .background(if (selectedImages.contains(index)) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.4f)),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         if (selectedImages.contains(index)) {
-                                            Text("${index + 1}", color = MiuixTheme.colorScheme.onPrimary)
+                                            Text("${index + 1}", color = MaterialTheme.colorScheme.onPrimary)
                                         }
                                     }
                                 } else {
@@ -211,33 +217,30 @@ fun ResultScreen(
                                             .align(Alignment.BottomEnd)
                                             .padding(8.dp)
                                             .size(36.dp)
-                                            .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.8f), RoundedCornerShape(18.dp)),
+                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.86f), CircleShape),
                                     ) {
-                                        Icon(MiuixIcons.Download, contentDescription = "下载", modifier = Modifier.size(20.dp))
+                                        Icon(Icons.Default.Download, contentDescription = "下载", modifier = Modifier.size(20.dp))
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Bottom actions
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        // Copy link button
-                        Button(
+                        NexioOutlinedButton(
+                            text = "复制链接",
                             onClick = {
                                 copyToClipboard(context, result.images.joinToString("\n"))
                                 Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.weight(1f),
-                        ) {
-                            Text("复制链接")
-                        }
+                        )
 
-                        // Download selected / all
-                        Button(
+                        NexioButton(
+                            text = if (selectionMode && selectedImages.isNotEmpty()) "下载选中(${selectedImages.size})" else "下载全部(${result.images.size})",
                             onClick = {
                                 val toDownload = if (selectionMode && selectedImages.isNotEmpty()) {
                                     selectedImages.map { result.images[it] }
@@ -255,13 +258,7 @@ fun ResultScreen(
                             },
                             modifier = Modifier.weight(1f),
                             enabled = downloadState !is DownloadState.Downloading,
-                        ) {
-                            if (downloadState is DownloadState.Downloading) {
-                                CircularProgressIndicator(modifier = Modifier.height(20.dp))
-                            } else {
-                                Text(if (selectionMode && selectedImages.isNotEmpty()) "下载选中(${selectedImages.size})" else "下载全部(${result.images.size})")
-                            }
-                        }
+                        )
                     }
                 }
 
@@ -270,8 +267,26 @@ fun ResultScreen(
                         modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     ) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = result.title.ifEmpty { "视频" }, style = MiuixTheme.textStyles.title1)
-                        Spacer(modifier = Modifier.height(12.dp))
+                        NexioPanel(Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                NexioIconCapsule("▶", MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column {
+                                    Text(
+                                        text = result.title.ifEmpty { "视频" },
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = nexioInk(),
+                                    )
+                                    Text(
+                                        text = "${result.source.ifEmpty { "视频" }} 解析结果",
+                                        color = nexioSecondary(),
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         result.videoUrl?.let { videoUrl ->
                             val exoPlayer = remember {
@@ -285,7 +300,7 @@ fun ResultScreen(
 
                             Box(
                                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(NexioSquircleSmall)
                                     .background(Color.Black)
                                     .clickable { exoPlayer.playWhenReady = !exoPlayer.playWhenReady },
                                 contentAlignment = Alignment.Center,
@@ -302,45 +317,49 @@ fun ResultScreen(
                                     contentDescription = "视频封面",
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)
-                                        .clip(RoundedCornerShape(12.dp)).background(MiuixTheme.colorScheme.surfaceVariant),
+                                        .clip(NexioSquircleSmall).background(MaterialTheme.colorScheme.surfaceVariant),
                                 )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                        // Copy + Download
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                copyToClipboard(context, result.videoUrl ?: "")
-                                Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
-                            }, modifier = Modifier.weight(1f)) { Text("复制链接") }
+                            NexioOutlinedButton(
+                                text = "复制链接",
+                                onClick = {
+                                    copyToClipboard(context, result.videoUrl ?: "")
+                                    Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
 
-                            Button(onClick = {
-                                result.videoUrl?.let { url ->
-                                    viewModel.downloadVideo(context, url, "LinkGrab_${System.currentTimeMillis()}.mp4")
-                                }
-                            }, modifier = Modifier.weight(1f),
-                                enabled = downloadState !is DownloadState.Downloading && result.videoUrl != null) {
-                                if (downloadState is DownloadState.Downloading) {
+                            NexioButton(
+                                text = if (downloadState is DownloadState.Downloading) {
                                     val progress = (downloadState as DownloadState.Downloading).progress
-                                    Text("下载中 $progress%")
-                                } else Text("下载视频")
-                            }
+                                    "下载中 $progress%"
+                                } else "下载视频",
+                                onClick = {
+                                    result.videoUrl?.let { url ->
+                                        viewModel.downloadVideo(context, url, "LinkGrab_${System.currentTimeMillis()}.mp4")
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                enabled = downloadState !is DownloadState.Downloading && result.videoUrl != null,
+                            )
                         }
                     }
                 }
 
                 MediaType.UNKNOWN -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("无法识别的内容类型")
+                        Text("无法识别的内容类型", color = nexioSecondary())
                     }
                 }
             }
         }
     }
 
-    // Image preview with zoom
     if (showPreview && result?.type == MediaType.IMAGE) {
         ImagePreviewDialog(
             images = result.images,
@@ -366,14 +385,13 @@ private fun ImagePreviewDialog(
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
-    // Reset zoom when changing image
     LaunchedEffect(currentIndex) {
         scale = 1f
         offsetX = 0f
         offsetY = 0f
     }
 
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier.fillMaxSize().background(Color.Black)
                 .pointerInput(Unit) {
@@ -393,7 +411,6 @@ private fun ImagePreviewDialog(
                     .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offsetX, translationY = offsetY),
             )
 
-            // Top bar
             Row(
                 modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -402,7 +419,7 @@ private fun ImagePreviewDialog(
                 Text(text = "${currentIndex + 1} / ${images.size}", color = Color.White)
                 Row {
                     IconButton(onClick = { onDownload(currentIndex) }) {
-                        Icon(MiuixIcons.Download, contentDescription = "下载", tint = Color.White)
+                        Icon(Icons.Default.Download, contentDescription = "下载", tint = Color.White)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = onDismiss) {
@@ -411,7 +428,6 @@ private fun ImagePreviewDialog(
                 }
             }
 
-            // Bottom navigation
             if (images.size > 1) {
                 Row(
                     modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(16.dp),

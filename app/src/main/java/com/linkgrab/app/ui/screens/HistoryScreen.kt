@@ -2,7 +2,7 @@ package com.linkgrab.app.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,13 +12,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,194 +32,98 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.linkgrab.app.data.history.HistoryItem
+import com.linkgrab.app.ui.theme.NexioCanvas
+import com.linkgrab.app.ui.theme.NexioChoice
+import com.linkgrab.app.ui.theme.NexioPageHeader
+import com.linkgrab.app.ui.theme.NexioPurple
+import com.linkgrab.app.ui.theme.isInDarkTheme
+import com.linkgrab.app.ui.theme.nexioInk
+import com.linkgrab.app.ui.theme.nexioSecondary
 import com.linkgrab.app.viewmodel.MainViewModel
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.ChevronForward
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronRight
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HistoryScreen(
-    viewModel: MainViewModel,
-    onBack: () -> Unit,
-    onParseUrl: (String) -> Unit,
-) {
+fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (String) -> Unit) {
     val history by viewModel.allHistory.collectAsState(initial = emptyList())
-    var showDeleteDialog by remember { mutableStateOf<HistoryItem?>(null) }
     var filter by remember { mutableStateOf("all") }
-
-    val filteredHistory = when (filter) {
-        "douyin" -> history.filter { it.platform == "douyin" }
-        "xiaohongshu" -> history.filter { it.platform == "xiaohongshu" }
-        else -> history
-    }
-
-    Scaffold(
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = "历史记录",
-                largeTitle = "历史记录",
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(MiuixIcons.Back, contentDescription = "返回")
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-        ) {
-            // 筛选 chips
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                FilterChip("全部", filter == "all") { filter = "all" }
-                FilterChip("抖音", filter == "douyin") { filter = "douyin" }
-                FilterChip("小红书", filter == "xiaohongshu") { filter = "xiaohongshu" }
+    var deleteItem by remember { mutableStateOf<HistoryItem?>(null) }
+    val filtered = history.filter { filter == "all" || it.platform == filter }
+    NexioCanvas {
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                NexioPageHeader("历史记录", "查看和继续处理已解析的内容")
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回", tint = nexioInk()) }
             }
-
-            if (filteredHistory.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NexioChoice("全部", filter == "all", onClick = { filter = "all" })
+                NexioChoice("抖音", filter == "douyin", onClick = { filter = "douyin" })
+                NexioChoice("小红书", filter == "xiaohongshu", onClick = { filter = "xiaohongshu" })
+            }
+            if (filtered.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "📦", style = MiuixTheme.textStyles.title1)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(text = "暂无历史记录", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = "去解析一个链接吧", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                        Text("还没有历史记录", color = nexioInk(), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+                        Text("解析一个链接后，它会出现在这里", color = nexioSecondary(), modifier = Modifier.padding(top = 8.dp))
                     }
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp),
-                ) {
-                    items(filteredHistory, key = { it.id }) { item ->
-                        HistoryCard(
-                            item = item,
-                            onClick = { onParseUrl(item.url) },
-                            onLongClick = { showDeleteDialog = item },
-                        )
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 100.dp)) {
+                    items(filtered, key = { it.id }) { item ->
+                        HistoryCard(item, onClick = { onParseUrl(item.url) }, onLongClick = { deleteItem = item })
                     }
                 }
             }
         }
     }
-
-    // 删除确认弹窗
-    showDeleteDialog?.let { item ->
-        androidx.compose.ui.window.Dialog(onDismissRequest = { showDeleteDialog = null }) {
-            Card(modifier = Modifier.padding(24.dp)) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(text = "删除记录", style = MiuixTheme.textStyles.title2)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = "确定删除「${item.title}」？", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Button(onClick = { showDeleteDialog = null }) { Text("取消") }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(onClick = { viewModel.deleteHistory(item); showDeleteDialog = null }) { Text("删除") }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (selected) MiuixTheme.colorScheme.primary else MiuixTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        Text(
-            text = text,
-            color = if (selected) MiuixTheme.colorScheme.onPrimary else MiuixTheme.colorScheme.onSurface,
+    deleteItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = { deleteItem = null },
+            title = { Text("删除这条记录？") },
+            text = { Text(item.title) },
+            confirmButton = { TextButton(onClick = { viewModel.deleteHistory(item); deleteItem = null }) { Text("删除", color = Color.Red) } },
+            dismissButton = { TextButton(onClick = { deleteItem = null }) { Text("取消") } },
         )
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HistoryCard(
-    item: HistoryItem,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (item.cover.isNotEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current).data(item.cover).crossfade(true).build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MiuixTheme.colorScheme.surfaceVariant),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MiuixTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(text = if (item.type == "video") "🎬" else "🖼️")
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = item.title, maxLines = 1, style = MiuixTheme.textStyles.title2)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${item.platform} · ${if (item.type == "video") "视频" else "图片"}",
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                )
-            }
-
-            // 右箭头
-            Icon(
-                MiuixIcons.ChevronForward,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-                tint = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-            )
+private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onLongClick: () -> Unit) {
+    val surface = if (isInDarkTheme()) Color(0xFF23232A).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.78f)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(surface)
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current).data(item.cover).crossfade(true).build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+        )
+        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Text(item.title, maxLines = 1, color = nexioInk(), fontWeight = FontWeight.SemiBold)
+            Text("${item.platform} · ${if (item.type == "video") "视频" else "图片"}", color = nexioSecondary(), modifier = Modifier.padding(top = 5.dp))
         }
+        Icon(Icons.Default.ChevronRight, null, tint = NexioPurple.copy(alpha = 0.7f))
     }
 }

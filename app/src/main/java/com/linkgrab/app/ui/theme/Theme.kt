@@ -7,10 +7,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.Color
 import androidx.core.view.WindowCompat
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.theme.ThemeController
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 
 val LocalColorMode = compositionLocalOf { 0 }
 
@@ -19,13 +20,6 @@ fun LinkGrabTheme(
     colorMode: Int = 0,
     content: @Composable () -> Unit,
 ) {
-    val controller = when (colorMode) {
-        1 -> ThemeController(ColorSchemeMode.Light)
-        2 -> ThemeController(ColorSchemeMode.Dark)
-        else -> ThemeController(ColorSchemeMode.System)
-    }
-
-    // Update status/navigation bar icon colors based on theme
     val view = LocalView.current
     val isDark = when (colorMode) {
         1 -> false
@@ -40,9 +34,43 @@ fun LinkGrabTheme(
         }
     }
 
+    val colorScheme = if (isDark) {
+        darkColorScheme(
+            primary = NexioPurpleLight,
+            onPrimary = Color(0xFF381E72),
+            primaryContainer = NexioPurple.copy(alpha = 0.35f),
+            onPrimaryContainer = NexioPurpleLight,
+            secondary = NexioPinkLight,
+            onSecondary = Color(0xFF492532),
+            background = NexioCanvasDark,
+            onBackground = NexioInkDark,
+            surface = NexioSurfaceDark,
+            onSurface = NexioInkDark,
+            surfaceVariant = Color(0xFF2A2A32),
+            onSurfaceVariant = NexioSecondaryDark,
+            outline = Color(0xFF49454F),
+        )
+    } else {
+        lightColorScheme(
+            primary = NexioPurple,
+            onPrimary = Color.White,
+            primaryContainer = NexioPurpleLight.copy(alpha = 0.55f),
+            onPrimaryContainer = NexioPurpleDark,
+            secondary = NexioPink,
+            onSecondary = Color.White,
+            background = NexioCanvasLight,
+            onBackground = NexioInkLight,
+            surface = NexioSurfaceLight,
+            onSurface = NexioInkLight,
+            surfaceVariant = Color(0xFFE7E0EC),
+            onSurfaceVariant = NexioSecondaryLight,
+            outline = Color(0xFFCAC4D0),
+        )
+    }
+
     CompositionLocalProvider(LocalColorMode provides colorMode) {
-        MiuixTheme(
-            controller = controller,
+        MaterialTheme(
+            colorScheme = colorScheme,
             content = content,
         )
     }

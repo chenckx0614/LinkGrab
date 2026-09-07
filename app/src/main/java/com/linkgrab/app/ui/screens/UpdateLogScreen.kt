@@ -1,129 +1,59 @@
 package com.linkgrab.app.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.ui.unit.sp
+import com.linkgrab.app.ui.theme.NexioCanvas
+import com.linkgrab.app.ui.theme.NexioPageHeader
+import com.linkgrab.app.ui.theme.NexioPanel
+import com.linkgrab.app.ui.theme.nexioInk
+import com.linkgrab.app.ui.theme.nexioSecondary
 
-data class UpdateLogItem(
-    val version: String,
-    val date: String,
-    val changes: List<String>,
-)
+data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
-    UpdateLogItem("1.5.0", "2026-06-20", listOf(
-        "v1.5 大版本：下载通知优化+批量解析+下拉刷新",
-        "下载完成通知点击打开相册/视频",
-        "支持粘贴多条链接批量解析",
-        "首页下拉刷新重新解析",
-    )),
-    UpdateLogItem("1.4.5", "2026-06-20", listOf("Text Selection Menu + 桌面小组件")),
-    UpdateLogItem("1.4.4", "2026-06-20", listOf("深色模式图标适配+解析重试+App Shortcuts")),
-    UpdateLogItem("1.4.3", "2026-06-20", listOf("修复引导页每次都显示的问题")),
-    UpdateLogItem("1.4.2", "2026-06-20", listOf("引导页UI优化")),
-    UpdateLogItem("1.4.1", "2026-06-20", listOf(
-        "历史记录支持按平台筛选",
-        "下载进度百分比显示",
-        "首次打开引导页",
-    )),
-    UpdateLogItem("1.4.0", "2026-06-20", listOf(
-        "图片预览双指缩放+拖拽",
-        "复制无水印链接",
-        "下载完成震动反馈",
-        "批量选择下载",
-    )),
-    UpdateLogItem("1.3.0", "2026-06-20", listOf(
-        "v1.3 大版本：代码全面清理 + Bug 修复",
-        "下载接入 Live Updates 通知（进度+完成提示）",
-        "修复下载超时（30s连接/60s读取）",
-        "修复下载完成后 Bitmap 未回收导致内存泄漏",
-        "Live Updates 开关持久化到 DataStore",
-        "历史记录加 200 条 FIFO 上限",
-        "删除废弃的 ParseApi.kt",
-        "清理 21 个文件中的未使用 import 和死代码",
-    )),
-    UpdateLogItem("1.2.12", "2026-06-20", listOf("去更新直接打开 Gitee releases 页面")),
-    UpdateLogItem("1.2.11", "2026-06-19", listOf("社交媒体图标重新制作")),
-    UpdateLogItem("1.2.10", "2026-06-20", listOf("修复进入设置页闪退", "关闭启动自动检测更新")),
-    UpdateLogItem("1.2.9", "2026-06-19", listOf("更新关于页介绍文案")),
-    UpdateLogItem("1.2.8", "2026-06-19", listOf("修复检查更新闪退")),
-    UpdateLogItem("1.2.7", "2026-06-19", listOf("顶栏/底栏miuix高斯模糊效果")),
-    UpdateLogItem("1.2.6", "2026-06-19", listOf("修复去更新跳转链接")),
-    UpdateLogItem("1.2.5", "2026-06-19", listOf("更新弹窗改为miuix风格")),
-    UpdateLogItem("1.2.4", "2026-06-19", listOf("优化设置页UI排版")),
-    UpdateLogItem("1.2.3", "2026-06-19", listOf("修复检查更新检测")),
-    UpdateLogItem("1.2.2", "2026-06-19", listOf("新增检查更新功能")),
-    UpdateLogItem("1.2.1", "2026-06-19", listOf("新增历史记录模块")),
-    UpdateLogItem("1.2.0", "2026-06-19", listOf("v1.2 大版本：历史记录 + DataStore持久化")),
-    UpdateLogItem("1.1.9", "2026-06-18", listOf("全面屏沉浸式适配")),
-    UpdateLogItem("1.1.8", "2026-06-18", listOf("顶栏/底栏高斯模糊", "预测返回手势开关")),
-    UpdateLogItem("1.1.7", "2026-06-18", listOf("Live Updates 重构", "targetSdk 升至 36")),
-    UpdateLogItem("1.1.0", "2026-06-18", listOf("标题折叠动画，Live Updates 前台服务")),
-    UpdateLogItem("1.0.7", "2026-06-18", listOf("分享接收功能，应用图标")),
-    UpdateLogItem("1.0.3", "2026-06-18", listOf("口令自动提取链接")),
-    UpdateLogItem("1.0.0", "2026-06-18", listOf("首次发布")),
+    UpdateLogItem("1.8.2", "2026-09-07", listOf("基于 NexioSchedule / HyperOS 4 风格重构全局 UI", "引入紫色主题、液态玻璃面板、Squircle 圆角与深色模式配色", "统一首页、结果页、设置页、历史记录、工具箱和引导页视觉")),
+    UpdateLogItem("1.8.1", "2026-09-01", listOf("按 Backdrop 官方 Glass Bottom Bar 教程补齐共享 LayerBackdrop 采样结构，增强底栏背景内容的实时折射效果")),
+    UpdateLogItem("1.8.0", "2026-08-20", listOf("彻底移除 Miuix，主题、图标、基础控件和模糊兼容层全部迁移到 AndroidX Compose 与 Liquid Glass")),
+    UpdateLogItem("1.7.9", "2026-08-20", listOf("将图片转换、视频转音频和解析结果页面的基础控件迁移为 Material 3 Apple 化组件，移除旧 Miuix Scaffold 与 TopAppBar")),
+    UpdateLogItem("1.7.8", "2026-08-20", listOf("恢复设置页的跟随系统、浅色和深色手动选择")),
+    UpdateLogItem("1.7.7", "2026-08-20", listOf("提升液态玻璃底栏的可视对比度，优化白色基底、蓝色选中态、高光与阴影层次")),
+    UpdateLogItem("1.7.6", "2026-08-20", listOf("标题与状态栏增加安全留白，底栏迁移液态玻璃选中胶囊的弹性滑动和折射动画")),
+    UpdateLogItem("1.7.5", "2026-08-20", listOf("统一巡检各页面间距、标题留白、内容边距和结果页网格布局，优化小屏设备的可读性与底部避让")),
+    UpdateLogItem("1.7.4", "2026-08-20", listOf("接入 AndroidLiquidGlass Backdrop 2.0.0，重构悬浮底栏的液态玻璃背景、选中胶囊和按压反馈")),
+    UpdateLogItem("1.7.3", "2026-08-13", listOf("重做悬浮底部导航选中态、按压反馈和胶囊展开动画")),
+    UpdateLogItem("1.7.2", "2026-08-13", listOf("恢复并重做关于页面", "保留版本信息、更新日志入口和服务说明")),
+    UpdateLogItem("1.7.1", "2026-08-13", listOf("恢复设置页检查更新入口与状态反馈", "保留所有原有设置和更新检查功能")),
+    UpdateLogItem("1.7.0", "2026-08-13", listOf("历史记录和更新日志切换为纯 Compose Apple 布局", "统一内容层卡片、空状态和删除确认交互")),
+    UpdateLogItem("1.6.9", "2026-08-13", listOf("Apple 内容层与控制层布局重构", "玻璃效果收敛到导航与控制层")),
+    UpdateLogItem("1.6.8", "2026-08-13", listOf("首页与导航切换为纯 Compose Apple 风格")),
+    UpdateLogItem("1.6.7", "2026-08-13", listOf("优化小红书图片解析等待策略")),
+    UpdateLogItem("1.6.5", "2026-08-13", listOf("修复 Android 16 Live Updates 通知")),
 )
 
 @Composable
 fun UpdateLogScreen(onBack: () -> Unit) {
-    val listState = rememberLazyListState()
-
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            TopAppBar(
-                title = "更新日志",
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(MiuixIcons.Back, contentDescription = "返回")
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-        ) {
-            item { Spacer(modifier = Modifier.height(16.dp)) }
-
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    updateLogs.forEachIndexed { index, item ->
-                        Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-                            Text(text = "v${item.version}  (${item.date})", style = MiuixTheme.textStyles.title2)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            item.changes.forEach { change ->
-                                Text(text = "  • $change", color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                            }
-                            if (index < updateLogs.size - 1) Spacer(modifier = Modifier.height(12.dp))
-                        }
-                    }
+    NexioCanvas {
+        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item { NexioPageHeader("更新日志", "LinkGrab 的每一次改进。") }
+            items(updateLogs.size) { index ->
+                val item = updateLogs[index]
+                NexioPanel {
+                    Text("v${item.version}", fontSize = 19.sp, fontWeight = FontWeight.SemiBold, color = nexioInk())
+                    Text(item.date, color = nexioSecondary(), modifier = Modifier.padding(top = 3.dp))
+                    item.changes.forEach { Text("•  $it", color = nexioSecondary(), modifier = Modifier.padding(top = 10.dp)) }
                 }
             }
-
-            item { Spacer(modifier = Modifier.height(32.dp)) }
+            item { Spacer(Modifier.padding(bottom = 100.dp)) }
         }
     }
 }

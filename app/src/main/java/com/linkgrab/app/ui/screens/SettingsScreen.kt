@@ -3,390 +3,110 @@ package com.linkgrab.app.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import android.content.Intent
-import android.net.Uri
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.linkgrab.app.BuildConfig
-import com.linkgrab.app.R
+import com.linkgrab.app.ui.theme.NexioButton
+import com.linkgrab.app.ui.theme.NexioCanvas
+import com.linkgrab.app.ui.theme.NexioChoice
+import com.linkgrab.app.ui.theme.NexioListRow
+import com.linkgrab.app.ui.theme.NexioPageHeader
+import com.linkgrab.app.ui.theme.NexioPanel
+import com.linkgrab.app.ui.theme.NexioSwitch
+import com.linkgrab.app.ui.theme.nexioInk
+import com.linkgrab.app.ui.theme.nexioSecondary
 import com.linkgrab.app.update.UpdateResult
-import com.linkgrab.app.ui.theme.isInDarkTheme
 import com.linkgrab.app.viewmodel.MainViewModel
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ChevronForward
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-fun SettingsScreen(
-    viewModel: MainViewModel,
-    onNavigateToUpdateLog: () -> Unit = {},
-) {
-    val colorMode by viewModel.colorMode.collectAsState()
-    val liveUpdatesEnabled by viewModel.liveUpdatesEnabled.collectAsState()
-    val predictiveBack by viewModel.predictiveBack.collectAsState()
-    val updateResult by viewModel.updateResult.collectAsState()
-    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
+fun SettingsScreen(viewModel: MainViewModel, onNavigateToUpdateLog: () -> Unit = {}) {
     val context = LocalContext.current
-    val uriHandler = LocalUriHandler.current
+    val colorMode by viewModel.colorMode.collectAsState()
+    val liveUpdates by viewModel.liveUpdatesEnabled.collectAsState()
+    val updateResult by viewModel.updateResult.collectAsState()
+    val checkingUpdate by viewModel.isCheckingUpdate.collectAsState()
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) viewModel.toggleLiveUpdates(true) }
 
-    val scrollBehavior = MiuixScrollBehavior()
-    val listState = rememberLazyListState()
-
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) viewModel.toggleLiveUpdates(true)
-    }
-
-    // Show toast for up-to-date
-    LaunchedEffect(updateResult) {
-        when (val result = updateResult) {
-            is UpdateResult.UpToDate -> {
-                Toast.makeText(context, "已是最新版本 v${result.currentVersion}", Toast.LENGTH_SHORT).show()
-                kotlinx.coroutines.delay(500)
-                viewModel.dismissUpdate()
+    NexioCanvas {
+        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            item { NexioPageHeader("设置", "让 LinkGrab 更符合你的使用习惯。") }
+            item {
+                NexioPanel(Modifier.fillMaxWidth()) {
+                    NexioListRow("跟随系统外观", "自动适配浅色和深色模式") { NexioSwitch(checked = colorMode == 0) { viewModel.setColorMode(if (it) 0 else 1) } }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+                    NexioListRow("实时状态通知", "下载和解析时显示进度") { NexioSwitch(checked = liveUpdates) { enabled -> if (enabled && Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else viewModel.toggleLiveUpdates(enabled) } }
+                    if (liveUpdates) NexioButton("发送测试通知", { viewModel.testLiveUpdates() }, Modifier.fillMaxWidth().padding(top = 12.dp))
+                }
             }
-            is UpdateResult.CheckFailed -> {
-                Toast.makeText(context, "检查失败: ${result.error}", Toast.LENGTH_SHORT).show()
-                kotlinx.coroutines.delay(500)
-                viewModel.dismissUpdate()
+            item {
+                NexioPanel(Modifier.fillMaxWidth()) {
+                    Text("外观", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = nexioInk())
+                    Text("选择 LinkGrab 的颜色模式", fontSize = 14.sp, color = nexioSecondary(), modifier = Modifier.padding(top = 4.dp))
+                    Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NexioChoice("跟随系统", colorMode == 0, { viewModel.setColorMode(0) }, Modifier.weight(1f))
+                        NexioChoice("浅色", colorMode == 1, { viewModel.setColorMode(1) }, Modifier.weight(1f))
+                        NexioChoice("深色", colorMode == 2, { viewModel.setColorMode(2) }, Modifier.weight(1f))
+                    }
+                }
             }
-            else -> {}
+            item {
+                NexioPanel(Modifier.fillMaxWidth()) {
+                    NexioListRow("软件更新", "保持 LinkGrab 处于最新状态") { Text(if (checkingUpdate) "检查中…" else "检查", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
+                    NexioButton("检查更新", { viewModel.checkForUpdate() }, Modifier.fillMaxWidth().padding(top = 12.dp), !checkingUpdate)
+                    when (val result = updateResult) {
+                        is UpdateResult.UpToDate -> Text("当前已是最新版本 v${result.currentVersion}", color = Color(0xFF248A3D), modifier = Modifier.padding(top = 10.dp))
+                        is UpdateResult.CheckFailed -> Text("检查失败：${result.error}", color = Color(0xFFD70015), modifier = Modifier.padding(top = 10.dp))
+                        is UpdateResult.UpdateAvailable -> Text("发现新版本 v${result.latestVersion}", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 10.dp))
+                        null -> Unit
+                    }
+                }
+            }
+            item {
+                NexioPanel(Modifier.fillMaxWidth()) {
+                    Text("关于", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = nexioInk())
+                    Text("LinkGrab", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = nexioInk(), modifier = Modifier.padding(top = 14.dp))
+                    Text("无水印媒体解析与保存工具", color = nexioSecondary(), modifier = Modifier.padding(top = 4.dp))
+                    Text("版本 ${BuildConfig.VERSION_NAME}", color = nexioSecondary(), modifier = Modifier.padding(top = 4.dp))
+                    NexioButton("查看更新日志", onNavigateToUpdateLog, Modifier.fillMaxWidth().padding(top = 14.dp))
+                    Text("解析服务由第三方网络接口提供，具体可用性取决于平台页面和网络环境。", color = nexioSecondary(), fontSize = 12.sp, modifier = Modifier.padding(top = 14.dp))
+                }
+                Spacer(Modifier.padding(bottom = 100.dp))
+            }
         }
-    }
-
-    val backdrop = rememberBlurBackdrop()
-    val blurActive = backdrop != null
-
-    Scaffold(
-        topBar = {
-            BlurredBar(backdrop = backdrop, blurEnabled = blurActive) {
-                TopAppBar(
-                    title = "设置",
-                    largeTitle = "设置",
-                    scrollBehavior = scrollBehavior,
-                )
-            }
-        },
-    ) { innerPadding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(horizontal = 16.dp),
-        ) {
-            item { Spacer(modifier = Modifier.height(8.dp)) }
-
-            // ========== 外观 ==========
-            item {
-                SectionHeader("外观")
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    SwitchPreference(
-                        title = "跟随系统",
-                        summary = "自动切换深色和浅色模式",
-                        checked = colorMode == 0,
-                        onCheckedChange = { enabled ->
-                            if (enabled) viewModel.setColorMode(0)
-                            else viewModel.setColorMode(1)
-                        },
-                    )
-                    if (colorMode != 0) {
-                        SwitchPreference(
-                            title = "浅色模式",
-                            summary = "始终使用浅色主题",
-                            checked = colorMode == 1,
-                            onCheckedChange = { viewModel.setColorMode(1) },
-                        )
-                        SwitchPreference(
-                            title = "深色模式",
-                            summary = "始终使用深色主题",
-                            checked = colorMode == 2,
-                            onCheckedChange = { viewModel.setColorMode(2) },
-                        )
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(20.dp)) }
-
-            // ========== 手势 ==========
-            item {
-                SectionHeader("手势")
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    SwitchPreference(
-                        title = "预测返回手势",
-                        summary = "滑动返回时预览上一页（Android 13+）",
-                        checked = predictiveBack == 1,
-                        onCheckedChange = { enabled ->
-                            viewModel.setPredictiveBack(if (enabled) 1 else 2)
-                        },
-                    )
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(20.dp)) }
-
-            // ========== 更新 ==========
-            item {
-                SectionHeader("更新")
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { viewModel.checkForUpdate() }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "检查更新", style = MiuixTheme.textStyles.title2)
-                            Text(
-                                text = "当前版本 v${BuildConfig.VERSION_NAME}",
-                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                            )
-                        }
-                        if (isCheckingUpdate) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        } else {
-                            Icon(MiuixIcons.ChevronForward, contentDescription = "检查")
-                        }
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(20.dp)) }
-
-            // ========== 调试 ==========
-            item {
-                SectionHeader("调试")
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    SwitchPreference(
-                        title = "Live Updates 通知",
-                        summary = "开启后下载/解析时显示进度通知",
-                        checked = liveUpdatesEnabled,
-                        onCheckedChange = { enabled ->
-                            if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                val hasPermission = ContextCompat.checkSelfPermission(
-                                    context, Manifest.permission.POST_NOTIFICATIONS
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (!hasPermission) notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                else viewModel.toggleLiveUpdates(true)
-                            } else {
-                                viewModel.toggleLiveUpdates(enabled)
-                            }
-                        },
-                    )
-                    if (liveUpdatesEnabled) {
-                        Button(
-                            onClick = { viewModel.testLiveUpdates() },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        ) {
-                            Text("发送测试通知")
-                        }
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(20.dp)) }
-
-            // ========== 关于 ==========
-            item {
-                SectionHeader("关于")
-
-                // 合并版本+作者+描述为一个卡片
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = "LinkGrab",
-                            style = MiuixTheme.textStyles.title1,
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "v${BuildConfig.VERSION_NAME}",
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "作者：chenckx",
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "这里可以下载无水印的抖音视频或小红书图片。",
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
-                        )
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(20.dp)) }
-
-            // ========== 更新日志 ==========
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onNavigateToUpdateLog() }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(text = "更新日志", style = MiuixTheme.textStyles.title2, modifier = Modifier.weight(1f))
-                        Icon(MiuixIcons.ChevronForward, contentDescription = "查看")
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(20.dp)) }
-
-            // ========== 关注我 ==========
-            item {
-                SectionHeader("关注我")
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                        SocialLinkItem(
-                            iconRes = R.drawable.ic_weibo,
-                            name = "微博",
-                            onClick = { uriHandler.openUri("https://weibo.com/u/6548741952") },
-                        )
-                        SocialLinkItem(
-                            iconRes = R.drawable.ic_douyin,
-                            name = "抖音",
-                            onClick = { uriHandler.openUri("https://v.douyin.com/wl0wb4k3cNQ/") },
-                        )
-                        SocialLinkItem(
-                            iconRes = R.drawable.ic_bilibili,
-                            name = "B站",
-                            onClick = { uriHandler.openUri("https://space.bilibili.com/431227749") },
-                        )
-                    }
-                }
-            }
-
-            item { Spacer(modifier = Modifier.height(48.dp)) }
-        }
-    }
-
-    // Update dialog
-    updateResult?.let { result ->
-        if (result is UpdateResult.UpdateAvailable) {
-            androidx.compose.material3.AlertDialog(
-                onDismissRequest = { viewModel.dismissUpdate() },
-                title = { Text("发现新版本") },
-                text = {
-                    Column {
-                        Text("v${result.currentVersion} → v${result.latestVersion}")
-                        if (result.releaseNotes.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(result.releaseNotes)
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(onClick = {
-                        try {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.downloadUrl)))
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-                        }
-                        viewModel.dismissUpdate()
-                    }) { Text("去更新") }
-                },
-                dismissButton = {
-                    Button(onClick = { viewModel.dismissUpdate() }) { Text("稍后") }
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MiuixTheme.textStyles.title1,
-        modifier = Modifier.padding(bottom = 8.dp),
-    )
-}
-
-@Composable
-private fun SocialLinkItem(
-    iconRes: Int,
-    name: String,
-    onClick: () -> Unit,
-) {
-    val isDark = isInDarkTheme()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (isDark) MiuixTheme.colorScheme.surfaceVariant else MiuixTheme.colorScheme.surface),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(id = iconRes),
-                contentDescription = name,
-                modifier = Modifier.size(32.dp),
-            )
-        }
-        Spacer(modifier = Modifier.width(14.dp))
-        Text(text = name, style = MiuixTheme.textStyles.title2)
     }
 }
