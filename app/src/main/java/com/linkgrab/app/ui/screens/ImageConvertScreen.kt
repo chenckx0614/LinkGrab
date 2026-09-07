@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -46,23 +47,28 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import com.linkgrab.app.ui.theme.NexioButton
-import com.linkgrab.app.ui.theme.NexioIconCapsule
-import com.linkgrab.app.ui.theme.NexioOutlinedButton
-import com.linkgrab.app.ui.theme.NexioPanel
-import com.linkgrab.app.ui.theme.nexioInk
-import com.linkgrab.app.ui.theme.nexioSecondary
+import com.linkgrab.app.ui.theme.IOS26Button
+import com.linkgrab.app.ui.theme.IOS26IconCapsule
+import com.linkgrab.app.ui.theme.IOS26OutlinedButton
+import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOSCornerSmall
+import com.linkgrab.app.ui.theme.iosBackground
+import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosLabel
+import com.linkgrab.app.ui.theme.iosSecondaryLabel
+import com.linkgrab.app.ui.theme.iosTertiaryBackground
+import com.linkgrab.app.ui.theme.iosSeparator
 
 data class ImageFormat(val name: String, val ext: String, val mimeType: String)
 
@@ -91,14 +97,20 @@ fun ImageConvertScreen(onBack: () -> Unit) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = iosBackground(),
         topBar = {
             TopAppBar(
-                title = { Text("图片转格式") },
+                title = { Text("图片转格式", fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = iosBackground().copy(alpha = 0.85f),
+                    titleContentColor = iosLabel(),
+                    navigationIconContentColor = iosLabel(),
+                ),
             )
         },
     ) { innerPadding ->
@@ -110,22 +122,24 @@ fun ImageConvertScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-            NexioIconCapsule("🖼", MaterialTheme.colorScheme.primary)
+            IOS26IconCapsule("🖼", iosBlue())
 
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
                 text = "图片转格式",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = nexioInk(),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = iosLabel(),
+                letterSpacing = (-0.4).sp,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "转换图片格式 (JPG/PNG/WebP/BMP)",
-                color = nexioSecondary(),
+                color = iosSecondaryLabel(),
+                fontSize = 14.sp,
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -138,17 +152,18 @@ fun ImageConvertScreen(onBack: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(180.dp)
-                        .clip(RoundedCornerShape(20.dp)),
+                        .clip(IOSCornerSmall),
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            NexioPanel(Modifier.fillMaxWidth()) {
+            IOS26Panel(Modifier.fillMaxWidth()) {
                 Text(
                     text = "目标格式",
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.fillMaxWidth(),
-                    color = nexioInk(),
+                    color = iosLabel(),
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -171,12 +186,13 @@ fun ImageConvertScreen(onBack: () -> Unit) {
                 Text(
                     text = statusText,
                     color = if (statusText.contains("失败")) MaterialTheme.colorScheme.error
-                    else nexioSecondary(),
+                    else iosSecondaryLabel(),
+                    fontSize = 14.sp,
                 )
 
                 if (isProcessing) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(40.dp), color = iosBlue())
                 }
             }
 
@@ -184,15 +200,15 @@ fun ImageConvertScreen(onBack: () -> Unit) {
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                NexioOutlinedButton(
+                IOS26OutlinedButton(
                     text = "选择图片",
                     onClick = { imagePicker.launch("image/*") },
                     modifier = Modifier.weight(1f),
                 )
 
-                NexioButton(
+                IOS26Button(
                     text = "转换",
                     onClick = {
                         selectedUri?.let { uri ->
@@ -231,7 +247,7 @@ private fun FormatChipSmall(
     modifier: Modifier = Modifier,
 ) {
     val background by androidx.compose.animation.animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        if (selected) iosBlue() else iosTertiaryBackground(),
         animationSpec = androidx.compose.animation.core.tween(180),
         label = "formatChipBg",
     )
@@ -240,8 +256,8 @@ private fun FormatChipSmall(
             .clip(RoundedCornerShape(12.dp))
             .background(background)
             .border(
-                width = if (selected) 2.dp else 0.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                width = if (selected) 0.5.dp else 0.5.dp,
+                color = if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
                 shape = RoundedCornerShape(12.dp),
             )
             .clickable(onClick = onClick)
@@ -250,8 +266,9 @@ private fun FormatChipSmall(
     ) {
         Text(
             text = format.name,
-            fontWeight = FontWeight.Bold,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = if (selected) Color.White else iosLabel(),
         )
     }
 }

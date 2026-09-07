@@ -42,13 +42,16 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.linkgrab.app.data.history.HistoryItem
-import com.linkgrab.app.ui.theme.NexioCanvas
-import com.linkgrab.app.ui.theme.NexioChoice
-import com.linkgrab.app.ui.theme.NexioPageHeader
-import com.linkgrab.app.ui.theme.NexioPurple
-import com.linkgrab.app.ui.theme.isInDarkTheme
-import com.linkgrab.app.ui.theme.nexioInk
-import com.linkgrab.app.ui.theme.nexioSecondary
+import com.linkgrab.app.ui.theme.IOS26Canvas
+import com.linkgrab.app.ui.theme.IOS26Choice
+import com.linkgrab.app.ui.theme.IOS26PageHeader
+import com.linkgrab.app.ui.theme.IOSCornerMedium
+import com.linkgrab.app.ui.theme.IOSCornerSmall
+import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosGlass
+import com.linkgrab.app.ui.theme.iosGlassStroke
+import com.linkgrab.app.ui.theme.iosLabel
+import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.viewmodel.MainViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -61,27 +64,49 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     var filter by remember { mutableStateOf("all") }
     var deleteItem by remember { mutableStateOf<HistoryItem?>(null) }
     val filtered = history.filter { filter == "all" || it.platform == filter }
-    NexioCanvas {
+    IOS26Canvas {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                NexioPageHeader("历史记录", "查看和继续处理已解析的内容")
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IOS26PageHeader("历史记录", "查看和继续处理已解析的内容")
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回", tint = nexioInk()) }
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Default.ArrowBack, "返回", tint = iosLabel())
+                }
             }
-            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                NexioChoice("全部", filter == "all", onClick = { filter = "all" })
-                NexioChoice("抖音", filter == "douyin", onClick = { filter = "douyin" })
-                NexioChoice("小红书", filter == "xiaohongshu", onClick = { filter = "xiaohongshu" })
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                IOS26Choice("全部", filter == "all", onClick = { filter = "all" })
+                IOS26Choice("抖音", filter == "douyin", onClick = { filter = "douyin" })
+                IOS26Choice("小红书", filter == "xiaohongshu", onClick = { filter = "xiaohongshu" })
             }
             if (filtered.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("还没有历史记录", color = nexioInk(), fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-                        Text("解析一个链接后，它会出现在这里", color = nexioSecondary(), modifier = Modifier.padding(top = 8.dp))
+                        Text(
+                            "还没有历史记录",
+                            color = iosLabel(),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.3).sp,
+                        )
+                        Text(
+                            "解析一个链接后，它会出现在这里",
+                            color = iosSecondaryLabel(),
+                            modifier = Modifier.padding(top = 8.dp),
+                            fontSize = 14.sp,
+                        )
                     }
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 100.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 100.dp),
+                ) {
                     items(filtered, key = { it.id }) { item ->
                         HistoryCard(item, onClick = { onParseUrl(item.url) }, onLongClick = { deleteItem = item })
                     }
@@ -92,10 +117,16 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     deleteItem?.let { item ->
         AlertDialog(
             onDismissRequest = { deleteItem = null },
-            title = { Text("删除这条记录？") },
+            title = { Text("删除这条记录？", fontWeight = FontWeight.SemiBold) },
             text = { Text(item.title) },
-            confirmButton = { TextButton(onClick = { viewModel.deleteHistory(item); deleteItem = null }) { Text("删除", color = Color.Red) } },
-            dismissButton = { TextButton(onClick = { deleteItem = null }) { Text("取消") } },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deleteHistory(item); deleteItem = null }) {
+                    Text("删除", color = com.linkgrab.app.ui.theme.IOSRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteItem = null }) { Text("取消") }
+            },
         )
     }
 }
@@ -103,13 +134,12 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onLongClick: () -> Unit) {
-    val surface = if (isInDarkTheme()) Color(0xFF23232A).copy(alpha = 0.78f) else Color.White.copy(alpha = 0.78f)
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(surface)
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+            .clip(IOSCornerMedium)
+            .background(iosGlass())
+            .border(0.5.dp, iosGlassStroke(), IOSCornerMedium)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -118,12 +148,32 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onLongClick: () 
             model = ImageRequest.Builder(LocalContext.current).data(item.cover).crossfade(true).build(),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier
+                .size(60.dp)
+                .clip(IOSCornerSmall)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
         )
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(item.title, maxLines = 1, color = nexioInk(), fontWeight = FontWeight.SemiBold)
-            Text("${item.platform} · ${if (item.type == "video") "视频" else "图片"}", color = nexioSecondary(), modifier = Modifier.padding(top = 5.dp))
+            Text(
+                item.title,
+                maxLines = 1,
+                color = iosLabel(),
+                fontWeight = FontWeight.Medium,
+                fontSize = 16.sp,
+                letterSpacing = (-0.2).sp,
+            )
+            Text(
+                "${item.platform} · ${if (item.type == "video") "视频" else "图片"}",
+                color = iosSecondaryLabel(),
+                modifier = Modifier.padding(top = 4.dp),
+                fontSize = 14.sp,
+            )
         }
-        Icon(Icons.Default.ChevronRight, null, tint = NexioPurple.copy(alpha = 0.7f))
+        Icon(
+            Icons.Default.ChevronRight,
+            null,
+            tint = iosBlue().copy(alpha = 0.7f),
+            modifier = Modifier.size(20.dp),
+        )
     }
 }

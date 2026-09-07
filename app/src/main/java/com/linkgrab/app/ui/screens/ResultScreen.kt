@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
@@ -63,6 +65,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.media3.common.MediaItem
@@ -73,13 +76,15 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.linkgrab.app.data.model.MediaType
-import com.linkgrab.app.ui.theme.NexioButton
-import com.linkgrab.app.ui.theme.NexioIconCapsule
-import com.linkgrab.app.ui.theme.NexioOutlinedButton
-import com.linkgrab.app.ui.theme.NexioPanel
-import com.linkgrab.app.ui.theme.NexioSquircleSmall
-import com.linkgrab.app.ui.theme.nexioInk
-import com.linkgrab.app.ui.theme.nexioSecondary
+import com.linkgrab.app.ui.theme.IOS26Button
+import com.linkgrab.app.ui.theme.IOS26IconCapsule
+import com.linkgrab.app.ui.theme.IOS26OutlinedButton
+import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOSCornerSmall
+import com.linkgrab.app.ui.theme.iosBackground
+import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosLabel
+import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.viewmodel.DownloadState
 import com.linkgrab.app.viewmodel.MainViewModel
 
@@ -120,9 +125,16 @@ fun ResultScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = iosBackground(),
         topBar = {
             TopAppBar(
-                title = { Text(if (selectionMode) "已选 ${selectedImages.size} 项" else "解析结果") },
+                title = {
+                    Text(
+                        if (selectionMode) "已选 ${selectedImages.size} 项" else "解析结果",
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.2).sp,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (selectionMode) {
@@ -141,10 +153,20 @@ fun ResultScreen(
                             selectionMode = !selectionMode
                             selectedImages = emptySet()
                         }) {
-                            Text(if (selectionMode) "取消" else "选择", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                if (selectionMode) "取消" else "选择",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Medium,
+                            )
                         }
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = iosBackground().copy(alpha = 0.85f),
+                    titleContentColor = iosLabel(),
+                    navigationIconContentColor = iosLabel(),
+                    actionIconContentColor = iosBlue(),
+                ),
             )
         },
     ) { innerPadding ->
@@ -165,9 +187,9 @@ fun ResultScreen(
                 MediaType.IMAGE -> {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(2),
-                        contentPadding = PaddingValues(bottom = 80.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.weight(1f),
                     ) {
                         itemsIndexed(result.images) { index, imageUrl ->
@@ -175,7 +197,7 @@ fun ResultScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .aspectRatio(1f)
-                                    .clip(NexioSquircleSmall)
+                                    .clip(IOSCornerSmall)
                                     .background(MaterialTheme.colorScheme.surfaceVariant)
                                     .clickable {
                                         if (selectionMode) {
@@ -200,11 +222,19 @@ fun ResultScreen(
                                             .padding(8.dp)
                                             .size(24.dp)
                                             .clip(CircleShape)
-                                            .background(if (selectedImages.contains(index)) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.4f)),
+                                            .background(
+                                                if (selectedImages.contains(index)) iosBlue()
+                                                else Color.Black.copy(alpha = 0.4f)
+                                            ),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         if (selectedImages.contains(index)) {
-                                            Text("${index + 1}", color = MaterialTheme.colorScheme.onPrimary)
+                                            Text(
+                                                "${index + 1}",
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                            )
                                         }
                                     }
                                 } else {
@@ -217,9 +247,17 @@ fun ResultScreen(
                                             .align(Alignment.BottomEnd)
                                             .padding(8.dp)
                                             .size(36.dp)
-                                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.86f), CircleShape),
+                                            .background(
+                                                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                                CircleShape,
+                                            ),
                                     ) {
-                                        Icon(Icons.Default.Download, contentDescription = "下载", modifier = Modifier.size(20.dp))
+                                        Icon(
+                                            Icons.Default.Download,
+                                            contentDescription = "下载",
+                                            modifier = Modifier.size(20.dp),
+                                            tint = iosLabel(),
+                                        )
                                     }
                                 }
                             }
@@ -227,10 +265,10 @@ fun ResultScreen(
                     }
 
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        NexioOutlinedButton(
+                        IOS26OutlinedButton(
                             text = "复制链接",
                             onClick = {
                                 copyToClipboard(context, result.images.joinToString("\n"))
@@ -239,7 +277,7 @@ fun ResultScreen(
                             modifier = Modifier.weight(1f),
                         )
 
-                        NexioButton(
+                        IOS26Button(
                             text = if (selectionMode && selectedImages.isNotEmpty()) "下载选中(${selectedImages.size})" else "下载全部(${result.images.size})",
                             onClick = {
                                 val toDownload = if (selectionMode && selectedImages.isNotEmpty()) {
@@ -267,21 +305,23 @@ fun ResultScreen(
                         modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                     ) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        NexioPanel(Modifier.fillMaxWidth()) {
+                        IOS26Panel(Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                NexioIconCapsule("▶", MaterialTheme.colorScheme.primary)
+                                IOS26IconCapsule("▶", iosBlue())
                                 Spacer(modifier = Modifier.width(14.dp))
                                 Column {
                                     Text(
                                         text = result.title.ifEmpty { "视频" },
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = nexioInk(),
+                                        fontSize = 20.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = iosLabel(),
+                                        letterSpacing = (-0.3).sp,
                                     )
                                     Text(
                                         text = "${result.source.ifEmpty { "视频" }} 解析结果",
-                                        color = nexioSecondary(),
+                                        color = iosSecondaryLabel(),
                                         modifier = Modifier.padding(top = 4.dp),
+                                        fontSize = 14.sp,
                                     )
                                 }
                             }
@@ -299,8 +339,10 @@ fun ResultScreen(
                             DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
 
                             Box(
-                                modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-                                    .clip(NexioSquircleSmall)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .aspectRatio(16f / 9f)
+                                    .clip(IOSCornerSmall)
                                     .background(Color.Black)
                                     .clickable { exoPlayer.playWhenReady = !exoPlayer.playWhenReady },
                                 contentAlignment = Alignment.Center,
@@ -316,16 +358,19 @@ fun ResultScreen(
                                     model = ImageRequest.Builder(context).data(coverUrl).crossfade(true).build(),
                                     contentDescription = "视频封面",
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)
-                                        .clip(NexioSquircleSmall).background(MaterialTheme.colorScheme.surfaceVariant),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 300.dp)
+                                        .clip(IOSCornerSmall)
+                                        .background(MaterialTheme.colorScheme.surfaceVariant),
                                 )
                             }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            NexioOutlinedButton(
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            IOS26OutlinedButton(
                                 text = "复制链接",
                                 onClick = {
                                     copyToClipboard(context, result.videoUrl ?: "")
@@ -334,7 +379,7 @@ fun ResultScreen(
                                 modifier = Modifier.weight(1f),
                             )
 
-                            NexioButton(
+                            IOS26Button(
                                 text = if (downloadState is DownloadState.Downloading) {
                                     val progress = (downloadState as DownloadState.Downloading).progress
                                     "下载中 $progress%"
@@ -353,7 +398,7 @@ fun ResultScreen(
 
                 MediaType.UNKNOWN -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("无法识别的内容类型", color = nexioSecondary())
+                        Text("无法识别的内容类型", color = iosSecondaryLabel(), fontSize = 15.sp)
                     }
                 }
             }
@@ -393,7 +438,9 @@ private fun ImagePreviewDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
-            modifier = Modifier.fillMaxSize().background(Color.Black)
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
                 .pointerInput(Unit) {
                     detectTransformGestures { _, pan, zoom, _ ->
                         scale = (scale * zoom).coerceIn(0.5f, 5f)
@@ -407,41 +454,54 @@ private fun ImagePreviewDialog(
                 model = ImageRequest.Builder(context).data(images[currentIndex]).crossfade(true).build(),
                 contentDescription = "预览 ${currentIndex + 1}/${images.size}",
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize().padding(16.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
                     .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offsetX, translationY = offsetY),
             )
 
             Row(
-                modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(text = "${currentIndex + 1} / ${images.size}", color = Color.White)
+                Text(
+                    text = "${currentIndex + 1} / ${images.size}",
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
                 Row {
                     IconButton(onClick = { onDownload(currentIndex) }) {
                         Icon(Icons.Default.Download, contentDescription = "下载", tint = Color.White)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     IconButton(onClick = onDismiss) {
-                        Text("✕", color = Color.White)
+                        Text("✕", color = Color.White, fontSize = 18.sp)
                     }
                 }
             }
 
             if (images.size > 1) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton(onClick = { if (currentIndex > 0) { currentIndex--; scale = 1f; offsetX = 0f; offsetY = 0f } }) {
-                        Text("‹", color = Color.White)
+                        Text("‹", color = Color.White, fontSize = 28.sp)
                     }
                     Spacer(modifier = Modifier.width(24.dp))
-                    Text("${currentIndex + 1}", color = Color.White)
+                    Text("${currentIndex + 1}", color = Color.White, fontSize = 16.sp)
                     Spacer(modifier = Modifier.width(24.dp))
                     IconButton(onClick = { if (currentIndex < images.size - 1) { currentIndex++; scale = 1f; offsetX = 0f; offsetY = 0f } }) {
-                        Text("›", color = Color.White)
+                        Text("›", color = Color.White, fontSize = 28.sp)
                     }
                 }
             }

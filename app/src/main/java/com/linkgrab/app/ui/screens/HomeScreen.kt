@@ -35,13 +35,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.linkgrab.app.data.model.Platform
-import com.linkgrab.app.ui.theme.NexioButton
-import com.linkgrab.app.ui.theme.NexioCanvas
-import com.linkgrab.app.ui.theme.NexioOutlinedButton
-import com.linkgrab.app.ui.theme.NexioPageHeader
-import com.linkgrab.app.ui.theme.NexioPanel
-import com.linkgrab.app.ui.theme.nexioInk
-import com.linkgrab.app.ui.theme.nexioSecondary
+import com.linkgrab.app.ui.theme.IOS26Button
+import com.linkgrab.app.ui.theme.IOS26Canvas
+import com.linkgrab.app.ui.theme.IOS26OutlinedButton
+import com.linkgrab.app.ui.theme.IOS26PageHeader
+import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.iosLabel
+import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.viewmodel.MainViewModel
 
 @Composable
@@ -52,33 +52,56 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToResult: () -> Unit, onNavig
     LaunchedEffect(initialShareText) { initialShareText?.takeIf { it.isNotBlank() }?.let { input = it; viewModel.parseUrl(it) } }
     LaunchedEffect(state.result) { if (state.result != null) onNavigateToResult() }
 
-    NexioCanvas {
+    IOS26Canvas {
         LazyColumn(
             modifier = Modifier.fillMaxSize().imePadding().padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item {
-                NexioPageHeader("LinkGrab", "保存你真正想留下的内容")
+                IOS26PageHeader("LinkGrab", "保存你真正想留下的内容")
             }
             item {
-                NexioPanel(Modifier.fillMaxWidth()) {
-                    Text("粘贴一个分享链接", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = nexioInk())
-                    Text("抖音和小红书链接会自动识别", color = nexioSecondary(), modifier = Modifier.padding(top = 5.dp))
-                    Spacer(Modifier.height(18.dp))
+                IOS26Panel(Modifier.fillMaxWidth()) {
+                    Text(
+                        "粘贴一个分享链接",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = iosLabel(),
+                        letterSpacing = (-0.3).sp,
+                    )
+                    Text(
+                        "抖音和小红书链接会自动识别",
+                        color = iosSecondaryLabel(),
+                        modifier = Modifier.padding(top = 4.dp),
+                        fontSize = 14.sp,
+                    )
+                    Spacer(Modifier.height(16.dp))
                     OutlinedTextField(
-                        value = input, onValueChange = { input = it }, singleLine = false,
-                        label = { Text("分享链接") }, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth(),
+                        value = input,
+                        onValueChange = { input = it },
+                        singleLine = false,
+                        label = { Text("分享链接") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     AnimatedVisibility(state.error != null, enter = fadeIn(), exit = fadeOut()) {
-                        Text(state.error.orEmpty(), color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 10.dp))
+                        Text(
+                            state.error.orEmpty(),
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 10.dp),
+                            fontSize = 14.sp,
+                        )
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        NexioOutlinedButton("从剪贴板粘贴", { paste(context) { input = it } }, Modifier.weight(1f))
-                        NexioButton("解析", { viewModel.parseUrl(input) }, Modifier.weight(0.68f), input.isNotBlank() && !state.isLoading)
+                        IOS26OutlinedButton("从剪贴板粘贴", { paste(context) { input = it } }, Modifier.weight(1f))
+                        IOS26Button("解析", { viewModel.parseUrl(input) }, Modifier.weight(0.72f), input.isNotBlank() && !state.isLoading)
                     }
-                    if (state.isLoading) CircularProgressIndicator(modifier = Modifier.padding(top = 14.dp))
+                    if (state.isLoading) {
+                        Spacer(Modifier.height(14.dp))
+                        CircularProgressIndicator(modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
             item {
@@ -87,14 +110,33 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToResult: () -> Unit, onNavig
                     input.contains("xiaohongshu.com") || input.contains("xhslink.com") -> Platform.XIAOHONGSHU
                     else -> Platform.UNKNOWN
                 }
-                if (platform != Platform.UNKNOWN) Text("已识别：${platform.displayName}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 6.dp))
+                if (platform != Platform.UNKNOWN) {
+                    Text(
+                        "已识别：${platform.displayName}",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                        fontSize = 14.sp,
+                    )
+                }
             }
             item {
-                NexioPanel(Modifier.fillMaxWidth()) {
-                    Text("最近解析", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = nexioInk())
-                    Text("继续查看或再次下载已保存的内容", color = nexioSecondary(), modifier = Modifier.padding(top = 5.dp))
+                IOS26Panel(Modifier.fillMaxWidth()) {
+                    Text(
+                        "最近解析",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = iosLabel(),
+                        letterSpacing = (-0.3).sp,
+                    )
+                    Text(
+                        "继续查看或再次下载已保存的内容",
+                        color = iosSecondaryLabel(),
+                        modifier = Modifier.padding(top = 4.dp),
+                        fontSize = 14.sp,
+                    )
                     Spacer(Modifier.height(14.dp))
-                    NexioButton("打开历史记录", onNavigateToHistory, Modifier.fillMaxWidth())
+                    IOS26Button("打开历史记录", onNavigateToHistory, Modifier.fillMaxWidth())
                 }
                 Spacer(Modifier.height(100.dp))
             }

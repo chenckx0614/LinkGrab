@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,22 +45,26 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import com.linkgrab.app.ui.theme.NexioButton
-import com.linkgrab.app.ui.theme.NexioIconCapsule
-import com.linkgrab.app.ui.theme.NexioPanel
-import com.linkgrab.app.ui.theme.nexioInk
-import com.linkgrab.app.ui.theme.nexioSecondary
+import com.linkgrab.app.ui.theme.IOS26Button
+import com.linkgrab.app.ui.theme.IOS26IconCapsule
+import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.iosBackground
+import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosLabel
+import com.linkgrab.app.ui.theme.iosSecondaryLabel
+import com.linkgrab.app.ui.theme.iosTertiaryBackground
+import com.linkgrab.app.ui.theme.iosSeparator
 
 data class AudioFormat(val name: String, val ext: String, val desc: String)
 
@@ -107,14 +112,20 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        containerColor = iosBackground(),
         topBar = {
             TopAppBar(
-                title = { Text("视频转音频") },
+                title = { Text("视频转音频", fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = iosBackground().copy(alpha = 0.85f),
+                    titleContentColor = iosLabel(),
+                    navigationIconContentColor = iosLabel(),
+                ),
             )
         },
     ) { innerPadding ->
@@ -126,32 +137,35 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-            NexioIconCapsule("🎵", MaterialTheme.colorScheme.primary)
+            IOS26IconCapsule("🎵", iosBlue())
 
             Spacer(modifier = Modifier.height(20.dp))
 
             Text(
                 text = "视频转音频",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = nexioInk(),
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = iosLabel(),
+                letterSpacing = (-0.4).sp,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "从视频中提取音频文件",
-                color = nexioSecondary(),
+                color = iosSecondaryLabel(),
+                fontSize = 14.sp,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            NexioPanel(Modifier.fillMaxWidth()) {
+            IOS26Panel(Modifier.fillMaxWidth()) {
                 Text(
                     text = "输出格式",
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.fillMaxWidth(),
-                    color = nexioInk(),
+                    color = iosLabel(),
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -181,18 +195,19 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
                 Text(
                     text = statusText,
                     color = if (statusText.contains("失败")) MaterialTheme.colorScheme.error
-                    else nexioSecondary(),
+                    else iosSecondaryLabel(),
+                    fontSize = 14.sp,
                 )
 
                 if (isProcessing) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    CircularProgressIndicator(modifier = Modifier.size(48.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(40.dp), color = iosBlue())
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            NexioButton(
+            IOS26Button(
                 text = "选择视频文件",
                 onClick = { videoPicker.launch("video/*") },
                 modifier = Modifier.fillMaxWidth(),
@@ -209,7 +224,7 @@ private fun FormatChip(
     modifier: Modifier = Modifier,
 ) {
     val background by androidx.compose.animation.animateColorAsState(
-        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        if (selected) iosBlue() else iosTertiaryBackground(),
         animationSpec = androidx.compose.animation.core.tween(180),
         label = "audioChipBg",
     )
@@ -218,8 +233,8 @@ private fun FormatChip(
             .clip(RoundedCornerShape(12.dp))
             .background(background)
             .border(
-                width = if (selected) 2.dp else 0.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                width = 0.5.dp,
+                color = if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
                 shape = RoundedCornerShape(12.dp),
             )
             .clickable(onClick = onClick)
@@ -228,13 +243,14 @@ private fun FormatChip(
     ) {
         Text(
             text = format.name,
-            fontWeight = FontWeight.Bold,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = if (selected) Color.White else iosLabel(),
         )
         Text(
             text = format.desc,
             fontSize = 10.sp,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else nexioSecondary(),
+            color = if (selected) Color.White.copy(alpha = 0.8f) else iosSecondaryLabel(),
         )
     }
 }
@@ -245,15 +261,12 @@ private suspend fun extractAudioFFmpeg(
     format: AudioFormat,
     onProgress: (String) -> Unit,
 ) = withContext(Dispatchers.IO) {
-    // Copy video to temp file
     val inputStream = context.contentResolver.openInputStream(videoUri)
     val tempFile = java.io.File(context.cacheDir, "temp_video_${System.currentTimeMillis()}.mp4")
     inputStream?.use { input -> tempFile.outputStream().use { output -> input.copyTo(output) } }
 
-    // Output file
     val outputFile = java.io.File(context.cacheDir, "output_audio.${format.ext}")
 
-    // FFmpeg command
     val codec = when (format.ext) {
         "mp3" -> "-codec:a libmp3lame -b:a 192k"
         "flac" -> "-codec:a flac"
@@ -269,7 +282,6 @@ private suspend fun extractAudioFFmpeg(
         throw Exception("转换失败")
     }
 
-    // Save to MediaStore
     val mimeType = "audio/${format.ext}"
     val contentValues = ContentValues().apply {
         put(MediaStore.Audio.Media.DISPLAY_NAME, "LinkGrab_${System.currentTimeMillis()}.${format.ext}")

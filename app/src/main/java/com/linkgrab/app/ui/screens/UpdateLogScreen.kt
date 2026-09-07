@@ -1,7 +1,6 @@
 package com.linkgrab.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -12,15 +11,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.linkgrab.app.ui.theme.NexioCanvas
-import com.linkgrab.app.ui.theme.NexioPageHeader
-import com.linkgrab.app.ui.theme.NexioPanel
-import com.linkgrab.app.ui.theme.nexioInk
-import com.linkgrab.app.ui.theme.nexioSecondary
+import com.linkgrab.app.ui.theme.IOS26Canvas
+import com.linkgrab.app.ui.theme.IOS26PageHeader
+import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.iosLabel
+import com.linkgrab.app.ui.theme.iosSecondaryLabel
 
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("1.8.3", "2026-09-07", listOf("基于 iOS 26 Liquid Glass 设计规范重构全局 UI", "统一系统蓝主题色、更通透的玻璃面板、更精致的圆角与阴影", "优化页面转场动画与按钮按压反馈，提升整体流畅度")),
     UpdateLogItem("1.8.2", "2026-09-07", listOf("基于 NexioSchedule / HyperOS 4 风格重构全局 UI", "引入紫色主题、液态玻璃面板、Squircle 圆角与深色模式配色", "统一首页、结果页、设置页、历史记录、工具箱和引导页视觉")),
     UpdateLogItem("1.8.1", "2026-09-01", listOf("按 Backdrop 官方 Glass Bottom Bar 教程补齐共享 LayerBackdrop 采样结构，增强底栏背景内容的实时折射效果")),
     UpdateLogItem("1.8.0", "2026-08-20", listOf("彻底移除 Miuix，主题、图标、基础控件和模糊兼容层全部迁移到 AndroidX Compose 与 Liquid Glass")),
@@ -42,15 +42,36 @@ private val updateLogs = listOf(
 
 @Composable
 fun UpdateLogScreen(onBack: () -> Unit) {
-    NexioCanvas {
-        LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item { NexioPageHeader("更新日志", "LinkGrab 的每一次改进。") }
+    IOS26Canvas {
+        LazyColumn(
+            Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item { IOS26PageHeader("更新日志", "LinkGrab 的每一次改进。") }
             items(updateLogs.size) { index ->
                 val item = updateLogs[index]
-                NexioPanel {
-                    Text("v${item.version}", fontSize = 19.sp, fontWeight = FontWeight.SemiBold, color = nexioInk())
-                    Text(item.date, color = nexioSecondary(), modifier = Modifier.padding(top = 3.dp))
-                    item.changes.forEach { Text("•  $it", color = nexioSecondary(), modifier = Modifier.padding(top = 10.dp)) }
+                IOS26Panel {
+                    Text(
+                        "v${item.version}",
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = iosLabel(),
+                        letterSpacing = (-0.3).sp,
+                    )
+                    Text(
+                        item.date,
+                        color = iosSecondaryLabel(),
+                        modifier = Modifier.padding(top = 3.dp),
+                        fontSize = 14.sp,
+                    )
+                    item.changes.forEach {
+                        Text(
+                            "•  $it",
+                            color = iosSecondaryLabel(),
+                            modifier = Modifier.padding(top = 10.dp),
+                            fontSize = 14.sp,
+                        )
+                    }
                 }
             }
             item { Spacer(Modifier.padding(bottom = 100.dp)) }

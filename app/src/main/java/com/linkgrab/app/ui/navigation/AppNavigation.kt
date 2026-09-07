@@ -85,9 +85,12 @@ import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
 import com.linkgrab.app.ui.screens.VideoToAudioScreen
-import com.linkgrab.app.ui.theme.NexioPurple
-import com.linkgrab.app.ui.theme.NexioPurpleLight
-import com.linkgrab.app.ui.theme.nexioInk
+import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosLabel
+import com.linkgrab.app.ui.theme.iosSecondaryLabel
+import com.linkgrab.app.ui.theme.iosGlass
+import com.linkgrab.app.ui.theme.iosGlassStroke
+import com.linkgrab.app.ui.theme.isInDarkTheme
 import com.linkgrab.app.viewmodel.MainViewModel
 
 sealed class Screen(val route: String, val title: String) {
@@ -102,7 +105,6 @@ sealed class Screen(val route: String, val title: String) {
     data object ImageConvert : Screen("image_convert", "图片转格式")
 }
 
-/** Custom Apple-style floating tab item. The route logic stays in the caller. */
 @Composable
 private fun NavigationBarItem(
     icon: ImageVector,
@@ -119,74 +121,80 @@ private fun NavigationBarItem(
     }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.9f else if (selected) 1f else 0.94f,
-        animationSpec = spring(dampingRatio = 0.68f, stiffness = 720f),
+        targetValue = if (pressed) 0.94f else if (selected) 1f else 0.96f,
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 750f),
         label = "tabPressScale",
     )
     val tint by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) NexioPurple else nexioInk().copy(alpha = 0.62f),
+        targetValue = if (selected) iosBlue() else iosLabel().copy(alpha = 0.55f),
         animationSpec = tween(180),
         label = "tabTint",
     )
     Column(
         modifier = Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(Color.Transparent)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        androidx.compose.material3.Icon(icon, contentDescription = visibleLabel, tint = tint, modifier = Modifier.size(22.dp))
-        androidx.compose.material3.Text(visibleLabel, color = tint, fontSize = 11.sp, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium)
+        Icon(icon, contentDescription = visibleLabel, tint = tint, modifier = Modifier.size(22.dp))
+        Text(
+            visibleLabel,
+            color = tint,
+            fontSize = 11.sp,
+            fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+            letterSpacing = (-0.1).sp,
+        )
     }
 }
 
-// Bottom nav routes - no animation for these
 private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Toolbox.route, Screen.Settings.route)
 
 @Composable
-private fun LiquidGlassBottomBar(
+private fun IOS26BottomBar(
     selectedIndex: Int,
     backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     interaction: MutableInteractionSource,
     content: @Composable RowScope.() -> Unit,
 ) {
     val barPressed by interaction.collectIsPressedAsState()
+    val blueTint = iosBlue()
     BoxWithConstraints(
         modifier = Modifier
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-            .height(64.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .height(58.dp)
             .fillMaxWidth()
             .drawBackdrop(
                 backdrop = backdrop,
-                shape = { RoundedCornerShape(30.dp) },
+                shape = { RoundedCornerShape(28.dp) },
                 effects = {
                     vibrancy()
-                    blur(11.dp.toPx())
-                    lens(20.dp.toPx(), 20.dp.toPx())
+                    blur(16.dp.toPx())
+                    lens(24.dp.toPx(), 24.dp.toPx())
                 },
                 layerBlock = {
-                    val scale = if (barPressed) 0.97f else 1f
+                    val scale = if (barPressed) 0.98f else 1f
                     scaleX = scale
                     scaleY = scale
                 },
                 highlight = { com.kyant.backdrop.highlight.Highlight.Default },
-                shadow = { Shadow(radius = 16.dp, alpha = 0.24f) },
-                innerShadow = { InnerShadow(radius = 7.dp, alpha = 0.20f) },
-                    onDrawSurface = {
-                        drawRect(Color.Transparent)
-                        drawRect(Color.White.copy(alpha = 0.04f))
-                    },
+                shadow = { Shadow(radius = 14.dp, alpha = 0.22f) },
+                innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.18f) },
+                onDrawSurface = {
+                    drawRect(Color.Transparent)
+                    drawRect(Color.White.copy(alpha = 0.05f))
+                },
             )
             .padding(horizontal = 4.dp, vertical = 4.dp),
     ) {
         val itemWidth = (maxWidth - 8.dp) / 3f
         val indicatorOffset by animateDpAsState(
             targetValue = itemWidth * selectedIndex,
-            animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
-            label = "liquidTabIndicatorOffset",
+            animationSpec = spring(dampingRatio = 0.75f, stiffness = 550f),
+            label = "ios26TabIndicator",
         )
         Box(
             modifier = Modifier
@@ -195,17 +203,17 @@ private fun LiquidGlassBottomBar(
                 .offset(x = indicatorOffset)
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(26.dp) },
+                    shape = { RoundedCornerShape(24.dp) },
                     effects = {
                         vibrancy()
-                        blur(8.dp.toPx())
-                        lens(16.dp.toPx(), 20.dp.toPx(), chromaticAberration = true)
+                        blur(10.dp.toPx())
+                        lens(18.dp.toPx(), 22.dp.toPx(), chromaticAberration = true)
                     },
-                    shadow = { Shadow(radius = 8.dp, alpha = 0.22f) },
-                    innerShadow = { InnerShadow(radius = 5.dp, alpha = 0.24f) },
+                    shadow = { Shadow(radius = 8.dp, alpha = 0.20f) },
+                    innerShadow = { InnerShadow(radius = 4.dp, alpha = 0.22f) },
                     onDrawSurface = {
-                        drawRect(Color.White.copy(alpha = 0.22f))
-                        drawRect(NexioPurpleLight.copy(alpha = 0.20f))
+                        drawRect(Color.White.copy(alpha = 0.20f))
+                        drawRect(blueTint.copy(alpha = 0.12f))
                     },
                 )
         )
@@ -233,12 +241,11 @@ fun AppNavigation(
     val dataLoaded by viewModel.dataLoaded.collectAsState()
     var guideChecked by remember { mutableStateOf(false) }
     val liquidBackdrop = rememberLayerBackdrop {
-        drawRect(Color.White.copy(alpha = 0.10f))
+        drawRect(Color.White.copy(alpha = 0.08f))
         drawContent()
     }
     val tabInteraction = remember { MutableInteractionSource() }
 
-    // Only check after DataStore has loaded
     LaunchedEffect(dataLoaded) {
         if (dataLoaded && !guideChecked) {
             guideChecked = true
@@ -260,7 +267,7 @@ fun AppNavigation(
                 startDestination = Screen.Home.route,
                 modifier = Modifier.fillMaxSize().layerBackdrop(liquidBackdrop),
             ) {
-                
+
             composable(Screen.Guide.route) {
                 GuideScreen(
                     onFinished = {
@@ -272,11 +279,11 @@ fun AppNavigation(
                 )
             }
 
-            // Bottom nav tabs - no animation
+            // Bottom nav tabs — quick crossfade for instant response
             composable(
                 Screen.Home.route,
-                enterTransition = { fadeIn(tween(150)) },
-                exitTransition = { fadeOut(tween(150)) },
+                enterTransition = { fadeIn(tween(160)) },
+                exitTransition = { fadeOut(tween(140)) },
             ) {
                 HomeScreen(
                     viewModel = viewModel,
@@ -291,8 +298,8 @@ fun AppNavigation(
             }
             composable(
                 Screen.Toolbox.route,
-                enterTransition = { fadeIn(tween(150)) },
-                exitTransition = { fadeOut(tween(150)) },
+                enterTransition = { fadeIn(tween(160)) },
+                exitTransition = { fadeOut(tween(140)) },
             ) {
                 ToolboxScreen(
                     onNavigateToVideoToAudio = { navController.navigate(Screen.VideoToAudio.route) },
@@ -302,8 +309,8 @@ fun AppNavigation(
 
             composable(
                 Screen.Settings.route,
-                enterTransition = { fadeIn(tween(150)) },
-                exitTransition = { fadeOut(tween(150)) },
+                enterTransition = { fadeIn(tween(160)) },
+                exitTransition = { fadeOut(tween(140)) },
             ) {
                 SettingsScreen(
                     viewModel = viewModel,
@@ -313,13 +320,31 @@ fun AppNavigation(
                 )
             }
 
-            // Other pages - slide animation
+            // Detail pages — iOS 26-style slide with spring-like easing
+            val slideSpec = tween<Float>(280)
+            val slideIn = slideInHorizontally(
+                animationSpec = tween(280),
+                initialOffsetX = { it },
+            )
+            val slideOut = slideOutHorizontally(
+                animationSpec = tween(280),
+                targetOffsetX = { -it / 4 },
+            )
+            val popSlideIn = slideInHorizontally(
+                animationSpec = tween(280),
+                initialOffsetX = { -it / 4 },
+            )
+            val popSlideOut = slideOutHorizontally(
+                animationSpec = tween(280),
+                targetOffsetX = { it },
+            )
+
             composable(
                 Screen.Result.route,
-                enterTransition = { slideInHorizontally(tween(300)) { it } },
-                exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
-                popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
-                popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+                enterTransition = { slideIn + fadeIn(tween(200)) },
+                exitTransition = { slideOut + fadeOut(tween(180)) },
+                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
+                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
             ) {
                 ResultScreen(
                     viewModel = viewModel,
@@ -328,10 +353,10 @@ fun AppNavigation(
             }
             composable(
                 Screen.UpdateLog.route,
-                enterTransition = { slideInHorizontally(tween(300)) { it } },
-                exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
-                popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
-                popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+                enterTransition = { slideIn + fadeIn(tween(200)) },
+                exitTransition = { slideOut + fadeOut(tween(180)) },
+                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
+                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
             ) {
                 UpdateLogScreen(
                     onBack = { navController.popBackStack() },
@@ -339,28 +364,28 @@ fun AppNavigation(
             }
             composable(
                 Screen.VideoToAudio.route,
-                enterTransition = { slideInHorizontally(tween(300)) { it } },
-                exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
-                popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
-                popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+                enterTransition = { slideIn + fadeIn(tween(200)) },
+                exitTransition = { slideOut + fadeOut(tween(180)) },
+                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
+                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
             ) {
                 VideoToAudioScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Screen.ImageConvert.route,
-                enterTransition = { slideInHorizontally(tween(300)) { it } },
-                exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
-                popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
-                popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+                enterTransition = { slideIn + fadeIn(tween(200)) },
+                exitTransition = { slideOut + fadeOut(tween(180)) },
+                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
+                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
             ) {
                 ImageConvertScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Screen.History.route,
-                enterTransition = { slideInHorizontally(tween(300)) { it } },
-                exitTransition = { slideOutHorizontally(tween(300)) { -it / 3 } },
-                popEnterTransition = { slideInHorizontally(tween(300)) { -it / 3 } },
-                popExitTransition = { slideOutHorizontally(tween(300)) { it } },
+                enterTransition = { slideIn + fadeIn(tween(200)) },
+                exitTransition = { slideOut + fadeOut(tween(180)) },
+                popEnterTransition = { popSlideIn + fadeIn(tween(200)) },
+                popExitTransition = { popSlideOut + fadeOut(tween(180)) },
             ) {
                 HistoryScreen(
                     viewModel = viewModel,
@@ -374,7 +399,7 @@ fun AppNavigation(
         }
         if (showBottomBar) {
             Box(Modifier.align(Alignment.BottomCenter)) {
-                LiquidGlassBottomBar(
+                IOS26BottomBar(
                     selectedIndex = when (currentDestination?.route) {
                         Screen.Toolbox.route -> 1
                         Screen.Settings.route -> 2
@@ -392,7 +417,6 @@ fun AppNavigation(
     }
     }
 
-    // 启动时更新弹窗（全局，不依赖设置页）
     val updateResult by viewModel.updateResult.collectAsState()
     updateResult?.let { result ->
         if (result is com.linkgrab.app.update.UpdateResult.UpdateAvailable) {
@@ -416,7 +440,7 @@ fun AppNavigation(
                     confirmButton = {
                         Button(onClick = {
                             try {
-                                context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(result.downloadUrl)))
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.downloadUrl)))
                             } catch (e: Exception) {
                                 Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
                             }
