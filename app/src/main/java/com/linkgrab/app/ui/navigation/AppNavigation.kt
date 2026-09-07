@@ -131,15 +131,15 @@ private fun NavigationBarItem(
     Column(
         modifier = Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(34.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(Color.Transparent)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
     ) {
-        androidx.compose.material3.Icon(icon, contentDescription = visibleLabel, tint = tint, modifier = Modifier.size(28.dp))
-        androidx.compose.material3.Text(visibleLabel, color = tint, fontSize = 13.sp, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium)
+        androidx.compose.material3.Icon(icon, contentDescription = visibleLabel, tint = tint, modifier = Modifier.size(22.dp))
+        androidx.compose.material3.Text(visibleLabel, color = tint, fontSize = 11.sp, fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium)
     }
 }
 
@@ -156,33 +156,33 @@ private fun LiquidGlassBottomBar(
     val barPressed by interaction.collectIsPressedAsState()
     BoxWithConstraints(
         modifier = Modifier
-            .padding(horizontal = 14.dp, vertical = 10.dp)
-            .height(92.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .height(64.dp)
             .fillMaxWidth()
             .drawBackdrop(
                 backdrop = backdrop,
-                shape = { RoundedCornerShape(48.dp) },
+                shape = { RoundedCornerShape(30.dp) },
                 effects = {
                     vibrancy()
-                    blur(13.dp.toPx())
-                    lens(28.dp.toPx(), 28.dp.toPx())
+                    blur(11.dp.toPx())
+                    lens(20.dp.toPx(), 20.dp.toPx())
                 },
                 layerBlock = {
-                    val scale = if (barPressed) 0.965f else 1f
+                    val scale = if (barPressed) 0.97f else 1f
                     scaleX = scale
                     scaleY = scale
                 },
                 highlight = { com.kyant.backdrop.highlight.Highlight.Default },
-                shadow = { Shadow(radius = 20.dp, alpha = 0.28f) },
-                innerShadow = { InnerShadow(radius = 9.dp, alpha = 0.22f) },
+                shadow = { Shadow(radius = 16.dp, alpha = 0.24f) },
+                innerShadow = { InnerShadow(radius = 7.dp, alpha = 0.20f) },
                     onDrawSurface = {
                         drawRect(Color.Transparent)
-                        drawRect(Color.White.copy(alpha = 0.035f))
+                        drawRect(Color.White.copy(alpha = 0.04f))
                     },
             )
-            .padding(horizontal = 5.dp, vertical = 5.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
     ) {
-        val itemWidth = (maxWidth - 10.dp) / 3f
+        val itemWidth = (maxWidth - 8.dp) / 3f
         val indicatorOffset by animateDpAsState(
             targetValue = itemWidth * selectedIndex,
             animationSpec = spring(dampingRatio = 0.72f, stiffness = 520f),
@@ -195,17 +195,17 @@ private fun LiquidGlassBottomBar(
                 .offset(x = indicatorOffset)
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(43.dp) },
+                    shape = { RoundedCornerShape(26.dp) },
                     effects = {
                         vibrancy()
-                        blur(9.dp.toPx())
-                        lens(20.dp.toPx(), 26.dp.toPx(), chromaticAberration = true)
+                        blur(8.dp.toPx())
+                        lens(16.dp.toPx(), 20.dp.toPx(), chromaticAberration = true)
                     },
-                    shadow = { Shadow(radius = 10.dp, alpha = 0.22f) },
-                    innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.24f) },
+                    shadow = { Shadow(radius = 8.dp, alpha = 0.22f) },
+                    innerShadow = { InnerShadow(radius = 5.dp, alpha = 0.24f) },
                     onDrawSurface = {
-                        drawRect(Color.White.copy(alpha = 0.24f))
-                        drawRect(NexioPurpleLight.copy(alpha = 0.18f))
+                        drawRect(Color.White.copy(alpha = 0.22f))
+                        drawRect(NexioPurpleLight.copy(alpha = 0.20f))
                     },
                 )
         )
