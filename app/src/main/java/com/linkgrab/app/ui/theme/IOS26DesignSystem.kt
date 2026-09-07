@@ -383,7 +383,7 @@ fun IOS26LargeTitle(title: String, subtitle: String? = null) {
 }
 
 @Composable
-fun IOS26PageHeader(title: String, subtitle: String? = null, topPadding: androidx.compose.ui.unit.Dp = 48.dp) {
+fun IOS26PageHeader(title: String, subtitle: String? = null, topPadding: androidx.compose.ui.unit.Dp = 16.dp) {
     Column(Modifier.padding(top = topPadding, bottom = 8.dp)) {
         IOS26LargeTitle(title, subtitle)
     }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -129,7 +130,7 @@ private fun NavigationBarItem(
         label = "tabPressScale",
     )
     val tint by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) iosBlue() else iosLabel().copy(alpha = 0.55f),
+        targetValue = if (selected) iosLabel() else iosLabel().copy(alpha = 0.45f),
         animationSpec = tween(200),
         label = "tabTint",
     )
@@ -156,72 +157,134 @@ private fun NavigationBarItem(
 
 private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Toolbox.route, Screen.Settings.route)
 
+/**
+ * iOS 26 / Nexio-style floating dock: a pill-shaped glass container holding
+ * the three tabs, plus a detached circular FAB on the right.
+ */
 @Composable
 private fun IOS26BottomBar(
     selectedIndex: Int,
     backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     interaction: MutableInteractionSource,
+    onFabClick: () -> Unit,
     content: @Composable RowScope.() -> Unit,
 ) {
-    val blueTint = iosBlue()
-    BoxWithConstraints(
+    Row(
         modifier = Modifier
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 18.dp)
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 16.dp)
             .navigationBarsPadding()
-            .height(60.dp)
             .fillMaxWidth()
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { RoundedCornerShape(30.dp) },
-                effects = {
-                    vibrancy()
-                    blur(16.dp.toPx())
-                    lens(24.dp.toPx(), 24.dp.toPx())
-                },
-                highlight = { com.kyant.backdrop.highlight.Highlight.Default },
-                shadow = { Shadow(radius = 14.dp, alpha = 0.22f) },
-                innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.18f) },
-                onDrawSurface = {
-                    drawRect(Color.Transparent)
-                    drawRect(Color.White.copy(alpha = 0.05f))
-                },
-            )
-            .padding(horizontal = 5.dp, vertical = 5.dp),
+            .height(64.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Each tab occupies exactly itemWidth so the indicator stays centered.
-        val itemWidth = (maxWidth - 10.dp) / 3f
-        val indicatorOffset by animateDpAsState(
-            targetValue = itemWidth * selectedIndex,
-            animationSpec = spring(dampingRatio = 0.68f, stiffness = 420f),
-            label = "ios26TabIndicator",
-        )
-        Box(
+        // ---- Pill container with the sliding selection capsule ----
+        BoxWithConstraints(
             modifier = Modifier
-                .width(itemWidth)
+                .weight(1f)
                 .fillMaxHeight()
-                .offset(x = indicatorOffset)
                 .drawBackdrop(
                     backdrop = backdrop,
-                    shape = { RoundedCornerShape(25.dp) },
+                    shape = { RoundedCornerShape(32.dp) },
                     effects = {
                         vibrancy()
-                        blur(10.dp.toPx())
-                        lens(18.dp.toPx(), 22.dp.toPx(), chromaticAberration = true)
+                        blur(16.dp.toPx())
+                        lens(24.dp.toPx(), 24.dp.toPx())
                     },
-                    shadow = { Shadow(radius = 8.dp, alpha = 0.20f) },
-                    innerShadow = { InnerShadow(radius = 4.dp, alpha = 0.22f) },
+                    highlight = { com.kyant.backdrop.highlight.Highlight.Default },
+                    shadow = { Shadow(radius = 14.dp, alpha = 0.20f) },
+                    innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.16f) },
                     onDrawSurface = {
-                        drawRect(Color.White.copy(alpha = 0.20f))
-                        drawRect(blueTint.copy(alpha = 0.10f))
+                        drawRect(Color.Transparent)
+                        drawRect(Color.White.copy(alpha = 0.05f))
                     },
                 )
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = 6.dp, vertical = 6.dp),
         ) {
-            content()
+            // Each tab occupies exactly itemWidth so the capsule stays centered.
+            val itemWidth = (maxWidth - 12.dp) / 3f
+            val indicatorOffset by animateDpAsState(
+                targetValue = itemWidth * selectedIndex,
+                animationSpec = spring(dampingRatio = 0.68f, stiffness = 420f),
+                label = "ios26TabIndicator",
+            )
+            Box(
+                modifier = Modifier
+                    .width(itemWidth)
+                    .fillMaxHeight()
+                    .offset(x = indicatorOffset)
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { RoundedCornerShape(26.dp) },
+                        effects = {
+                            vibrancy()
+                            blur(10.dp.toPx())
+                            lens(18.dp.toPx(), 22.dp.toPx(), chromaticAberration = true)
+                        },
+                        shadow = { Shadow(radius = 8.dp, alpha = 0.18f) },
+                        innerShadow = { InnerShadow(radius = 4.dp, alpha = 0.20f) },
+                        onDrawSurface = {
+                            drawRect(Color.White.copy(alpha = 0.22f))
+                            drawRect(Color.Gray.copy(alpha = 0.10f))
+                        },
+                    )
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                content()
+            }
+        }
+
+        Spacer(Modifier.width(14.dp))
+
+        // ---- Detached circular FAB ----
+        IOS26Fab(backdrop = backdrop, interaction = interaction, onClick = onFabClick)
+    }
+}
+
+@Composable
+private fun IOS26Fab(
+    backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
+    interaction: MutableInteractionSource,
+    onClick: () -> Unit,
+) {
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 560f),
+        label = "ios26FabScale",
+    )
+    val blue = iosBlue()
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(CircleShape)
+            .background(blue)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Plus glyph drawn manually for crisp proportions
+        androidx.compose.foundation.Canvas(modifier = Modifier.size(22.dp)) {
+            val stroke = 2.6.dp.toPx()
+            val half = size.minDimension / 2f
+            val arm = size.minDimension * 0.30f
+            drawLine(
+                color = Color.White,
+                start = androidx.compose.ui.geometry.Offset(half - arm, half),
+                end = androidx.compose.ui.geometry.Offset(half + arm, half),
+                strokeWidth = stroke,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            )
+            drawLine(
+                color = Color.White,
+                start = androidx.compose.ui.geometry.Offset(half, half - arm),
+                end = androidx.compose.ui.geometry.Offset(half, half + arm),
+                strokeWidth = stroke,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            )
         }
     }
 }
@@ -408,6 +471,16 @@ fun AppNavigation(
                     },
                     backdrop = liquidBackdrop,
                     interaction = tabInteraction,
+                    onFabClick = {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val text = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString().orEmpty()
+                        if (text.isBlank()) {
+                            Toast.makeText(context, "剪贴板为空", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.parseUrl(text)
+                            navController.navigate(Screen.Result.route)
+                        }
+                    },
                 ) {
                     NavigationBarItem(Icons.Default.Home, "首页", currentDestination?.route == Screen.Home.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Home.route) { launchSingleTop = true } }
                     NavigationBarItem(Icons.Default.Build, "工具箱", currentDestination?.route == Screen.Toolbox.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Toolbox.route) { launchSingleTop = true } }

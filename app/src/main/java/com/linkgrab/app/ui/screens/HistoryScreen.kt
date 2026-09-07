@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,12 +66,12 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     var deleteItem by remember { mutableStateOf<HistoryItem?>(null) }
     val filtered = history.filter { filter == "all" || it.platform == filter }
     IOS26Canvas {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
             IOS26BackButton(
                 onClick = onBack,
-                modifier = Modifier.padding(top = 16.dp),
+                modifier = Modifier.padding(top = 12.dp),
             )
-            IOS26PageHeader("历史记录", "查看和继续处理已解析的内容", topPadding = 20.dp)
+            IOS26PageHeader("历史记录", "查看和继续处理已解析的内容", topPadding = 16.dp)
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

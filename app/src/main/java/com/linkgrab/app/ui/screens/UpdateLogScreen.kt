@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,16 +46,16 @@ private val updateLogs = listOf(
 fun UpdateLogScreen(onBack: () -> Unit) {
     IOS26Canvas {
         LazyColumn(
-            Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
                 IOS26BackButton(
                     onClick = onBack,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = 12.dp),
                 )
             }
-            item { IOS26PageHeader("更新日志", "LinkGrab 的每一次改进。", topPadding = 20.dp) }
+            item { IOS26PageHeader("更新日志", "LinkGrab 的每一次改进。", topPadding = 16.dp) }
             items(updateLogs.size) { index ->
                 val item = updateLogs[index]
                 IOS26Panel {

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -32,7 +33,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 fun ToolboxScreen(onNavigateToVideoToAudio: () -> Unit = {}, onNavigateToImageConvert: () -> Unit = {}) {
     IOS26Canvas {
         LazyColumn(
-            Modifier.fillMaxSize().padding(horizontal = 20.dp),
+            Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             item {
