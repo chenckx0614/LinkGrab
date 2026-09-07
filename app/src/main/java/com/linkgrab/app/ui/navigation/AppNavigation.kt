@@ -86,6 +86,7 @@ import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
+import com.linkgrab.app.ui.liquid.LiquidBottomTabs
 import com.linkgrab.app.ui.screens.VideoToAudioScreen
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosLabel
@@ -107,143 +108,46 @@ sealed class Screen(val route: String, val title: String) {
     data object ImageConvert : Screen("image_convert", "图片转格式")
 }
 
+/**
+ * A single tab inside [LiquidBottomTabs]. The tint is uniform here — the
+ * selected state is rendered by the bar itself: an invisible accent-tinted
+ * duplicate of this content is recorded into a backdrop layer and revealed
+ * through the selection capsule's refraction.
+ */
 @Composable
-private fun NavigationBarItem(
+private fun LiquidTabItem(
     icon: ImageVector,
     label: String,
-    selected: Boolean,
-    interaction: MutableInteractionSource,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val visibleLabel = when (icon) {
-        Icons.Default.Home -> "首页"
-        Icons.Default.Build -> "工具箱"
-        Icons.Default.Settings -> "设置"
-        else -> label
-    }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.92f else 1f,
-        animationSpec = spring(dampingRatio = 0.68f, stiffness = 620f),
-        label = "tabPressScale",
-    )
-    val tint by androidx.compose.animation.animateColorAsState(
-        targetValue = if (selected) iosLabel() else iosLabel().copy(alpha = 0.45f),
-        animationSpec = tween(200),
-        label = "tabTint",
-    )
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.Transparent)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+            .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = visibleLabel, tint = tint, modifier = Modifier.size(21.dp))
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = iosLabel(),
+            modifier = Modifier.size(21.dp),
+        )
         Spacer(Modifier.height(3.dp))
         Text(
-            visibleLabel,
-            color = tint,
+            label,
+            color = iosLabel(),
             fontSize = 10.sp,
             lineHeight = 10.sp,
-            fontWeight = if (selected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
             letterSpacing = (-0.1).sp,
         )
     }
 }
 
 private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Toolbox.route, Screen.Settings.route)
-
-/**
- * iOS 26-style floating dock: a full-width pill glass container with three
- * tabs. The selection capsule slides with a liquid squash-and-stretch
- * effect — it elongates along the travel direction while moving and
- * settles back to its exact item width, like UIKit's liquid-glass tab bar.
- */
-@Composable
-private fun IOS26BottomBar(
-    selectedIndex: Int,
-    backdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
-    interaction: MutableInteractionSource,
-    content: @Composable RowScope.() -> Unit,
-) {
-    BoxWithConstraints(
-        modifier = Modifier
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 16.dp)
-            .navigationBarsPadding()
-            .fillMaxWidth()
-            .height(64.dp)
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { RoundedCornerShape(32.dp) },
-                effects = {
-                    vibrancy()
-                    blur(16.dp.toPx())
-                    lens(24.dp.toPx(), 24.dp.toPx())
-                },
-                highlight = { com.kyant.backdrop.highlight.Highlight.Default },
-                shadow = { Shadow(radius = 14.dp, alpha = 0.20f) },
-                innerShadow = { InnerShadow(radius = 6.dp, alpha = 0.16f) },
-                onDrawSurface = {
-                    drawRect(Color.Transparent)
-                    drawRect(Color.White.copy(alpha = 0.05f))
-                },
-            )
-            .padding(horizontal = 6.dp, vertical = 6.dp),
-    ) {
-        // Each tab occupies exactly itemWidth so the capsule stays centered.
-        val itemWidth = (maxWidth - 12.dp) / 3f
-
-        // Track the capsule position as a float so we also get its velocity —
-        // velocity drives the liquid stretch while the capsule is traveling.
-        val position = remember { androidx.compose.animation.core.Animatable(0f) }
-        LaunchedEffect(selectedIndex) {
-            position.animateTo(
-                targetValue = selectedIndex.toFloat(),
-                animationSpec = spring(dampingRatio = 0.62f, stiffness = 380f),
-            )
-        }
-        val velocity = position.velocity
-        // Stretch up to +22% width at peak velocity, centered on the capsule.
-        val stretch = 1f + (kotlin.math.abs(velocity).coerceAtMost(5f) / 5f) * 0.22f
-        val capsuleWidth = itemWidth * stretch
-        val capsuleCenter = itemWidth * (position.value + 0.5f)
-        val capsuleOffset = capsuleCenter - capsuleWidth / 2f
-
-        Box(
-            modifier = Modifier
-                .width(capsuleWidth)
-                .fillMaxHeight()
-                .offset(x = capsuleOffset)
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedCornerShape(26.dp) },
-                    effects = {
-                        vibrancy()
-                        blur(10.dp.toPx())
-                        lens(18.dp.toPx(), 22.dp.toPx(), chromaticAberration = true)
-                    },
-                    shadow = { Shadow(radius = 8.dp, alpha = 0.18f) },
-                    innerShadow = { InnerShadow(radius = 4.dp, alpha = 0.20f) },
-                    onDrawSurface = {
-                        drawRect(Color.White.copy(alpha = 0.22f))
-                        drawRect(Color.Gray.copy(alpha = 0.10f))
-                    },
-                )
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            content()
-        }
-    }
-}
 
 @Composable
 fun AppNavigation(
@@ -263,7 +167,6 @@ fun AppNavigation(
         drawRect(Color.White.copy(alpha = 0.08f))
         drawContent()
     }
-    val tabInteraction = remember { MutableInteractionSource() }
 
     LaunchedEffect(dataLoaded) {
         if (dataLoaded && !guideChecked) {
@@ -419,18 +322,32 @@ fun AppNavigation(
         }
         if (showBottomBar) {
             Box(Modifier.align(Alignment.BottomCenter)) {
-                IOS26BottomBar(
-                    selectedIndex = when (currentDestination?.route) {
-                        Screen.Toolbox.route -> 1
-                        Screen.Settings.route -> 2
-                        else -> 0
+                LiquidBottomTabs(
+                    selectedTabIndex = {
+                        when (currentDestination?.route) {
+                            Screen.Toolbox.route -> 1
+                            Screen.Settings.route -> 2
+                            else -> 0
+                        }
+                    },
+                    onTabSelected = { index ->
+                        val route = when (index) {
+                            1 -> Screen.Toolbox.route
+                            2 -> Screen.Settings.route
+                            else -> Screen.Home.route
+                        }
+                        navController.navigate(route) { launchSingleTop = true }
                     },
                     backdrop = liquidBackdrop,
-                    interaction = tabInteraction,
+                    tabsCount = 3,
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 16.dp)
+                        .navigationBarsPadding(),
                 ) {
-                    NavigationBarItem(Icons.Default.Home, "首页", currentDestination?.route == Screen.Home.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Home.route) { launchSingleTop = true } }
-                    NavigationBarItem(Icons.Default.Build, "工具箱", currentDestination?.route == Screen.Toolbox.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Toolbox.route) { launchSingleTop = true } }
-                    NavigationBarItem(Icons.Default.Settings, "设置", currentDestination?.route == Screen.Settings.route, tabInteraction, Modifier.weight(1f)) { navController.navigate(Screen.Settings.route) { launchSingleTop = true } }
+                    LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { navController.navigate(Screen.Home.route) { launchSingleTop = true } }
+                    LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { navController.navigate(Screen.Toolbox.route) { launchSingleTop = true } }
+                    LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { navController.navigate(Screen.Settings.route) { launchSingleTop = true } }
                 }
             }
         }
