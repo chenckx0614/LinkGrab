@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.3", "2026-09-08", listOf(
+        "修复页面未滚动时顶部就出现一块带硬边的「遮罩」：原因是吸顶头的 vibrancy 色彩滤镜（饱和度 1.5x）未随滚动淡出",
+        "吸顶模糊改为滚动超过约 56dp 后才渐入，模糊区底部与页面底色无缝衔接，无分割线",
+    )),
     UpdateLogItem("2.0.2", "2026-09-08", listOf(
         "修复小红书解析：补全 xhslink.cn 短链识别、短链自动展开，并加固 __INITIAL_STATE__ 中 undefined 的归一化",
         "小红书链接过期或缺少安全令牌时，改为提示「请在小红书 App 中重新分享」而不是直接报解析失败",

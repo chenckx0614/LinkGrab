@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -82,6 +83,7 @@ import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26HeaderHeight
+import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26Panel
@@ -131,11 +133,12 @@ fun ResultScreen(
     val headerBackdrop = rememberLayerBackdrop()
     val gridState = rememberLazyGridState()
     val videoScrollState = rememberScrollState()
-    val headerScrolled by remember {
+    val scrollThreshold = with(LocalDensity.current) { IOS26HeaderScrollThreshold.roundToPx() }
+    val headerScrolled by remember(scrollThreshold) {
         derivedStateOf {
             gridState.firstVisibleItemIndex > 0 ||
-                gridState.firstVisibleItemScrollOffset > 8 ||
-                videoScrollState.value > 8
+                gridState.firstVisibleItemScrollOffset > scrollThreshold ||
+                videoScrollState.value > scrollThreshold
         }
     }
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()

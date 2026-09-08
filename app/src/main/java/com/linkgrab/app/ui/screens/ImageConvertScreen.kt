@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,7 @@ import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26HeaderHeight
+import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26Panel
@@ -97,7 +99,7 @@ fun ImageConvertScreen(onBack: () -> Unit) {
 
     val headerBackdrop = rememberLayerBackdrop()
     val scrollState = rememberScrollState()
-    val headerScrolled = scrollState.value > 8
+    val headerScrolled = scrollState.value > with(LocalDensity.current) { IOS26HeaderScrollThreshold.roundToPx() }
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Scaffold(

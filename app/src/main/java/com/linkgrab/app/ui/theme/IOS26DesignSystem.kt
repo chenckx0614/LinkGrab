@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -476,6 +477,9 @@ val IOS26HeaderHeight = 52.dp
  */
 private val IOS26HeaderFade = 28.dp
 
+/** 滚动超过这段距离后，吸顶模糊才开始出现。 */
+val IOS26HeaderScrollThreshold = 56.dp
+
 /**
  * iOS 26-style pinned navigation bar. It stays attached to the top of the
  * screen while content scrolls underneath, and applies a real backdrop blur
@@ -511,21 +515,32 @@ fun IOS26BlurHeader(
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RectangleShape },
+                // `progress` 必须在绘制期读取：progress ~0 时 vibrancy 的色彩
+                // 滤镜仍会把背景轻微提亮，在纯色页面上形成一块带硬边的
+                // "遮罩"。因此未滚动时这里什么都不画。
                 effects = {
-                    vibrancy()
-                    blur((0.1f + 26f * progress).dp.toPx())
+                    val p = progress
+                    if (p > 0.01f) {
+                        vibrancy()
+                        blur((26f * p).dp.toPx())
+                    }
                 },
-                // Gradient mask instead of a flat fill: opaque under the bar,
-                // fully transparent at the bottom of the fade — no seam.
+                // 顶部半透明、底部渐变到**完全不透明的页面底色**。模糊蒙版
+                // 无法做渐变，但底色与页面背景同色，所以模糊区的下边缘落在
+                // 同一块纯色上 —— 视觉上无缝，也不会出现分割线。
                 onDrawSurface = {
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            0f to bg.copy(alpha = 0.88f * progress),
-                            0.55f to bg.copy(alpha = 0.72f * progress),
-                            0.82f to bg.copy(alpha = 0.28f * progress),
-                            1f to bg.copy(alpha = 0f),
-                        ),
-                    )
+                    val p = progress
+                    if (p > 0.01f) {
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                0f to bg.copy(alpha = 0.68f * p),
+                                0.55f to bg.copy(alpha = 0.86f * p),
+                                // 底部始终为不透明底色（与页面背景同色），
+                                // 动画过程中也不会露出模糊/清晰的接缝。
+                                1f to bg,
+                            ),
+                        )
+                    }
                 },
             ),
     ) {
@@ -575,9 +590,11 @@ fun IOS26StickyPage(
     content: LazyListScope.() -> Unit,
 ) {
     val listState = rememberLazyListState()
-    val scrolled by remember {
+    val scrollThreshold = with(LocalDensity.current) { IOS26HeaderScrollThreshold.roundToPx() }
+    val scrolled by remember(scrollThreshold) {
         derivedStateOf {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
+            listState.firstVisibleItemIndex > 0 ||
+                listState.firstVisibleItemScrollOffset > scrollThreshold
         }
     }
     val backdrop = rememberLayerBackdrop()
