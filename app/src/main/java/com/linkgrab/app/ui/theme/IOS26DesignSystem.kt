@@ -63,7 +63,6 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.vibrancy
 
 /* =========================================================
  * iOS 26 Liquid Glass Design System for LinkGrab
@@ -512,6 +511,10 @@ fun IOS26BlurHeader(
     val bg = iosBackground()
     val titleColor = iosLabel()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // 渐变断点要按状态栏高度算：bar 区域是 [topInset, topInset+52dp]，
+    // fade 区域是之后 28dp。直接写 0.65 会在刘海/挖孔屏上错位。
+    val totalHeaderDpValue = topInset.value + IOS26HeaderHeight.value + IOS26HeaderFade.value
+    val barEndFrac = (topInset.value + IOS26HeaderHeight.value) / totalHeaderDpValue
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -519,29 +522,29 @@ fun IOS26BlurHeader(
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RectangleShape },
-                // `progress` 必须在绘制期读取：progress ~0 时 vibrancy 的色彩
-                // 滤镜仍会把背景轻微提亮，在纯色页面上形成一块带硬边的
-                // "遮罩"。因此未滚动时这里什么都不画。
+                // 只在滚动后才挂模糊 + tint；未滚动时 backdrop 图层根本不录
+                // （见 rememberBackdropLayerActive），所以这里不画任何东西。
+                // vibrancy() 内部 = saturation 1.5x 的 ColorFilter，在中性灰
+                // 页面上会形成偏色矩形，所以去掉，只靠 blur 自然混合颜色。
                 effects = {
                     val p = progress
                     if (p > 0.01f) {
-                        vibrancy()
                         blur((26f * p).dp.toPx())
                     }
                 },
-                // 顶部半透明、底部渐变到**完全不透明的页面底色**。模糊蒙版
-                // 无法做渐变，但底色与页面背景同色，所以模糊区的下边缘落在
-                // 同一块纯色上 —— 视觉上无缝，也不会出现分割线。
+                // 渐变方向反过来：顶部到 bar 底是不透明的 frosted tint，
+                // bar 底以下 28dp 渐变到完全透明。这样 box 底边不会停在
+                // 100% 不透明的页面底色上（那会与下方未模糊内容形成硬边
+                // / "线"），而是让 blur 后的"失焦版"内容透出来，下方
+                // 紧接着同一段内容的"对焦版"——defocus→focus 是软过渡。
                 onDrawSurface = {
                     val p = progress
                     if (p > 0.01f) {
                         drawRect(
                             brush = Brush.verticalGradient(
-                                0f to bg.copy(alpha = 0.68f * p),
-                                0.55f to bg.copy(alpha = 0.86f * p),
-                                // 底部始终为不透明底色（与页面背景同色），
-                                // 动画过程中也不会露出模糊/清晰的接缝。
-                                1f to bg,
+                                0f to bg.copy(alpha = 0.8f * p),
+                                barEndFrac to bg.copy(alpha = 0.8f * p),
+                                1f to Color.Transparent,
                             ),
                         )
                     }

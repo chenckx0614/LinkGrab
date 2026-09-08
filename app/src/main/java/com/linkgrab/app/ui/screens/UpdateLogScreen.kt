@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.5", "2026-09-08", listOf(
+        "修复吸顶头底部的「线」：渐变方向反了——之前是顶部半透明、底部 100% 不透明页面底色，色带与下方未模糊内容形成硬边；现在改为顶部到 bar 底 80% frosted tint、bar 底以下 28dp 渐变到全透明，defocus→focus 软过渡",
+        "渐变断点按状态栏高度动态计算（barEndFrac = (topInset+52dp)/(topInset+80dp)），刘海/挖孔屏上 bar 底位置仍准确",
+        "去掉 vibrancy()：反编译确认其内部是 saturation=1.5x ColorFilter，在中性灰页面会形成偏色矩形；只保留 blur + tint，色靠 blur 自然混合，更接近 iOS Liquid Glass",
+    )),
     UpdateLogItem("2.0.4", "2026-09-08", listOf(
         "关闭 Android 预测式返回手势：该手势会与自定义转场抢占控制权，导致返回动画错位/闪屏",
         "返回手势改由应用内统一接管，非首页/非引导页的返回行为完全一致",
