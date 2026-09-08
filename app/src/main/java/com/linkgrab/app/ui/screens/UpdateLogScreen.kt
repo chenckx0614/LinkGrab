@@ -17,6 +17,15 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.2", "2026-09-08", listOf(
+        "修复小红书解析：补全 xhslink.cn 短链识别、短链自动展开，并加固 __INITIAL_STATE__ 中 undefined 的归一化",
+        "小红书链接过期或缺少安全令牌时，改为提示「请在小红书 App 中重新分享」而不是直接报解析失败",
+        "小红书视频解析新增 h265/av1 编码兜底，图集图片补充 urlPre 回退与实况照片识别",
+        "抖音图文（图集）解析增强：优先取无水印原图 download_url_list，支持更多返回结构",
+        "抖音短链解析新增多级兜底（移动端/桌面端 UA、JS 跳转页面），图文与视频自动适配接口参数",
+        "顶部导航栏去掉分割线：改为下滑时渐变模糊过渡，向下自然消散",
+        "重做页面转场：返回动画改为 iOS 视差推拉，并补齐页面底色，彻底消除切换白屏",
+    )),
     UpdateLogItem("2.0.1", "2026-09-08", listOf(
         "修复抖音解析：分享页 SSR 字段下线导致解析失败，切换至 slidesinfo 专用接口，视频与图文均恢复",
         "修复小红书新版 xhslink.cn 短链无法识别的问题",

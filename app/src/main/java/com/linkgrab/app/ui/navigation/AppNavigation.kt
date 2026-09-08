@@ -7,7 +7,10 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -63,6 +66,7 @@ import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -88,6 +92,7 @@ import com.linkgrab.app.ui.screens.ToolboxScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
 import com.linkgrab.app.ui.liquid.LiquidBottomTabs
 import com.linkgrab.app.ui.screens.VideoToAudioScreen
+import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
@@ -149,6 +154,53 @@ private fun LiquidTabItem(
 
 private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Toolbox.route, Screen.Settings.route)
 
+// MARK: - Page transitions (iOS 26 push / pop)
+
+private typealias EnterSpec = AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition
+private typealias ExitSpec = AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition
+
+private const val TransitionMs = 340
+
+/** iOS system deceleration curve — fast start, long smooth tail. */
+private val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
+
+/** Tab-to-tab switches use a quick crossfade instead of a slide. */
+private val tabFadeIn: EnterTransition = fadeIn(tween(150))
+private val tabFadeOut: ExitTransition = fadeOut(tween(130))
+
+/** 30% parallax offset for the page that stays behind. */
+private const val Parallax = 0.30f
+
+private val pushEnter: EnterTransition = slideInHorizontally(
+    animationSpec = tween(TransitionMs, easing = iosEasing),
+    initialOffsetX = { it },
+)
+
+private val pushExit: ExitTransition = slideOutHorizontally(
+    animationSpec = tween(TransitionMs, easing = iosEasing),
+    targetOffsetX = { (-it * Parallax).toInt() },
+)
+
+private val popEnter: EnterTransition = slideInHorizontally(
+    animationSpec = tween(TransitionMs, easing = iosEasing),
+    initialOffsetX = { (-it * Parallax).toInt() },
+)
+
+private val popExit: ExitTransition = slideOutHorizontally(
+    animationSpec = tween(TransitionMs, easing = iosEasing),
+    targetOffsetX = { it },
+)
+
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(): Boolean =
+    initialState.destination.route in bottomNavRoutes &&
+        targetState.destination.route in bottomNavRoutes
+
+private fun iosEnter(transition: EnterTransition): EnterSpec =
+    { if (isTabSwitch()) tabFadeIn else transition }
+
+private fun iosExit(transition: ExitTransition): ExitSpec =
+    { if (isTabSwitch()) tabFadeOut else transition }
+
 @Composable
 fun AppNavigation(
     viewModel: MainViewModel,
@@ -197,7 +249,10 @@ fun AppNavigation(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {},
     ) { _ ->
-        Box(Modifier.fillMaxSize()) {
+        // An opaque base layer: during a transition both pages are partially
+        // off-screen, and without it the window background (white) shows
+        // through as a flash between pages.
+        Box(Modifier.fillMaxSize().background(iosBackground())) {
             NavHost(
                 navController = navController,
                 startDestination = Screen.Home.route,
@@ -215,11 +270,14 @@ fun AppNavigation(
                 )
             }
 
-            // Bottom nav tabs — quick crossfade for instant response
+            // Bottom nav tabs — quick crossfade when switching between tabs,
+            // iOS parallax push/pop when opening or leaving a detail page.
             composable(
                 Screen.Home.route,
-                enterTransition = { fadeIn(tween(160)) },
-                exitTransition = { fadeOut(tween(140)) },
+                enterTransition = iosEnter(pushEnter),
+                exitTransition = iosExit(pushExit),
+                popEnterTransition = iosEnter(popEnter),
+                popExitTransition = iosExit(popExit),
             ) {
                 HomeScreen(
                     viewModel = viewModel,
@@ -234,8 +292,10 @@ fun AppNavigation(
             }
             composable(
                 Screen.Toolbox.route,
-                enterTransition = { fadeIn(tween(160)) },
-                exitTransition = { fadeOut(tween(140)) },
+                enterTransition = iosEnter(pushEnter),
+                exitTransition = iosExit(pushExit),
+                popEnterTransition = iosEnter(popEnter),
+                popExitTransition = iosExit(popExit),
             ) {
                 ToolboxScreen(
                     onNavigateToVideoToAudio = { navController.navigate(Screen.VideoToAudio.route) },
@@ -245,8 +305,10 @@ fun AppNavigation(
 
             composable(
                 Screen.Settings.route,
-                enterTransition = { fadeIn(tween(160)) },
-                exitTransition = { fadeOut(tween(140)) },
+                enterTransition = iosEnter(pushEnter),
+                exitTransition = iosExit(pushExit),
+                popEnterTransition = iosEnter(popEnter),
+                popExitTransition = iosExit(popExit),
             ) {
                 SettingsScreen(
                     viewModel = viewModel,
@@ -256,32 +318,13 @@ fun AppNavigation(
                 )
             }
 
-            // Detail pages — iOS 26 push/pop: new page slides in from right with
-            // deceleration curve, old page parallax-shifts left at 1/4 speed.
-            val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
-            val slideIn = slideInHorizontally(
-                animationSpec = tween(320, easing = iosEasing),
-                initialOffsetX = { it },
-            )
-            val slideOut = slideOutHorizontally(
-                animationSpec = tween(320, easing = iosEasing),
-                targetOffsetX = { -it / 4 },
-            )
-            val popSlideIn = slideInHorizontally(
-                animationSpec = tween(320, easing = iosEasing),
-                initialOffsetX = { -it / 4 },
-            )
-            val popSlideOut = slideOutHorizontally(
-                animationSpec = tween(320, easing = iosEasing),
-                targetOffsetX = { it },
-            )
-
+            // Detail pages — transitions come from the shared specs above.
             composable(
                 Screen.Result.route,
-                enterTransition = { slideIn },
-                exitTransition = { slideOut },
-                popEnterTransition = { popSlideIn },
-                popExitTransition = { popSlideOut },
+                enterTransition = iosEnter(pushEnter),
+                exitTransition = iosExit(pushExit),
+                popEnterTransition = iosEnter(popEnter),
+                popExitTransition = iosExit(popExit),
             ) {
                 ResultScreen(
                     viewModel = viewModel,
@@ -290,10 +333,10 @@ fun AppNavigation(
             }
             composable(
                 Screen.UpdateLog.route,
-                enterTransition = { slideIn },
-                exitTransition = { slideOut },
-                popEnterTransition = { popSlideIn },
-                popExitTransition = { popSlideOut },
+                enterTransition = iosEnter(pushEnter),
+                exitTransition = iosExit(pushExit),
+                popEnterTransition = iosEnter(popEnter),
+                popExitTransition = iosExit(popExit),
             ) {
                 UpdateLogScreen(
                     onBack = { navController.popBackStack() },
@@ -301,28 +344,28 @@ fun AppNavigation(
             }
             composable(
                 Screen.VideoToAudio.route,
-                enterTransition = { slideIn },
-                exitTransition = { slideOut },
-                popEnterTransition = { popSlideIn },
-                popExitTransition = { popSlideOut },
+                enterTransition = iosEnter(pushEnter),
+                exitTransition = iosExit(pushExit),
+                popEnterTransition = iosEnter(popEnter),
+                popExitTransition = iosExit(popExit),
             ) {
                 VideoToAudioScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Screen.ImageConvert.route,
-                enterTransition = { slideIn },
-                exitTransition = { slideOut },
-                popEnterTransition = { popSlideIn },
-                popExitTransition = { popSlideOut },
+                enterTransition = iosEnter(pushEnter),
+                exitTransition = iosExit(pushExit),
+                popEnterTransition = iosEnter(popEnter),
+                popExitTransition = iosExit(popExit),
             ) {
                 ImageConvertScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 Screen.History.route,
-                enterTransition = { slideIn },
-                exitTransition = { slideOut },
-                popEnterTransition = { popSlideIn },
-                popExitTransition = { popSlideOut },
+                enterTransition = iosEnter(pushEnter),
+                exitTransition = iosExit(pushExit),
+                popEnterTransition = iosEnter(popEnter),
+                popExitTransition = iosExit(popExit),
             ) {
                 HistoryScreen(
                     viewModel = viewModel,

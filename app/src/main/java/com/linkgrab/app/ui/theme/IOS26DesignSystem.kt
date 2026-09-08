@@ -471,6 +471,12 @@ fun IOS26Divider(modifier: Modifier = Modifier) {
 val IOS26HeaderHeight = 52.dp
 
 /**
+ * Extra height below the bar over which the blur fades out. Without it the
+ * blurred region ends on a hard edge, which reads as a divider line.
+ */
+private val IOS26HeaderFade = 28.dp
+
+/**
  * iOS 26-style pinned navigation bar. It stays attached to the top of the
  * screen while content scrolls underneath, and applies a real backdrop blur
  * (sampled from [backdrop], which should record the scrolling content via
@@ -478,7 +484,8 @@ val IOS26HeaderHeight = 52.dp
  *
  * Behaviour matches UIKit: the bar is transparent at the top of the page;
  * once [scrolled] is true the blur + background tint fade in and the compact
- * title appears.
+ * title appears. There is deliberately **no** divider — the bar dissolves
+ * into the page through [IOS26HeaderFade] of gradient instead.
  */
 @Composable
 fun IOS26BlurHeader(
@@ -491,31 +498,43 @@ fun IOS26BlurHeader(
 ) {
     val progress by animateFloatAsState(
         targetValue = if (scrolled) 1f else 0f,
-        animationSpec = tween(220),
+        animationSpec = tween(260),
         label = "ios26HeaderProgress",
     )
     val bg = iosBackground()
     val titleColor = iosLabel()
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .height(topInset + IOS26HeaderHeight + IOS26HeaderFade)
             .drawBackdrop(
                 backdrop = backdrop,
                 shape = { RectangleShape },
                 effects = {
                     vibrancy()
-                    blur((0.1f + 20f * progress).dp.toPx())
+                    blur((0.1f + 26f * progress).dp.toPx())
                 },
+                // Gradient mask instead of a flat fill: opaque under the bar,
+                // fully transparent at the bottom of the fade — no seam.
                 onDrawSurface = {
-                    drawRect(bg.copy(alpha = 0.62f * progress))
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to bg.copy(alpha = 0.88f * progress),
+                            0.55f to bg.copy(alpha = 0.72f * progress),
+                            0.82f to bg.copy(alpha = 0.28f * progress),
+                            1f to bg.copy(alpha = 0f),
+                        ),
+                    )
                 },
-            )
-            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
-            .height(IOS26HeaderHeight)
-            .padding(horizontal = 20.dp),
+            ),
     ) {
         Row(
-            Modifier.fillMaxSize(),
+            Modifier
+                .fillMaxWidth()
+                .padding(top = topInset)
+                .height(IOS26HeaderHeight)
+                .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {

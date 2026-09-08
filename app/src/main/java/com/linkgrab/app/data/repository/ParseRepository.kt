@@ -28,7 +28,10 @@ class ParseRepository(context: Context) {
         val cleanUrl = extractUrl(url).lowercase()
         return when {
             """(douyin\.com|v\.douyin\.com|iesdouyin\.com)/""".toRegex().containsMatchIn(cleanUrl) -> Platform.DOUYIN
-            """(xiaohongshu\.com|xhslink\.com|xslink\.com)/""".toRegex().containsMatchIn(cleanUrl) -> Platform.XIAOHONGSHU
+            // 小红书域名必须覆盖短链变体：xhslink.com / xhslink.cn / xslink.com。
+            // 缺少任一变体时，App 内复制的分享文案会被判成"不支持的链接"。
+            """(xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com)/""".toRegex()
+                .containsMatchIn(cleanUrl) -> Platform.XIAOHONGSHU
             else -> Platform.UNKNOWN
         }
     }
@@ -63,11 +66,15 @@ class ParseRepository(context: Context) {
         val trimmed = text.trim()
 
         // Try to find douyin URL first (v.douyin.com short links)
-        val douyinPattern = """https?://(?:v\.douyin\.com|www\.douyin\.com|iesdouyin\.com)[^\s"'<>]*""".toRegex()
+        val douyinPattern =
+            """https?://(?:v\.douyin\.com|(?:\w+\.)?douyin\.com|(?:\w+\.)?iesdouyin\.com)[^\s"'<>，。！？；：、）】]*"""
+                .toRegex()
         douyinPattern.find(trimmed)?.let { return cleanUrl(it.value) }
 
         // Try to find xiaohongshu URL (including xhslink)
-        val xhsPattern = """https?://(?:www\.xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com)[^\s"'<>]*""".toRegex()
+        val xhsPattern =
+            """https?://(?:(?:www\.)?xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com)[^\s"'<>，。！？；：、）】]*"""
+                .toRegex()
         xhsPattern.find(trimmed)?.let { return cleanUrl(it.value) }
 
         // Generic URL fallback
