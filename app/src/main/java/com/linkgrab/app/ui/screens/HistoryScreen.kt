@@ -7,20 +7,14 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,10 +37,10 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.linkgrab.app.data.history.HistoryItem
-import com.linkgrab.app.ui.theme.IOS26BackButton
 import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26Choice
 import com.linkgrab.app.ui.theme.IOS26PageHeader
+import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.IOSCornerMedium
 import com.linkgrab.app.ui.theme.IOSCornerSmall
 import com.linkgrab.app.ui.theme.iosBlue
@@ -66,46 +60,45 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     var deleteItem by remember { mutableStateOf<HistoryItem?>(null) }
     val filtered = history.filter { filter == "all" || it.platform == filter }
     IOS26Canvas {
-        Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp)) {
-            IOS26BackButton(
-                onClick = onBack,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            IOS26PageHeader("历史记录", "查看和继续处理已解析的内容", topPadding = 16.dp)
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                IOS26Choice("全部", filter == "all", onClick = { filter = "all" })
-                IOS26Choice("抖音", filter == "douyin", onClick = { filter = "douyin" })
-                IOS26Choice("小红书", filter == "xiaohongshu", onClick = { filter = "xiaohongshu" })
+        IOS26StickyPage(
+            title = "历史记录",
+            onBack = onBack,
+            spacedBy = 10.dp,
+        ) {
+            item { IOS26PageHeader("历史记录", "查看和继续处理已解析的内容", topPadding = 0.dp) }
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    IOS26Choice("全部", filter == "all", onClick = { filter = "all" })
+                    IOS26Choice("抖音", filter == "douyin", onClick = { filter = "douyin" })
+                    IOS26Choice("小红书", filter == "xiaohongshu", onClick = { filter = "xiaohongshu" })
+                }
             }
             if (filtered.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "还没有历史记录",
-                            color = iosLabel(),
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = (-0.3).sp,
-                        )
-                        Text(
-                            "解析一个链接后，它会出现在这里",
-                            color = iosSecondaryLabel(),
-                            modifier = Modifier.padding(top = 8.dp),
-                            fontSize = 14.sp,
-                        )
+                item {
+                    Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "还没有历史记录",
+                                color = iosLabel(),
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.3).sp,
+                            )
+                            Text(
+                                "解析一个链接后，它会出现在这里",
+                                color = iosSecondaryLabel(),
+                                modifier = Modifier.padding(top = 8.dp),
+                                fontSize = 14.sp,
+                            )
+                        }
                     }
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 100.dp),
-                ) {
-                    items(filtered, key = { it.id }) { item ->
-                        HistoryCard(item, onClick = { onParseUrl(item.url) }, onLongClick = { deleteItem = item })
-                    }
+                items(filtered, key = { it.id }) { item ->
+                    HistoryCard(item, onClick = { onParseUrl(item.url) }, onLongClick = { deleteItem = item })
                 }
             }
         }

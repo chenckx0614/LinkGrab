@@ -1,16 +1,11 @@
 package com.linkgrab.app.ui.screens
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +18,7 @@ import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26Divider
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
@@ -32,12 +28,9 @@ import androidx.compose.material.icons.filled.ChevronRight
 @Composable
 fun ToolboxScreen(onNavigateToVideoToAudio: () -> Unit = {}, onNavigateToImageConvert: () -> Unit = {}) {
     IOS26Canvas {
-        LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
+        IOS26StickyPage(title = "工具") {
             item {
-                IOS26PageHeader("工具", "为已经保存的内容，准备下一步。")
+                IOS26PageHeader("工具", "为已经保存的内容，准备下一步。", topPadding = 0.dp)
             }
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
@@ -53,7 +46,6 @@ fun ToolboxScreen(onNavigateToVideoToAudio: () -> Unit = {}, onNavigateToImageCo
                     modifier = Modifier.padding(horizontal = 4.dp),
                     fontSize = 14.sp,
                 )
-                Spacer(Modifier.padding(bottom = 100.dp))
             }
         }
     }

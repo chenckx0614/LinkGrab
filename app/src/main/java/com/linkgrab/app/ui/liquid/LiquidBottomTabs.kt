@@ -106,7 +106,12 @@ fun LiquidBottomTabs(
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
-        var currentIndex by remember(selectedTabIndex) {
+        // NOTE: do NOT key this remember on the `selectedTabIndex` lambda — the
+        // lambda is recreated on every recomposition, which would orphan the
+        // state object observed by the snapshotFlow below and silently break
+        // the tap-driven selection animation (drag still worked because it
+        // drives the animation directly).
+        var currentIndex by remember {
             mutableIntStateOf(selectedTabIndex())
         }
         val dampedDragAnimation = remember(animationScope) {
@@ -191,7 +196,7 @@ fun LiquidBottomTabs(
                     onDrawSurface = { drawRect(containerColor) }
                 )
                 .then(interactiveHighlight.modifier)
-                .height(64f.dp)
+                .height(62f.dp)
                 .fillMaxWidth()
                 .padding(4f.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -226,7 +231,7 @@ fun LiquidBottomTabs(
                     onDrawSurface = { drawRect(containerColor) }
                 )
                 .then(interactiveHighlight.modifier)
-                .height(56f.dp)
+                .height(54f.dp)
                 .fillMaxWidth()
                 .padding(horizontal = 4f.dp)
                 .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
@@ -288,7 +293,7 @@ fun LiquidBottomTabs(
                         drawRect(Color.Black.copy(alpha = 0.03f * progress))
                     }
                 )
-                .height(56f.dp)
+                .height(54f.dp)
                 .fillMaxWidth(1f / tabsCount)
         )
     }

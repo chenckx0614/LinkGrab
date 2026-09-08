@@ -22,10 +22,6 @@ androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "u
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 
-miuix-ui = { group = "top.yukonga.miuix.kmp", name = "miuix-ui-android", version = "0.9.0" }
-miuix-preference = { group = "top.yukonga.miuix.kmp", name = "miuix-preference-android", version = "0.9.0" }
-miuix-icons = { group = "top.yukonga.miuix.kmp", name = "miuix-icons-android", version = "0.9.0" }
-miuix-blur = { group = "top.yukonga.miuix.kmp", name = "miuix-blur-android", version = "0.9.0" }
 
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }

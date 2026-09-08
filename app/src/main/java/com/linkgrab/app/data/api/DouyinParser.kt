@@ -52,39 +52,20 @@ class DouyinParser {
     private val defaultUa =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 
+    private val mobileUa =
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+
     suspend fun parse(shareUrl: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         try {
             val videoId = resolveVideoId(shareUrl)
                 ?: return@withContext Result.failure(Exception("无法从链接中提取抖音作品 ID"))
 
-            val pageUrl = "https://www.iesdouyin.com/share/video/$videoId/"
-            val html = get(pageUrl, followRedirects = true)
-
-            // window._ROUTER_DATA = {...}</script>
-            val routerJson = Regex(
-                """window\._ROUTER_DATA\s*=\s*(.*?)</script>""",
-                RegexOption.DOT_MATCHES_ALL,
-            ).find(html)?.groupValues?.get(1)?.trim()
-                ?: return@withContext Result.failure(Exception("页面数据结构解析失败（_ROUTER_DATA 不存在）"))
-
-            val root = json.parseToJsonElement(routerJson).jsonObject
-            val loaderData = root["loaderData"]?.jsonObject
-                ?: return@withContext Result.failure(Exception("页面数据结构异常（loaderData 缺失）"))
-
-            val videoInfoRes = (
-                loaderData["video_(id)/page"]?.jsonObject?.get("videoInfoRes")
-                    ?: loaderData["note_(id)/page"]?.jsonObject?.get("videoInfoRes")
-                )?.jsonObject
+            // 优先走 slidesinfo 专用接口（SSR 页面的 videoInfoRes 字段已下线，
+            // 图文 note 需要带 request_source=200 才返回数据）。接口失败时
+            // 回退到旧的 HTML SSR 解析。
+            val data = fetchAwemeDetail(videoId)
+                ?: fetchAwemeDetailFromHtml(videoId)
                 ?: return@withContext Result.failure(Exception("未找到作品信息"))
-
-            val itemList = videoInfoRes["item_list"]?.jsonArray
-            if (itemList == null || itemList.isEmpty()) {
-                val filterMsg = videoInfoRes["filter_list"]?.jsonArray
-                    ?.firstOrNull()?.jsonObject
-                    ?.get("detail_msg")?.jsonPrimitive?.content
-                return@withContext Result.failure(Exception(filterMsg ?: "作品不存在或已被删除"))
-            }
-            val data = itemList[0].jsonObject
 
             // ---- images (图集) + LivePhoto ----
             val images = mutableListOf<String>()
@@ -149,6 +130,63 @@ class DouyinParser {
             )
         } catch (e: Exception) {
             Result.failure(Exception("抖音解析失败: ${e.message}"))
+        }
+    }
+
+    /**
+     * 专用接口：https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/
+     * 同时支持视频与图文（图文需 request_source=200），直接返回 aweme_details。
+     */
+    private fun fetchAwemeDetail(videoId: String): JsonObject? {
+        val apiUrls = listOf(
+            "https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/?aweme_ids=%5B$videoId%5D",
+            "https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/?aweme_ids=%5B$videoId%5D&request_source=200",
+        )
+        for (apiUrl in apiUrls) {
+            try {
+                val body = get(apiUrl, followRedirects = true)
+                val details = json.parseToJsonElement(body).jsonObject["aweme_details"]?.jsonArray
+                if (details != null && details.isNotEmpty()) {
+                    return details[0].jsonObject
+                }
+            } catch (e: Exception) {
+                // try next endpoint variant
+            }
+        }
+        return null
+    }
+
+    /**
+     * 旧的 HTML SSR 解析（iesdouyin 分享页 _ROUTER_DATA），作为接口失败时的兜底。
+     * 注意页面会 302 到 www.douyin.com，必须禁止跟随重定向并使用移动端 UA。
+     */
+    private fun fetchAwemeDetailFromHtml(videoId: String): JsonObject? {
+        return try {
+            val pageUrl = "https://www.iesdouyin.com/share/video/$videoId/"
+            val request = Request.Builder().url(pageUrl)
+                .header("User-Agent", mobileUa)
+                .header("Referer", "https://www.douyin.com/")
+                .build()
+            val html = noRedirectClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                resp.body?.string() ?: return null
+            }
+            val routerJson = Regex(
+                """window\._ROUTER_DATA\s*=\s*(.*?)</script>""",
+                RegexOption.DOT_MATCHES_ALL,
+            ).find(html)?.groupValues?.get(1)?.trim() ?: return null
+
+            val loaderData = json.parseToJsonElement(routerJson).jsonObject["loaderData"]?.jsonObject
+                ?: return null
+            val videoInfoRes = (
+                loaderData["video_(id)/page"]?.jsonObject?.get("videoInfoRes")
+                    ?: loaderData["note_(id)/page"]?.jsonObject?.get("videoInfoRes")
+                )?.jsonObject ?: return null
+
+            val itemList = videoInfoRes["item_list"]?.jsonArray
+            if (itemList == null || itemList.isEmpty()) null else itemList[0].jsonObject
+        } catch (e: Exception) {
+            null
         }
     }
 

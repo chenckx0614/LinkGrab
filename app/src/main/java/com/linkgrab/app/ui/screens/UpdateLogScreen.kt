@@ -1,27 +1,30 @@
 package com.linkgrab.app.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.linkgrab.app.ui.theme.IOS26BackButton
 import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.1", "2026-09-08", listOf(
+        "修复抖音解析：分享页 SSR 字段下线导致解析失败，切换至 slidesinfo 专用接口，视频与图文均恢复",
+        "修复小红书新版 xhslink.cn 短链无法识别的问题",
+        "全部页面升级为 iOS 26 吸顶导航栏：返回按钮与标题固定顶部，滚动时呈现实时模糊遮罩",
+        "修复底栏点击无选中动画的问题（仅按住滑动才生效）",
+        "修复底部标签反复点击导致页面栈堆积、返回时概率白屏卡住的问题",
+        "底栏尺寸与排版微调，标签切换改用状态保存式导航",
+    )),
     UpdateLogItem("2.0.0", "2026-09-07", listOf(
         "解析系统全面重构：接入原生抖音/小红书解析引擎（移植自 parse-video-py），不再依赖第三方解析网站",
         "新增小红书实况照片（Live Photo）解析、预览播放与下载",
@@ -53,17 +56,12 @@ private val updateLogs = listOf(
 @Composable
 fun UpdateLogScreen(onBack: () -> Unit) {
     IOS26Canvas {
-        LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+        IOS26StickyPage(
+            title = "更新日志",
+            onBack = onBack,
+            spacedBy = 14.dp,
         ) {
-            item {
-                IOS26BackButton(
-                    onClick = onBack,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-            }
-            item { IOS26PageHeader("更新日志", "LinkGrab 的每一次改进。", topPadding = 16.dp) }
+            item { IOS26PageHeader("更新日志", "LinkGrab 的每一次改进。", topPadding = 0.dp) }
             items(updateLogs.size) { index ->
                 val item = updateLogs[index]
                 IOS26Panel {
@@ -90,7 +88,6 @@ fun UpdateLogScreen(onBack: () -> Unit) {
                     }
                 }
             }
-            item { Spacer(Modifier.padding(bottom = 100.dp)) }
         }
     }
 }

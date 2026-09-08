@@ -67,7 +67,7 @@ class ParseRepository(context: Context) {
         douyinPattern.find(trimmed)?.let { return cleanUrl(it.value) }
 
         // Try to find xiaohongshu URL (including xhslink)
-        val xhsPattern = """https?://(?:www\.xiaohongshu\.com|xhslink\.com|xslink\.com)[^\s"'<>]*""".toRegex()
+        val xhsPattern = """https?://(?:www\.xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com)[^\s"'<>]*""".toRegex()
         xhsPattern.find(trimmed)?.let { return cleanUrl(it.value) }
 
         // Generic URL fallback

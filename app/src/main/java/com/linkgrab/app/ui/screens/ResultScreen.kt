@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,10 +26,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,14 +43,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -74,9 +76,12 @@ import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.linkgrab.app.data.model.MediaType
-import com.linkgrab.app.ui.theme.IOS26BackButton
+import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
+import com.linkgrab.app.ui.theme.IOS26HeaderHeight
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26Panel
@@ -123,75 +128,44 @@ fun ResultScreen(
         }
     }
 
+    val headerBackdrop = rememberLayerBackdrop()
+    val gridState = rememberLazyGridState()
+    val videoScrollState = rememberScrollState()
+    val headerScrolled by remember {
+        derivedStateOf {
+            gridState.firstVisibleItemIndex > 0 ||
+                gridState.firstVisibleItemScrollOffset > 8 ||
+                videoScrollState.value > 8
+        }
+    }
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = iosBackground(),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (selectionMode) "已选 ${selectedImages.size} 项" else "解析结果",
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = (-0.2).sp,
-                    )
-                },
-                navigationIcon = {
-                    IOS26BackButton(
-                        onClick = {
-                            if (selectionMode) {
-                                selectionMode = false
-                                selectedImages = emptySet()
-                            } else {
-                                onBack()
-                            }
-                        },
-                        modifier = Modifier.padding(start = 16.dp),
-                    )
-                },
-                actions = {
-                    if (result?.type == MediaType.IMAGE && result.images.size > 1) {
-                        IconButton(onClick = {
-                            selectionMode = !selectionMode
-                            selectedImages = emptySet()
-                        }) {
-                            Text(
-                                if (selectionMode) "取消" else "选择",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = iosBackground().copy(alpha = 0.85f),
-                    titleContentColor = iosLabel(),
-                    navigationIconContentColor = iosLabel(),
-                    actionIconContentColor = iosBlue(),
-                ),
-            )
-        },
-    ) { innerPadding ->
+    ) { _ ->
+        Box(Modifier.fillMaxSize()) {
         if (result == null) {
-            Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            Box(modifier = Modifier.fillMaxSize().padding(top = topInset + IOS26HeaderHeight)) {
                 ResultLoadingSkeleton()
             }
-            return@Scaffold
-        }
+        } else {
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = topInset + IOS26HeaderHeight)
                 .padding(horizontal = 20.dp),
         ) {
             when (result.type) {
                 MediaType.IMAGE -> {
                     LazyVerticalGrid(
+                        state = gridState,
                         columns = GridCells.Fixed(2),
                         contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).layerBackdrop(headerBackdrop),
                     ) {
                         itemsIndexed(result.images) { index, imageUrl ->
                             val isLive = result.isLivePhoto(index)
@@ -349,7 +323,10 @@ fun ResultScreen(
 
                 MediaType.VIDEO -> {
                     Column(
-                        modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                        modifier = Modifier
+                            .weight(1f)
+                            .layerBackdrop(headerBackdrop)
+                            .verticalScroll(videoScrollState),
                     ) {
                         Spacer(modifier = Modifier.height(8.dp))
                         IOS26Panel(Modifier.fillMaxWidth()) {
@@ -449,6 +426,41 @@ fun ResultScreen(
                     }
                 }
             }
+        }
+        }
+
+        // Pinned iOS 26 blur header — stays on top while content scrolls
+        IOS26BlurHeader(
+            title = if (selectionMode) "已选 ${selectedImages.size} 项" else "解析结果",
+            backdrop = headerBackdrop,
+            scrolled = headerScrolled,
+            modifier = Modifier.align(Alignment.TopCenter),
+            onBack = {
+                if (selectionMode) {
+                    selectionMode = false
+                    selectedImages = emptySet()
+                } else {
+                    onBack()
+                }
+            },
+            actions = {
+                if (result?.type == MediaType.IMAGE && result.images.size > 1) {
+                    Text(
+                        if (selectionMode) "取消" else "选择",
+                        color = iosBlue(),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                selectionMode = !selectionMode
+                                selectedImages = emptySet()
+                            }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
+            },
+        )
         }
     }
 

@@ -133,9 +133,9 @@ private fun LiquidTabItem(
             icon,
             contentDescription = label,
             tint = iosLabel(),
-            modifier = Modifier.size(21.dp),
+            modifier = Modifier.size(20.dp),
         )
-        Spacer(Modifier.height(3.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             label,
             color = iosLabel(),
@@ -175,6 +175,20 @@ fun AppNavigation(
                 navController.navigate(Screen.Guide.route) {
                     popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
                 }
+            }
+        }
+    }
+
+    // Bottom-tab navigation: keep a single instance per tab and restore its
+    // state. Without popUpTo/saveState, repeated tab taps keep pushing new
+    // destinations onto the back stack, which interrupted transitions and
+    // could leave a stale half-faded (white) page on the screen.
+    val navigateToTab: (String) -> Unit = remember(navController) {
+        { route ->
+            navController.navigate(route) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
             }
         }
     }
@@ -336,18 +350,18 @@ fun AppNavigation(
                             2 -> Screen.Settings.route
                             else -> Screen.Home.route
                         }
-                        navController.navigate(route) { launchSingleTop = true }
+                        navigateToTab(route)
                     },
                     backdrop = liquidBackdrop,
                     tabsCount = 3,
                     modifier = Modifier
-                        .padding(horizontal = 20.dp)
-                        .padding(bottom = 16.dp)
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 12.dp)
                         .navigationBarsPadding(),
                 ) {
-                    LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { navController.navigate(Screen.Home.route) { launchSingleTop = true } }
-                    LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { navController.navigate(Screen.Toolbox.route) { launchSingleTop = true } }
-                    LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { navController.navigate(Screen.Settings.route) { launchSingleTop = true } }
+                    LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { navigateToTab(Screen.Home.route) }
+                    LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { navigateToTab(Screen.Toolbox.route) }
+                    LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { navigateToTab(Screen.Settings.route) }
                 }
             }
         }

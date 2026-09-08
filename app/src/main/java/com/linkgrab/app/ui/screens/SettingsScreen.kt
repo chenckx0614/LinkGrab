@@ -32,6 +32,7 @@ import com.linkgrab.app.ui.theme.IOS26Divider
 import com.linkgrab.app.ui.theme.IOS26ListRow
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.IOS26Switch
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
@@ -49,11 +50,8 @@ fun SettingsScreen(viewModel: MainViewModel, onNavigateToUpdateLog: () -> Unit =
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) viewModel.toggleLiveUpdates(true) }
 
     IOS26Canvas {
-        LazyColumn(
-            Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-        ) {
-            item { IOS26PageHeader("设置", "让 LinkGrab 更符合你的使用习惯。") }
+        IOS26StickyPage(title = "设置") {
+            item { IOS26PageHeader("设置", "让 LinkGrab 更符合你的使用习惯。", topPadding = 0.dp) }
 
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
@@ -184,7 +182,6 @@ fun SettingsScreen(viewModel: MainViewModel, onNavigateToUpdateLog: () -> Unit =
                         modifier = Modifier.padding(top = 14.dp),
                     )
                 }
-                Spacer(Modifier.padding(bottom = 100.dp))
             }
         }
     }

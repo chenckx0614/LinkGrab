@@ -41,6 +41,7 @@ import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.viewmodel.MainViewModel
@@ -54,12 +55,12 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToResult: () -> Unit, onNavig
     LaunchedEffect(state.result) { if (state.result != null) onNavigateToResult() }
 
     IOS26Canvas {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().imePadding().padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+        IOS26StickyPage(
+            title = "LinkGrab",
+            applyImePadding = true,
         ) {
             item {
-                IOS26PageHeader("LinkGrab", "保存你真正想留下的内容")
+                IOS26PageHeader("LinkGrab", "保存你真正想留下的内容", topPadding = 0.dp)
             }
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
@@ -108,7 +109,7 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToResult: () -> Unit, onNavig
             item {
                 val platform = when {
                     input.contains("douyin.com") -> Platform.DOUYIN
-                    input.contains("xiaohongshu.com") || input.contains("xhslink.com") -> Platform.XIAOHONGSHU
+                    input.contains("xiaohongshu.com") || input.contains("xhslink.com") || input.contains("xhslink.cn") -> Platform.XIAOHONGSHU
                     else -> Platform.UNKNOWN
                 }
                 if (platform != Platform.UNKNOWN) {
@@ -139,7 +140,6 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToResult: () -> Unit, onNavig
                     Spacer(Modifier.height(14.dp))
                     IOS26Button("打开历史记录", onNavigateToHistory, Modifier.fillMaxWidth())
                 }
-                Spacer(Modifier.height(100.dp))
             }
         }
     }

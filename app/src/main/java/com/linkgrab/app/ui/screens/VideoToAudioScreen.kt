@@ -17,11 +17,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,17 +48,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material.icons.Icons
-import com.linkgrab.app.ui.theme.IOS26BackButton
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
+import com.linkgrab.app.ui.theme.IOS26HeaderHeight
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.iosBackground
@@ -110,35 +110,26 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
         }
     }
 
+    val headerBackdrop = rememberLayerBackdrop()
+    val scrollState = rememberScrollState()
+    val headerScrolled = scrollState.value > 8
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = iosBackground(),
-        topBar = {
-            TopAppBar(
-                title = { Text("视频转音频", fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp) },
-                navigationIcon = {
-                    IOS26BackButton(
-                        onClick = onBack,
-                        modifier = Modifier.padding(start = 16.dp),
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = iosBackground().copy(alpha = 0.85f),
-                    titleContentColor = iosLabel(),
-                    navigationIconContentColor = iosLabel(),
-                ),
-            )
-        },
-    ) { innerPadding ->
+    ) { _ ->
+        Box(Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = topInset + IOS26HeaderHeight)
                 .padding(horizontal = 20.dp)
-                .verticalScroll(rememberScrollState()),
+                .layerBackdrop(headerBackdrop)
+                .verticalScroll(scrollState),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             IOS26IconCapsule("🎵", iosBlue())
 
@@ -213,6 +204,18 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
                 onClick = { videoPicker.launch("video/*") },
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            Spacer(modifier = Modifier.height(40.dp))
+        }
+
+        // Pinned iOS 26 blur header
+        IOS26BlurHeader(
+            title = "视频转音频",
+            backdrop = headerBackdrop,
+            scrolled = headerScrolled,
+            modifier = Modifier.align(Alignment.TopCenter),
+            onBack = onBack,
+        )
         }
     }
 }

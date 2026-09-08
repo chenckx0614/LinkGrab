@@ -15,18 +15,30 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -35,10 +47,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.vibrancy
 
 /* =========================================================
  * iOS 26 Liquid Glass Design System for LinkGrab
@@ -445,6 +465,130 @@ fun IOS26Divider(modifier: Modifier = Modifier) {
     )
 }
 
+// MARK: - Sticky Blur Header (iOS 26 navigation bar)
+
+/** Height of the pinned header bar (below the status bar). */
+val IOS26HeaderHeight = 52.dp
+
+/**
+ * iOS 26-style pinned navigation bar. It stays attached to the top of the
+ * screen while content scrolls underneath, and applies a real backdrop blur
+ * (sampled from [backdrop], which should record the scrolling content via
+ * `Modifier.layerBackdrop(backdrop)`).
+ *
+ * Behaviour matches UIKit: the bar is transparent at the top of the page;
+ * once [scrolled] is true the blur + background tint fade in and the compact
+ * title appears.
+ */
+@Composable
+fun IOS26BlurHeader(
+    title: String,
+    backdrop: Backdrop,
+    scrolled: Boolean,
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
+) {
+    val progress by animateFloatAsState(
+        targetValue = if (scrolled) 1f else 0f,
+        animationSpec = tween(220),
+        label = "ios26HeaderProgress",
+    )
+    val bg = iosBackground()
+    val titleColor = iosLabel()
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RectangleShape },
+                effects = {
+                    vibrancy()
+                    blur((0.1f + 20f * progress).dp.toPx())
+                },
+                onDrawSurface = {
+                    drawRect(bg.copy(alpha = 0.62f * progress))
+                },
+            )
+            .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding())
+            .height(IOS26HeaderHeight)
+            .padding(horizontal = 20.dp),
+    ) {
+        Row(
+            Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (onBack != null) {
+                IOS26BackButton(onClick = onBack)
+                Spacer(Modifier.size(14.dp))
+            }
+            Text(
+                title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = titleColor,
+                letterSpacing = (-0.2).sp,
+                maxLines = 1,
+                modifier = Modifier
+                    .weight(1f)
+                    .graphicsLayer { alpha = progress },
+            )
+            actions()
+        }
+    }
+}
+
+/**
+ * A page scaffold with a pinned iOS 26 blur header over a [LazyColumn].
+ * The scrolling content is recorded into a backdrop layer so the header can
+ * blur it in real time. Large titles should remain a content item — the
+ * compact header title fades in once the page is scrolled.
+ */
+@Composable
+fun IOS26StickyPage(
+    title: String,
+    modifier: Modifier = Modifier,
+    onBack: (() -> Unit)? = null,
+    spacedBy: Dp = 20.dp,
+    bottomSpacing: Dp = 100.dp,
+    applyImePadding: Boolean = false,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: LazyListScope.() -> Unit,
+) {
+    val listState = rememberLazyListState()
+    val scrolled by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 8
+        }
+    }
+    val backdrop = rememberLayerBackdrop()
+    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    Box(modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .layerBackdrop(backdrop)
+                .then(if (applyImePadding) Modifier.imePadding() else Modifier)
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(spacedBy),
+            contentPadding = PaddingValues(
+                top = topInset + IOS26HeaderHeight + 10.dp,
+                bottom = bottomSpacing,
+            ),
+            content = content,
+        )
+        IOS26BlurHeader(
+            title = title,
+            backdrop = backdrop,
+            scrolled = scrolled,
+            modifier = Modifier.align(Alignment.TopCenter),
+            onBack = onBack,
+            actions = actions,
+        )
+    }
+}
+
 // MARK: - Back Button (iOS 26 circular glass style)
 
 /**
@@ -471,15 +615,18 @@ fun IOS26BackButton(
         label = "ios26BackBg",
     )
     val chevronColor = iosLabel()
-    val glassBg = iosGlass()
-    val glassStroke = iosGlassStroke()
+    // iOS 26 uses a subtle tertiary system fill instead of opaque white glass
+    val fillBase = if (isInDarkTheme()) Color.White.copy(alpha = 0.14f)
+    else Color(0xFF787880).copy(alpha = 0.10f)
+    val strokeBase = if (isInDarkTheme()) Color.White.copy(alpha = 0.08f)
+    else Color.Black.copy(alpha = 0.05f)
     Box(
         modifier = modifier
             .size(38.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
-            .background(glassBg.copy(alpha = bgAlpha))
-            .border(0.5.dp, glassStroke, CircleShape)
+            .background(fillBase.copy(alpha = fillBase.alpha * bgAlpha))
+            .border(0.5.dp, strokeBase, CircleShape)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
