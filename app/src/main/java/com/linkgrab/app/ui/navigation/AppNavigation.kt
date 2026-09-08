@@ -73,6 +73,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -212,6 +213,17 @@ fun AppNavigation(
 
     val showBottomBar = currentDestination?.route in bottomNavRoutes
     val context = LocalContext.current
+
+    // 预测式返回已关闭，系统返回手势会走 onBackPressed。这里接管它，
+    // 让手势返回执行应用内的 pop 转场（而不是直接退出应用）。
+    // 只有非底部标签页才拦截，首页上仍然保留"返回退出"的系统行为。
+    BackHandler(
+        enabled = currentDestination?.route != null &&
+            currentDestination?.route !in bottomNavRoutes &&
+            currentDestination?.route != Screen.Guide.route,
+    ) {
+        navController.popBackStack()
+    }
     val guideShown by viewModel.guideShown.collectAsState()
     val dataLoaded by viewModel.dataLoaded.collectAsState()
     var guideChecked by remember { mutableStateOf(false) }

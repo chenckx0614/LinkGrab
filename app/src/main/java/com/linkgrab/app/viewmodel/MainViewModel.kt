@@ -177,7 +177,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun clearResult() { _uiState.value = ParseUiState() }
+    // 退出结果页时在转场末尾触发，只清 result 字段：整体重建 UiState 会让
+    // 正在做进场动画的首页多一次全量重组，正好卡在动画收尾的那一帧。
+    fun clearResult() { _uiState.value = _uiState.value.copy(result = null) }
     fun clearError() { _uiState.value = _uiState.value.copy(error = null) }
 
     // ==================== History ====================

@@ -17,6 +17,14 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.4", "2026-09-08", listOf(
+        "关闭 Android 预测式返回手势：该手势会与自定义转场抢占控制权，导致返回动画错位/闪屏",
+        "返回手势改由应用内统一接管，非首页/非引导页的返回行为完全一致",
+        "修复解析结果页返回时的动画错误：视频播放器改用 TextureView，不再脱离图层变换产生黑块与错位",
+        "修复实况照片预览弹窗关闭时的残影，退出前先暂停解码",
+        "优化结果页返回卡顿：吸顶模糊图层改为滚动时按需挂载，未滚动时不再做全屏离屏合成",
+        "优化结果页返回卡顿：清除结果只更新结果字段，避免首页多一次全量重组；图片网格补充稳定 key",
+    )),
     UpdateLogItem("2.0.3", "2026-09-08", listOf(
         "修复页面未滚动时顶部就出现一块带硬边的「遮罩」：原因是吸顶头的 vibrancy 色彩滤镜（饱和度 1.5x）未随滚动淡出",
         "吸顶模糊改为滚动超过约 56dp 后才渐入，模糊区底部与页面底色无缝衔接，无分割线",

@@ -8,6 +8,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -79,6 +80,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.linkgrab.app.R
 import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
@@ -87,6 +89,7 @@ import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.rememberBackdropLayerActive
 import com.linkgrab.app.ui.theme.IOSCornerSmall
 import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
@@ -110,9 +113,27 @@ fun ResultScreen(
     var showPreview by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedImages by remember { mutableStateOf(setOf<Int>()) }
+    // 视频结果页的播放器：返回时先暂停，避免转场动画期间继续解码
+    var player by remember { mutableStateOf<ExoPlayer?>(null) }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.clearResult() }
+    }
+
+    // 系统返回手势：优先于导航层的 BackHandler，返回前先暂停播放，
+    // 避免转场动画期间仍在解码导致掉帧。
+    BackHandler {
+        when {
+            showPreview -> showPreview = false
+            selectionMode -> {
+                selectionMode = false
+                selectedImages = emptySet()
+            }
+            else -> {
+                player?.pause()
+                onBack()
+            }
+        }
     }
 
     LaunchedEffect(downloadState) {
@@ -141,6 +162,7 @@ fun ResultScreen(
                 videoScrollState.value > scrollThreshold
         }
     }
+    val backdropLayerActive = rememberBackdropLayerActive(headerScrolled)
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Scaffold(
@@ -168,9 +190,11 @@ fun ResultScreen(
                         contentPadding = PaddingValues(bottom = 80.dp, top = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.weight(1f).layerBackdrop(headerBackdrop),
+                        modifier = Modifier.weight(1f)
+                            .then(if (backdropLayerActive) Modifier.layerBackdrop(headerBackdrop) else Modifier),
                     ) {
-                        itemsIndexed(result.images) { index, imageUrl ->
+                        // 显式 key：避免任何重组都重建整个网格项（会连带重触发图片加载）
+                        itemsIndexed(result.images, key = { index, _ -> index }) { index, imageUrl ->
                             val isLive = result.isLivePhoto(index)
                             Box(
                                 modifier = Modifier
@@ -328,7 +352,7 @@ fun ResultScreen(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .layerBackdrop(headerBackdrop)
+                            .then(if (backdropLayerActive) Modifier.layerBackdrop(headerBackdrop) else Modifier)
                             .verticalScroll(videoScrollState),
                     ) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -363,7 +387,15 @@ fun ResultScreen(
                                     prepare()
                                 }
                             }
-                            DisposableEffect(Unit) { onDispose { exoPlayer.release() } }
+                            // 退出页面时先暂停，避免转场期间仍在解码拖慢动画
+                            DisposableEffect(Unit) {
+                                player = exoPlayer
+                                onDispose {
+                                    exoPlayer.pause()
+                                    exoPlayer.release()
+                                    if (player === exoPlayer) player = null
+                                }
+                            }
 
                             Box(
                                 modifier = Modifier
@@ -375,7 +407,14 @@ fun ResultScreen(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 AndroidView(
-                                    factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = true; showController() } },
+                                    // 布局里声明了 surface_type=texture_view，SurfaceView 在
+                                    // 转场动画中会脱离图层变换，必须换成 TextureView。
+                                    factory = { ctx ->
+                                        (android.view.LayoutInflater.from(ctx)
+                                            .inflate(R.layout.player_view_texture, null) as PlayerView).apply {
+                                            this.player = exoPlayer
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -443,6 +482,8 @@ fun ResultScreen(
                     selectionMode = false
                     selectedImages = emptySet()
                 } else {
+                    // 先停掉播放再走转场，避免退出动画期间解码抢占主线程
+                    player?.pause()
                     onBack()
                 }
             },
@@ -514,7 +555,8 @@ private fun ImagePreviewDialog(
         } else null
     }
     DisposableEffect(exoPlayer) {
-        onDispose { exoPlayer?.release() }
+        // 先暂停再释放，避免弹窗消失动画期间仍在解码
+        onDispose { exoPlayer?.pause(); exoPlayer?.release() }
     }
 
     LaunchedEffect(currentIndex) {
@@ -540,7 +582,13 @@ private fun ImagePreviewDialog(
         ) {
             if (playingLive && exoPlayer != null) {
                 AndroidView(
-                    factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer; useController = false } },
+                    factory = { ctx ->
+                        (android.view.LayoutInflater.from(ctx)
+                            .inflate(R.layout.player_view_texture, null) as PlayerView).apply {
+                            this.player = exoPlayer
+                            this.useController = false
+                        }
+                    },
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                 )
             } else {

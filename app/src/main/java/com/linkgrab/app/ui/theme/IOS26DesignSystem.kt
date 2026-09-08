@@ -38,9 +38,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -573,6 +577,29 @@ fun IOS26BlurHeader(
 }
 
 /**
+ * 吸顶模糊只在页面滚动后才可能出现，未滚动时把整页内容录进 backdrop 图层
+ * 是一次纯浪费的全屏离屏合成（会明显拖慢页面转场）。这里让图层的挂载跟随
+ * 模糊的可见性；关闭时延后到模糊淡出结束，避免图层提前卸载导致模糊内容
+ * 突然消失。
+ *
+ * 用法：`Modifier.then(if (active) Modifier.layerBackdrop(backdrop) else Modifier)`
+ */
+@Composable
+fun rememberBackdropLayerActive(scrolled: Boolean): Boolean {
+    var active by remember { mutableStateOf(scrolled) }
+    LaunchedEffect(scrolled) {
+        if (scrolled) {
+            active = true
+        } else {
+            // 与 IOS26BlurHeader 的淡出时长（260ms）对齐并留出余量
+            delay(320)
+            active = false
+        }
+    }
+    return active
+}
+
+/**
  * A page scaffold with a pinned iOS 26 blur header over a [LazyColumn].
  * The scrolling content is recorded into a backdrop layer so the header can
  * blur it in real time. Large titles should remain a content item — the
@@ -598,13 +625,14 @@ fun IOS26StickyPage(
         }
     }
     val backdrop = rememberLayerBackdrop()
+    val layerActive = rememberBackdropLayerActive(scrolled)
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Box(modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-                .layerBackdrop(backdrop)
+                .then(if (layerActive) Modifier.layerBackdrop(backdrop) else Modifier)
                 .then(if (applyImePadding) Modifier.imePadding() else Modifier)
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(spacedBy),
