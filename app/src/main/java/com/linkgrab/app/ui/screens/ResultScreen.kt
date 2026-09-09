@@ -110,7 +110,6 @@ import com.linkgrab.app.viewmodel.MainViewModel
 fun ResultScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
-    backdrop: Backdrop? = null,
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -156,6 +155,12 @@ fun ResultScreen(
     }
 
     val headerBackdrop = rememberLayerBackdrop()
+    // 底栏毛玻璃专用的内容采样层。
+    // 千万不能用 AppNavigation 那个 liquidBackdrop：它采样的是整个 NavHost，
+    // 而结果页（含这条底栏）就在 NavHost 里 —— 底栏去采样它等于采样自己，
+    // 形成循环引用，解析完成进入页面时直接崩溃。这里单独建一层，只记录
+    // 内容区（Scaffold 的 content slot 不含 bottomBar），因此不会自引用。
+    val contentBackdrop = rememberLayerBackdrop()
     val gridState = rememberLazyGridState()
     val videoScrollState = rememberScrollState()
     val scrollThreshold = with(LocalDensity.current) { IOS26HeaderScrollThreshold.roundToPx() }
@@ -176,7 +181,7 @@ fun ResultScreen(
             result?.let { safeResult ->
                 ResultBottomBar(
                     result = safeResult,
-                    backdrop = backdrop,
+                    backdrop = contentBackdrop,
                     selectionMode = selectionMode,
                     selectedImages = selectedImages,
                     downloadState = downloadState,
@@ -204,7 +209,9 @@ fun ResultScreen(
             }
         },
     ) { paddingValues ->
-        Box(Modifier.fillMaxSize()) {
+        // 挂上内容采样层：记录网格/视频区域，供底栏毛玻璃取样。
+        // 底栏在 bottomBar slot 里，不在这棵树内，所以不会自引用。
+        Box(Modifier.fillMaxSize().layerBackdrop(contentBackdrop)) {
             if (result == null) {
                 if (!uiState.isLoading) {
                     LaunchedEffect(Unit) { onBack() }

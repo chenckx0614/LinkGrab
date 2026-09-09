@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.11", "2026-09-09", listOf(
+        "紧急修复：解析完成后进入结果页闪退（v2.1.10 引入）",
+        "原因：结果页底栏毛玻璃误用了导航层的 liquidBackdrop —— 它采样整个 NavHost，而结果页（含这条底栏）就在 NavHost 内，底栏采样它等于采样自己，形成循环引用崩溃",
+        "修复：结果页单独建立内容采样层（只记录 Scaffold 的 content 区，不含 bottomBar），底栏改用这一层，彻底断开自引用",
+    )),
     UpdateLogItem("2.1.10", "2026-09-09", listOf(
         "解析结果页底部操作栏改为毛玻璃：实时高斯模糊滚动到栏底的图片/视频内容，从近乎不透明的实色变为通透玻璃",
         "底栏模糊区域延伸到屏幕底部安全区，与系统毛玻璃导航栏观感一致",
