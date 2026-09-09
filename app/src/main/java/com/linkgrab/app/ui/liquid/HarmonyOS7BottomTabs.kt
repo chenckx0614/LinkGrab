@@ -93,18 +93,16 @@ fun HarmonyOS7BottomTabs(
         if (isLightTheme) Color.White.copy(alpha = 0.70f)
         else Color.White.copy(alpha = 0.12f)
 
-    // 选中遮罩：鸿蒙默认是浅灰胶囊，按压时轻微加深。
+    // 选中遮罩：常态下选中项有一个浅灰胶囊背景；鸿蒙光感交互的反馈
+    // 主要靠光晕和容器形变，按压时遮罩本身不跟随、不缩小、不加深。
     val maskNormalColor =
         if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.10f)
         else Color.White.copy(alpha = 0.12f)
-    val maskPressedColor =
-        if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.20f)
-        else Color.White.copy(alpha = 0.22f)
 
-    // 光晕颜色：使用系统蓝的高亮低透明版本，契合「光感」描述。
+    // 光晕颜色：使用系统蓝的高亮版本，半径做大一些，让「光感」更明显。
     val glowColor =
-        if (isLightTheme) Color(0xFF0088FF).copy(alpha = 0.18f)
-        else Color(0xFF4CADFF).copy(alpha = 0.16f)
+        if (isLightTheme) Color(0xFF0088FF).copy(alpha = 0.30f)
+        else Color(0xFF4CADFF).copy(alpha = 0.26f)
 
     var pressedIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -126,16 +124,15 @@ fun HarmonyOS7BottomTabs(
             if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
         }
         val maskPosition = remember { Animatable(initialPosition) }
-        val maskScale = remember { Animatable(1f) }
-        val maskPress = remember { Animatable(0f) }
         val glowRadius = remember { Animatable(0f) }
         val containerPress = remember { Animatable(0f) }
 
-        // 选中/按压位置驱动遮罩滑动。使用弹跳 spring：dampingRatio 略低于 1，
+        // 选中位置驱动遮罩滑动。使用弹跳 spring：dampingRatio 略低于 1，
         // 让切换时产生鸿蒙标志性的轻微 overshoot「弹」一下。
+        // 注意：按压时遮罩不跟随手指，只在选中项保持常态浅灰背景。
         LaunchedEffect(Unit) {
             snapshotFlow {
-                val i = pressedIndex ?: selectedIndexState
+                val i = selectedIndexState
                 if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
             }.collectLatest { target ->
                 maskPosition.animateTo(
@@ -148,16 +145,9 @@ fun HarmonyOS7BottomTabs(
             }
         }
 
-        // 按压状态驱动遮罩缩放/加深、光晕扩散、容器下凹。
+        // 按压状态只驱动光晕扩散和容器下凹；遮罩本身不变化。
         LaunchedEffect(Unit) {
             snapshotFlow { pressedIndex != null }.collectLatest { pressed ->
-                launch {
-                    maskScale.animateTo(
-                        if (pressed) 0.90f else 1f,
-                        spring(dampingRatio = 0.72f, stiffness = 480f),
-                    )
-                }
-                launch { maskPress.animateTo(if (pressed) 1f else 0f, tween(160)) }
                 launch {
                     glowRadius.animateTo(
                         if (pressed) 1f else 0f,
@@ -175,9 +165,9 @@ fun HarmonyOS7BottomTabs(
                 .graphicsLayer {
                     // 按压时整体轻微下凹，模拟光感形变。
                     val press = containerPress.value
-                    scaleX = 1f - 0.015f * press
-                    scaleY = 1f - 0.015f * press
-                    alpha = 0.98f + 0.02f * (1f - press)
+                    scaleX = 1f - 0.020f * press
+                    scaleY = 1f - 0.020f * press
+                    alpha = 0.97f + 0.03f * (1f - press)
                 }
                 .drawBackdrop(
                     backdrop = backdrop,
@@ -196,7 +186,8 @@ fun HarmonyOS7BottomTabs(
                 val pressed = pressedIndex ?: selectedIndexState
                 val positionFloat = if (isLtr) pressed.toFloat() else (tabsCount - 1 - pressed).toFloat()
                 val centerX = positionFloat * tabWidthPx + tabWidthPx / 2f
-                val radius = tabWidthPx * (0.45f + glowRadius.value * 0.65f)
+                // 光晕半径：从标签中心向外扩散到接近 2.2 倍标签宽，确保明显可见。
+                val radius = tabWidthPx * (0.55f + glowRadius.value * 1.65f)
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -204,7 +195,7 @@ fun HarmonyOS7BottomTabs(
                             drawCircle(
                                 brush = Brush.radialGradient(
                                     0.0f to glowColor,
-                                    0.65f to glowColor.copy(alpha = glowColor.alpha * 0.35f),
+                                    0.55f to glowColor.copy(alpha = glowColor.alpha * 0.55f),
                                     1.0f to Color.Transparent,
                                     center = Offset(centerX, size.height / 2f),
                                     radius = radius,
@@ -216,7 +207,7 @@ fun HarmonyOS7BottomTabs(
                 )
             }
 
-            // ---- 选中/按压遮罩：椭圆胶囊，跟随位置并弹跳 ----
+            // ---- 选中遮罩：椭圆胶囊，只表示当前选中位置，按压时不变化 ----
             Box(
                 Modifier
                     .offset {
@@ -228,26 +219,8 @@ fun HarmonyOS7BottomTabs(
                     .padding(vertical = maskInset)
                     .width(maskWidth)
                     .fillMaxHeight()
-                    .graphicsLayer {
-                        scaleX = maskScale.value
-                        scaleY = maskScale.value
-                    }
                     .clip(RoundedCornerShape(27.dp))
-                    .drawBehind {
-                        val color = androidx.compose.ui.graphics.lerp(
-                            maskNormalColor,
-                            maskPressedColor,
-                            maskPress.value
-                        )
-                        drawRect(color)
-                        // 按压时在遮罩边缘叠加一层极淡的高光，模拟光感照亮边缘。
-                        if (maskPress.value > 0.01f) {
-                            drawRect(
-                                glowColor.copy(alpha = glowColor.alpha * 0.4f * maskPress.value),
-                                size = size.copy(height = 2.5f),
-                            )
-                        }
-                    },
+                    .drawBehind { drawRect(maskNormalColor) },
             )
 
             // ---- 标签内容 ----
