@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.1", "2026-09-09", listOf(
+        "增强小红书链接识别：扩展短链变体(xhs.link)、更宽松的中英文括号/方括号包裹、更好的结尾标点清理",
+        "小红书解析增加多路 fallback：__INITIAL_STATE__ → JSON-LD → og:image/meta → 移动 UA 重试 → 任意 xhscdn 图片兜底，降低「解析成功但看不到内容」的概率",
+        "重写实况照片提取：同时探测 stream.h264/h265、video.url、livePhotoUrl、livePhotoMedia 等多条链路",
+        "未登录/失效链接给出更明确的错误提示，而不是泛化的解析失败",
+    )),
     UpdateLogItem("2.1.0", "2026-09-09", listOf(
         "重构解析结果页整体排版：合并原来的标题条+概览条为统一信息卡片，媒体区更突出，底部操作栏悬浮固定，复制/下载按钮不再跟随内容滚动",
         "修复解析后卡在结果页的死循环：上一版移除页面销毁时清空结果后，首页仍用持久状态跳转导致返回首页立刻再跳回结果页。现在把「解析成功跳结果页」改为一次性事件（SharedFlow），首页和历史页发起的解析统一在导航层处理",

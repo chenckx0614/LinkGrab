@@ -28,9 +28,9 @@ class ParseRepository(context: Context) {
         val cleanUrl = extractUrl(url).lowercase()
         return when {
             """(douyin\.com|v\.douyin\.com|iesdouyin\.com)/""".toRegex().containsMatchIn(cleanUrl) -> Platform.DOUYIN
-            // 小红书域名必须覆盖短链变体：xhslink.com / xhslink.cn / xslink.com。
+            // 小红书域名必须覆盖短链变体：xhslink.com / xhslink.cn / xslink.com / xhs.link。
             // 缺少任一变体时，App 内复制的分享文案会被判成"不支持的链接"。
-            """(xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com)/""".toRegex()
+            """(xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)/""".toRegex()
                 .containsMatchIn(cleanUrl) -> Platform.XIAOHONGSHU
             else -> Platform.UNKNOWN
         }
@@ -61,24 +61,24 @@ class ParseRepository(context: Context) {
      *   "7.89 Lhb:/ 复制打开抖音，看看【xxx】的作品 https://v.douyin.com/iRNBho6u/"
      *   "3.27 Hhb:/ https://www.xiaohongshu.com/explore/xxx?xsec_token=abc"
      *   "https://v.douyin.com/iRNBho6u/"
+     *   "复制这条信息，打开【小红书】App查看【...】（ https://xhslink.com/a/xxx ）"
      */
     private fun extractUrl(text: String): String {
         val trimmed = text.trim()
 
-        // Try to find douyin URL first (v.douyin.com short links)
-        val douyinPattern =
-            """https?://(?:v\.douyin\.com|(?:\w+\.)?douyin\.com|(?:\w+\.)?iesdouyin\.com)[^\s"'<>，。！？；：、）】]*"""
-                .toRegex()
-        douyinPattern.find(trimmed)?.let { return cleanUrl(it.value) }
+        // 优先匹配已知的平台域名。允许 URL 被中文括号、方括号、引号包裹。
+        val knownPatterns = listOf(
+            // 抖音
+            """https?://(?:v\.douyin\.com|(?:\w+\.)?douyin\.com|(?:\w+\.)?iesdouyin\.com)(?:/[^\s\u3000"'<>()（）【】\[\]{}]*)?""",
+            // 小红书（含短链变体）
+            """https?://(?:(?:www\.)?xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)(?:/[^\s\u3000"'<>()（）【】\[\]{}]*)?""",
+        )
+        for (pattern in knownPatterns) {
+            pattern.toRegex().find(trimmed)?.let { return cleanUrl(it.value) }
+        }
 
-        // Try to find xiaohongshu URL (including xhslink)
-        val xhsPattern =
-            """https?://(?:(?:www\.)?xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com)[^\s"'<>，。！？；：、）】]*"""
-                .toRegex()
-        xhsPattern.find(trimmed)?.let { return cleanUrl(it.value) }
-
-        // Generic URL fallback
-        val genericPattern = """https?://[^\s"'<>]+""".toRegex()
+        // Generic URL fallback：更宽松，但只取到常见结束标点/分隔符之前。
+        val genericPattern = """https?://[^\s\u3000"'<>()（）【】\[\]{}]+""".toRegex()
         genericPattern.find(trimmed)?.let { return cleanUrl(it.value) }
 
         // No URL found, return as-is
@@ -86,11 +86,18 @@ class ParseRepository(context: Context) {
     }
 
     /**
-     * Clean up extracted URL: remove trailing punctuation that's not part of the URL.
+     * Clean up extracted URL: remove trailing punctuation/brackets that's not part of the URL.
+     * Also decode common HTML entities and strip U+002F escapes left by some share texts.
      */
     private fun cleanUrl(url: String): String {
-        return url.trimEnd(
-            '.', ',', ';', '!', '?', ')', ']', '}', '。', '，', '；', '！', '？', '）'
-        )
+        return url
+            .trim()
+            .trimEnd(
+                '.', ',', ';', '!', '?', ')', ']', '}', '。', '，', '；', '！', '？', '）', '】', '」', '』',
+                ':', '：', '、',
+            )
+            .replace("\\u002F", "/")
+            .replace("\\u0026", "&")
+            .replace("&amp;", "&")
     }
 }
