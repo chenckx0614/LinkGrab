@@ -424,6 +424,7 @@ fun AppNavigation(
                     HyperOS4BottomTabs(
                         selectedTabIndex = { selectedIndex },
                         onTabSelected = onTabSelected,
+                        backdrop = liquidBackdrop,
                         tabsCount = 3,
                         modifier = bottomModifier,
                     ) { selectIndex ->

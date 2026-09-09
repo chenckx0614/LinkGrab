@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.3", "2026-09-09", listOf(
+        "重做 HyperOS4 底栏：容器改为真正的毛玻璃（backdrop 取样 + 弱模糊），背景内容可以透出来",
+        "选中态改为跟随滑动的浅灰椭圆遮罩（HyperOS4 的标志性元素），去掉之前误加的底部指示线",
+        "胶囊边缘补一圈浅色描边，按下时标签中心出现深灰圆形涟漪，与参考图一致",
+    )),
     UpdateLogItem("2.1.2", "2026-09-09", listOf(
         "新增 HyperOS4 风格底栏：可在设置-外观中切换",
         "HyperOS4 底栏：悬浮胶囊容器，图标+文字垂直排列，选中态高对比深色，未选中态柔和灰色",
