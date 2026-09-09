@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.6", "2026-09-09", listOf(
+        "新增 HarmonyOS 7 风格底栏：悬浮胶囊 + 沉浸光感毛玻璃 + 按压光晕反馈",
+        "HarmonyOS 7 底栏切换动画带轻微弹簧 overshoot，模拟鸿蒙页签的弹跳反馈",
+        "HarmonyOS 7 底栏沿用 Animatable + snapshotFlow 事件驱动架构，动画过程零重组，避免掉帧",
+        "设置-外观新增「HarmonyOS 7」底栏选项，与 iOS27、HyperOS4 三选一",
+    )),
     UpdateLogItem("2.1.5", "2026-09-09", listOf(
         "底栏切换动画掉帧优化（iOS27）：点击驱动的滑动按压峰值从 1.0 降到 0.5，lens/阴影半径减半，转场中 AGSL 采样成本大降",
         "底栏切换动画掉帧优化（iOS27）：静止时彻底摘掉 lens/chromaticAberration/highlight/shadow/innerShadow（之前传 0 半径仍走 shader 路径，每帧白付采样）",

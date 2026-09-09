@@ -91,6 +91,8 @@ import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
+import com.linkgrab.app.ui.liquid.HarmonyOS7BottomTabs
+import com.linkgrab.app.ui.liquid.HarmonyOS7TabItem
 import com.linkgrab.app.ui.liquid.HyperOS4BottomTabs
 import com.linkgrab.app.ui.liquid.HyperOS4TabItem
 import com.linkgrab.app.ui.liquid.LiquidBottomTabs
@@ -420,8 +422,8 @@ fun AppNavigation(
                     .padding(bottom = 12.dp)
                     .navigationBarsPadding()
 
-                if (bottomBarStyle == 1) {
-                    HyperOS4BottomTabs(
+                when (bottomBarStyle) {
+                    1 -> HyperOS4BottomTabs(
                         selectedTabIndex = { selectedIndex },
                         onTabSelected = onTabSelected,
                         backdrop = liquidBackdrop,
@@ -450,17 +452,47 @@ fun AppNavigation(
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(2) }
                     }
-                } else {
-                    LiquidBottomTabs(
+                    2 -> HarmonyOS7BottomTabs(
                         selectedTabIndex = { selectedIndex },
                         onTabSelected = onTabSelected,
                         backdrop = liquidBackdrop,
                         tabsCount = 3,
                         modifier = bottomModifier,
-                    ) { selectIndex ->
-                        LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { selectIndex(0) }
-                        LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { selectIndex(1) }
-                        LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { selectIndex(2) }
+                    ) { selectIndex, reportPress ->
+                        HarmonyOS7TabItem(
+                            Icons.Default.Home,
+                            "首页",
+                            selected = selectedIndex == 0,
+                            onPress = { reportPress(0, it) },
+                            modifier = Modifier.weight(1f),
+                        ) { selectIndex(0) }
+                        HarmonyOS7TabItem(
+                            Icons.Default.Build,
+                            "工具箱",
+                            selected = selectedIndex == 1,
+                            onPress = { reportPress(1, it) },
+                            modifier = Modifier.weight(1f),
+                        ) { selectIndex(1) }
+                        HarmonyOS7TabItem(
+                            Icons.Default.Settings,
+                            "设置",
+                            selected = selectedIndex == 2,
+                            onPress = { reportPress(2, it) },
+                            modifier = Modifier.weight(1f),
+                        ) { selectIndex(2) }
+                    }
+                    else -> {
+                        LiquidBottomTabs(
+                            selectedTabIndex = { selectedIndex },
+                            onTabSelected = onTabSelected,
+                            backdrop = liquidBackdrop,
+                            tabsCount = 3,
+                            modifier = bottomModifier,
+                        ) { selectIndex ->
+                            LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { selectIndex(0) }
+                            LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { selectIndex(1) }
+                            LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { selectIndex(2) }
+                        }
                     }
                 }
             }
