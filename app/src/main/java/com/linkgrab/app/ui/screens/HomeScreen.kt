@@ -47,12 +47,15 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.viewmodel.MainViewModel
 
 @Composable
-fun HomeScreen(viewModel: MainViewModel, onNavigateToResult: () -> Unit, onNavigateToHistory: () -> Unit = {}, initialShareText: String? = null) {
+fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, initialShareText: String? = null) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     var input by remember { mutableStateOf("") }
     LaunchedEffect(initialShareText) { initialShareText?.takeIf { it.isNotBlank() }?.let { input = it; viewModel.parseUrl(it) } }
-    LaunchedEffect(state.result) { if (state.result != null) onNavigateToResult() }
+    // 注意：不要在这里用 `if (state.result != null) onNavigateToResult()`。
+    // result 是持久状态（结果页返回后仍非空），据此跳转会造成「返回首页→
+    // 立刻再跳回结果页」的死循环。跳转改由 MainViewModel.navigateToResult
+    // 这个一次性事件驱动，统一在 AppNavigation 里处理。
 
     IOS26Canvas {
         IOS26StickyPage(

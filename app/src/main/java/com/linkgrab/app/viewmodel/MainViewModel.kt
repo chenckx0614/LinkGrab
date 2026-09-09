@@ -27,6 +27,9 @@ import com.linkgrab.app.update.UpdateResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,6 +48,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(ParseUiState())
     val uiState: StateFlow<ParseUiState> = _uiState.asStateFlow()
+
+    // 「跳转到结果页」必须是一次性事件，不能由持久状态推导：结果页返回后
+    // result 仍是非空（故意不在页面销毁时清，否则会把还在屏幕上的页面清空
+    // 造成白屏），若首页写 `if (result != null) navigate()` 就会立刻再跳
+    // 回去，形成死循环卡在结果页。
+    private val _navigateToResult = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val navigateToResult: SharedFlow<Unit> = _navigateToResult.asSharedFlow()
 
     private val _colorMode = MutableStateFlow(0)
     val colorMode: StateFlow<Int> = _colorMode.asStateFlow()
@@ -170,6 +180,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             parseRepository.parse(url)
                 .onSuccess { result ->
                     _uiState.value = _uiState.value.copy(isLoading = false, result = result)
+                    // 用一次性事件驱动跳转：首页和历史页发起的解析都能到达
+                    _navigateToResult.tryEmit(Unit)
                     historyRepository.add(
                         HistoryItem(
                             platform = platform.name.lowercase(),

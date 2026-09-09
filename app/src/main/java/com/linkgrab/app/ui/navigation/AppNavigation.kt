@@ -214,6 +214,17 @@ fun AppNavigation(
     val showBottomBar = currentDestination?.route in bottomNavRoutes
     val context = LocalContext.current
 
+    // 「解析成功跳结果页」是一次性事件，不能由持久状态推导。
+    // 统一在这里监听，首页和历史页发起的解析都会走到这里。
+    LaunchedEffect(Unit) {
+        viewModel.navigateToResult.collect {
+            navController.navigate(Screen.Result.route) {
+                launchSingleTop = true
+                restoreState = false
+            }
+        }
+    }
+
     // 预测式返回已关闭，系统返回手势会走 onBackPressed。这里接管它，
     // 让手势返回执行应用内的 pop 转场（而不是直接退出应用）。
     // 只有非底部标签页才拦截，首页上仍然保留"返回退出"的系统行为。
@@ -293,9 +304,6 @@ fun AppNavigation(
             ) {
                 HomeScreen(
                     viewModel = viewModel,
-                    onNavigateToResult = {
-                        navController.navigate(Screen.Result.route)
-                    },
                     onNavigateToHistory = {
                         navController.navigate(Screen.History.route)
                     },
