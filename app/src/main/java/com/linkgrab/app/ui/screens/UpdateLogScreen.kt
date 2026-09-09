@@ -18,9 +18,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 private val updateLogs = listOf(
     UpdateLogItem("2.1.6", "2026-09-09", listOf(
-        "新增 HarmonyOS 7 风格底栏：悬浮胶囊 + 沉浸光感毛玻璃 + 按压光晕反馈",
-        "HarmonyOS 7 底栏切换动画带轻微弹簧 overshoot，模拟鸿蒙页签的弹跳反馈",
-        "HarmonyOS 7 底栏沿用 Animatable + snapshotFlow 事件驱动架构，动画过程零重组，避免掉帧",
+        "新增 HarmonyOS 7 风格底栏：悬浮胶囊 + 沉浸光感材质 + 光感形变按压反馈",
+        "HarmonyOS 7 底栏按官方规范采用固定宽度居中（2 页签 168vp / 3 页签 248vp），不撑满屏幕",
+        "HarmonyOS 7 底栏选中态使用品牌高亮色 + 细微弹跳动效，不再沿用 HyperOS4 的灰色椭圆遮罩",
+        "HarmonyOS 7 底栏按压光效改为「照亮容器边缘」的环境光，从指尖向外衰减，配合容器轻微形变",
+        "HarmonyOS 7 底栏底部补充渐变颜色蒙层（与页面背景色一致），增强界面空间感",
         "设置-外观新增「HarmonyOS 7」底栏选项，与 iOS27、HyperOS4 三选一",
     )),
     UpdateLogItem("2.1.5", "2026-09-09", listOf(

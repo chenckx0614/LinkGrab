@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -17,10 +16,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,9 +35,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
@@ -54,6 +54,7 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.shapes.Capsule
+import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.isInDarkTheme
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -62,14 +63,23 @@ import kotlin.math.roundToInt
 /**
  * HarmonyOS 7 风格悬浮底栏。
  *
- * 参考鸿蒙 7 官方「沉浸光感」底部页签规范设计：
- * - 悬浮胶囊容器（barFloatingStyle），不撑满屏幕底部，与内容有 36vp 级轻盈边距感。
- * - 沉浸光感材质：背板/渐变模糊 + 自适应材质层级，背景内容可透出来。
- * - 光感形变交互：按压位置作为动态光源，向外投射轻微光晕，同时容器轻微下凹。
- * - 弹跳反馈：切换选中态时遮罩带轻微 overshoot 的弹簧动画。
+ * 严格对照华为《底部页签》与《沉浸光感》设计规范：
  *
- * 性能沿用 HyperOS4 的零重组思路：所有动画目标均由 Animatable + snapshotFlow
- * 在 draw/layout 阶段读取，组合期不读取按压/选中状态，避免 drawBackdrop 节点重建。
+ * 1. **固定宽度居中，不撑满屏幕**：悬浮式页签是胶囊容器，3 个 Tabs 固定
+ *    248vp、2 个 168vp（窗口 <600vp 断点）。撑满宽度是平铺式 / HyperOS 的做法。
+ * 2. **容器高度 56vp、胶囊圆角**（圆角 = 高的一半）。
+ * 3. **THIN 材质**：规范明确「组件在底部悬浮时推荐使用 THIN 枚举参数」，
+ *    轻薄模糊即可，不是厚重的毛玻璃。
+ * 4. **渐变颜色蒙层**：规范「底部采用渐变颜色增强界面空间感，渐变颜色层
+ *    建议较底部内容最顶边高 16vp，颜色需与页面背景色保持一致」。
+ * 5. **选中态 = 品牌高亮色**，没有灰色遮罩胶囊。规范「被激活的页签应有
+ *    明确的视觉反馈，如使用品牌高亮色显示」。灰色椭圆遮罩是 HyperOS4 的
+ *    标志性元素，鸿蒙悬浮式靠颜色区分选中。
+ * 6. **光感形变 = 照亮容器边缘**：规范「向周围材质表面投射光晕，照亮容器
+ *    边缘，光照强度随距离衰减，同时使容器向手指位置形变」。所以光效是沿
+ *    容器边缘流转的环境光，不是从中心扩散的大圆光晕。
+ *
+ * 性能沿用零重组思路：Animatable + snapshotFlow 事件驱动，组合期不读按压状态。
  */
 @Composable
 fun HarmonyOS7BottomTabs(
@@ -85,147 +95,116 @@ fun HarmonyOS7BottomTabs(
 ) {
     val isLightTheme = !isInDarkTheme()
 
-    // 胶囊容器：半透明白/灰底 + 浅色描边，比 HyperOS4 更亮的玻璃感。
+    // 规范：底部悬浮使用 THIN 材质档位 —— 轻薄、通透。
     val containerColor =
-        if (isLightTheme) Color.White.copy(alpha = 0.48f)
-        else Color(0xFF2C2C2E).copy(alpha = 0.55f)
-    val strokeColor =
-        if (isLightTheme) Color.White.copy(alpha = 0.70f)
-        else Color.White.copy(alpha = 0.12f)
+        if (isLightTheme) Color.White.copy(alpha = 0.38f)
+        else Color(0xFF2C2C2E).copy(alpha = 0.45f)
 
-    // 选中遮罩：常态下选中项有一个浅灰胶囊背景；鸿蒙光感交互的反馈
-    // 主要靠光晕和容器形变，按压时遮罩本身不跟随、不缩小、不加深。
-    val maskNormalColor =
-        if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.10f)
-        else Color.White.copy(alpha = 0.12f)
+    // 光效颜色：规范「建议使用低透明度、高亮度的色彩」。
+    val edgeGlowColor =
+        if (isLightTheme) Color(0xFF66B8FF)
+        else Color(0xFF5CB3FF)
 
-    // 光晕颜色：遵循规范「低透明度、高亮度」原则。光感交互是克制的光晕，
-    // 不是大面积高亮 —— 官方的强档效果图并非默认档位。
-    val glowColor =
-        if (isLightTheme) Color(0xFF4DA6FF).copy(alpha = 0.16f)
-        else Color(0xFF4CADFF).copy(alpha = 0.14f)
+    // 渐变蒙层颜色：规范要求与页面背景色保持一致。
+    val pageBg = iosBackground()
 
     var pressedIndex by remember { mutableStateOf<Int?>(null) }
 
     BoxWithConstraints(
         modifier = modifier,
-        contentAlignment = Alignment.CenterStart
+        contentAlignment = Alignment.Center
     ) {
         val density = LocalDensity.current
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
-        val tabWidthPx = constraints.maxWidth.toFloat() / tabsCount
-        val maskInset = 5.dp
-        val maskInsetPx = with(density) { maskInset.toPx() }
-        val maskWidth = with(density) { (tabWidthPx - maskInsetPx * 2).toDp() }
+
+        // 规范：悬浮式固定宽度（2 Tabs 168vp / 3 Tabs 248vp），居中，不撑满。
+        val barWidth = remember(tabsCount) { (8 + tabsCount * 80).dp }
+        val barHeight = 56.dp
+        val barCorner = 28.dp // 胶囊圆角 = 高的一半
+
+        val tabWidthPx = with(density) { barWidth.toPx() } / tabsCount
+        val cornerRadiusPx = with(density) { barCorner.toPx() }
+
+        val glowCenterPx = remember { Animatable(0f) }
+        val glowStrength = remember { Animatable(0f) }
+        val containerPress = remember { Animatable(0f) }
 
         val selectedIndexState by rememberUpdatedState(selectedTabIndex())
 
-        val initialPosition = remember {
-            val i = selectedTabIndex()
-            if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
-        }
-        val maskPosition = remember { Animatable(initialPosition) }
-        val glowRadius = remember { Animatable(0f) }
-        val containerPress = remember { Animatable(0f) }
-
-        // 选中位置驱动遮罩滑动。使用弹跳 spring：dampingRatio 略低于 1，
-        // 让切换时产生鸿蒙标志性的轻微 overshoot「弹」一下。
-        // 注意：按压时遮罩不跟随手指，只在选中项保持常态浅灰背景。
+        // 边缘光中心跟随按压的标签；松开后回落到选中项。
         LaunchedEffect(Unit) {
             snapshotFlow {
-                val i = selectedIndexState
-                if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
+                val i = pressedIndex ?: selectedIndexState
+                val pos = if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
+                pos * tabWidthPx + tabWidthPx / 2f
             }.collectLatest { target ->
-                maskPosition.animateTo(
-                    target,
-                    spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = 380f,
-                    ),
-                )
+                glowCenterPx.animateTo(target, spring(stiffness = 420f))
             }
         }
 
-        // 按压状态只驱动光晕扩散和容器下凹；遮罩本身不变化。
+        // 按压驱动边缘光强度与容器形变。
         LaunchedEffect(Unit) {
             snapshotFlow { pressedIndex != null }.collectLatest { pressed ->
-                launch {
-                    glowRadius.animateTo(
-                        if (pressed) 1f else 0f,
-                        tween(220),
-                    )
-                }
+                launch { glowStrength.animateTo(if (pressed) 1f else 0f, tween(200)) }
                 launch { containerPress.animateTo(if (pressed) 1f else 0f, tween(140)) }
             }
         }
 
         Box(
             Modifier
-                .fillMaxWidth()
-                .height(56.dp)
+                .width(barWidth)
+                .height(barHeight)
                 .graphicsLayer {
-                    // 按压时容器轻微向手指位置形变（下沉），幅度克制。
+                    // 规范「使容器向手指位置形变」—— 轻微下沉，幅度克制。
                     val press = containerPress.value
-                    scaleX = 1f - 0.012f * press
-                    scaleY = 1f - 0.012f * press
-                    alpha = 0.98f + 0.02f * (1f - press)
+                    scaleX = 1f - 0.010f * press
+                    scaleY = 1f - 0.010f * press
                 }
                 .drawBackdrop(
                     backdrop = backdrop,
                     shape = { Capsule() },
-                    // 沉浸光感：较强的背板模糊，不使用 iOS27 的 lens/vibrancy，
-                    // 保持鸿蒙风格干净、通透的毛玻璃。
-                    effects = { blur(20.dp.toPx()) },
+                    // THIN 材质：轻薄模糊，保留通透感。
+                    effects = { blur(12.dp.toPx()) },
                     highlight = { null },
                     shadow = { null },
                     onDrawSurface = { drawRect(containerColor) },
                 )
-                .border(1.dp, strokeColor, RoundedCornerShape(32.dp)),
-        ) {
-            // ---- 光晕层：从按压标签中心向外扩散的径向光晕 ----
-            if (glowRadius.value > 0.001f) {
-                val pressed = pressedIndex ?: selectedIndexState
-                val positionFloat = if (isLtr) pressed.toFloat() else (tabsCount - 1 - pressed).toFloat()
-                val centerX = positionFloat * tabWidthPx + tabWidthPx / 2f
-                // 光晕收敛到约 1.2 倍标签宽：规范强调「低透明度、高亮度」的
-                // 克制光效，指尖位置是光源，照亮容器边缘而非整片铺满。
-                val radius = tabWidthPx * (0.45f + glowRadius.value * 0.75f)
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .drawBehind {
-                            drawCircle(
-                                brush = Brush.radialGradient(
-                                    0.0f to glowColor,
-                                    0.5f to glowColor.copy(alpha = glowColor.alpha * 0.45f),
-                                    1.0f to Color.Transparent,
-                                    center = Offset(centerX, size.height / 2f),
-                                    radius = radius,
-                                ),
-                                radius = radius,
-                                center = Offset(centerX, size.height / 2f),
-                            )
-                        }
-                )
-            }
-
-            // ---- 选中遮罩：椭圆胶囊，只表示当前选中位置，按压时不变化 ----
-            Box(
-                Modifier
-                    .offset {
-                        IntOffset(
-                            x = (maskPosition.value * tabWidthPx + maskInsetPx).roundToInt(),
-                            y = 0,
+                .clip(RoundedCornerShape(barCorner))
+                // 光感形变：沿容器边缘流转的光，从指尖位置向外衰减。
+                .drawBehind {
+                    val strength = glowStrength.value
+                    if (strength > 0.001f) {
+                        val center = Offset(glowCenterPx.value, size.height / 2f)
+                        // 照亮边缘而非中心：只画描边，亮度沿边缘随距离衰减。
+                        drawRoundRect(
+                            brush = Brush.radialGradient(
+                                0.0f to edgeGlowColor.copy(alpha = 0.55f * strength),
+                                0.45f to edgeGlowColor.copy(alpha = 0.28f * strength),
+                                1.0f to Color.Transparent,
+                                center = center,
+                                radius = size.width.coerceAtLeast(size.height),
+                            ),
+                            topLeft = Offset(1f, 1f),
+                            size = Size(size.width - 2f, size.height - 2f),
+                            cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                            style = Stroke(width = with(density) { 2.dp.toPx() }),
+                        )
+                        // 指尖附近极淡的一层弥散光，模拟光在介质中的漫反射。
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                0.0f to edgeGlowColor.copy(alpha = 0.12f * strength),
+                                0.6f to edgeGlowColor.copy(alpha = 0.04f * strength),
+                                1.0f to Color.Transparent,
+                                center = center,
+                                radius = tabWidthPx * 0.8f,
+                            ),
+                            radius = tabWidthPx * 0.8f,
+                            center = center,
                         )
                     }
-                    .padding(vertical = maskInset)
-                    .width(maskWidth)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(27.dp))
-                    .drawBehind { drawRect(maskNormalColor) },
-            )
-
-            // ---- 标签内容 ----
+                },
+        ) {
+            // ---- 标签内容：选中态靠品牌高亮色，没有灰色遮罩胶囊 ----
             Row(
                 Modifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -237,6 +216,28 @@ fun HarmonyOS7BottomTabs(
                 },
             )
         }
+
+        // ---- 渐变颜色蒙层：规范「底部采用渐变颜色增强界面空间感」 ----
+        // 位于容器上方 16vp，从透明渐变到页面背景色，让内容自然沉入底栏。
+        Box(
+            Modifier
+                .width(barWidth)
+                .height(16.dp)
+                .align(Alignment.TopCenter)
+                .offset {
+                    IntOffset(0, -with(density) { 16.dp.toPx() }.roundToInt())
+                }
+                .drawBehind {
+                    drawRect(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            1f to pageBg.copy(alpha = 0.55f),
+                            startY = 0f,
+                            endY = size.height,
+                        )
+                    )
+                }
+        )
     }
 }
 
@@ -251,19 +252,28 @@ fun HarmonyOS7TabItem(
 ) {
     val isLightTheme = !isInDarkTheme()
 
-    // 鸿蒙 7 底部页签：选中态使用品牌高亮色，未选中态降低透明度。
+    // 规范：激活页签用品牌高亮色，未激活靠降低透明度弱化。
     val activeColor = if (isLightTheme) Color(0xFF0088FF) else Color(0xFF4CADFF)
     val inactiveColor =
-        if (isLightTheme) Color(0xFF1A1A1A).copy(alpha = 0.50f)
-        else Color.White.copy(alpha = 0.52f)
-    // 选中/未选中的颜色变化也改用 Animatable + snapshotFlow 的父级思路不容易
-    // 作用到子项；这里颜色变化幅度小、频率低，且 animateColorAsState 重组范围
-    // 仅限这个 Column 内部，对底栏整体性能影响可忽略。
+        if (isLightTheme) Color(0xFF1A1A1A).copy(alpha = 0.45f)
+        else Color.White.copy(alpha = 0.48f)
     val contentColor by androidx.compose.animation.animateColorAsState(
         targetValue = if (selected) activeColor else inactiveColor,
         animationSpec = tween(180),
         label = "harmonyContentColor",
     )
+
+    // 规范：切换时选中态有细微的弹跳动效。
+    val bounce = remember { Animatable(1f) }
+    LaunchedEffect(selected) {
+        if (selected) {
+            bounce.animateTo(0.86f, tween(90))
+            bounce.animateTo(
+                1f,
+                spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = 520f),
+            )
+        }
+    }
 
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -272,7 +282,7 @@ fun HarmonyOS7TabItem(
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(27.dp))
+            .clip(RoundedCornerShape(28.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -283,6 +293,10 @@ fun HarmonyOS7TabItem(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
+            modifier = Modifier.graphicsLayer {
+                scaleX = bounce.value
+                scaleY = bounce.value
+            },
         ) {
             Icon(
                 imageVector = icon,
@@ -294,10 +308,10 @@ fun HarmonyOS7TabItem(
             Text(
                 text = label,
                 color = contentColor,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Medium,
-                letterSpacing = (-0.15).sp,
-                lineHeight = 12.sp,
+                letterSpacing = (-0.1).sp,
+                lineHeight = 11.sp,
             )
         }
     }
