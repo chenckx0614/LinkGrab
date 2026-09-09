@@ -47,7 +47,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,11 +54,9 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.shapes.Capsule
-import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.isInDarkTheme
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 /**
  * HarmonyOS 7 风格悬浮底栏。
@@ -106,9 +103,6 @@ fun HarmonyOS7BottomTabs(
         if (isLightTheme) Color(0xFF66B8FF)
         else Color(0xFF5CB3FF)
 
-    // 渐变蒙层颜色：规范要求与页面背景色保持一致。
-    val pageBg = iosBackground()
-
     var pressedIndex by remember { mutableStateOf<Int?>(null) }
 
     BoxWithConstraints(
@@ -138,10 +132,10 @@ fun HarmonyOS7BottomTabs(
         // translate 位移与 alpha，避免每帧分配 Brush + Color。
         val glowBrush = remember(edgeGlowColor, glowRadiusPx) {
             Brush.radialGradient(
-                0.0f to edgeGlowColor.copy(alpha = 0.20f),
-                0.25f to edgeGlowColor.copy(alpha = 0.12f),
-                0.55f to edgeGlowColor.copy(alpha = 0.05f),
-                0.8f to edgeGlowColor.copy(alpha = 0.015f),
+                0.0f to edgeGlowColor.copy(alpha = 0.32f),
+                0.25f to edgeGlowColor.copy(alpha = 0.20f),
+                0.55f to edgeGlowColor.copy(alpha = 0.08f),
+                0.8f to edgeGlowColor.copy(alpha = 0.02f),
                 1.0f to Color.Transparent,
                 center = Offset(glowRadiusPx, glowRadiusPx),
                 radius = glowRadiusPx,
@@ -169,18 +163,20 @@ fun HarmonyOS7BottomTabs(
 
         val selectedIndexState by rememberUpdatedState(selectedTabIndex())
 
-        // 边缘光中心跟随按压的标签；松开后回落到选中项。
+        // 光效中心跟随按压的标签；松开后回落到选中项。
+        // 高刚度 spring：按压到别的标签时光点几乎立即跟过去（「跟着的光效」），
+        // 又保留一点点平滑不至于生硬跳变。
         LaunchedEffect(Unit) {
             snapshotFlow {
                 val i = pressedIndex ?: selectedIndexState
                 val pos = if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
                 pos * tabWidthPx + tabWidthPx / 2f
             }.collectLatest { target ->
-                glowCenterPx.animateTo(target, spring(stiffness = 420f))
+                glowCenterPx.animateTo(target, spring(stiffness = 1200f, dampingRatio = 0.9f))
             }
         }
 
-        // 按压驱动边缘光强度与容器形变。
+        // 按压驱动光效强度与容器形变。
         LaunchedEffect(Unit) {
             snapshotFlow { pressedIndex != null }.collectLatest { pressed ->
                 launch { glowStrength.animateTo(if (pressed) 1f else 0f, tween(200)) }
@@ -256,28 +252,6 @@ fun HarmonyOS7BottomTabs(
                 },
             )
         }
-
-        // ---- 渐变颜色蒙层：规范「底部采用渐变颜色增强界面空间感」 ----
-        // 位于容器上方 16vp，从透明渐变到页面背景色，让内容自然沉入底栏。
-        Box(
-            Modifier
-                .width(barWidth)
-                .height(16.dp)
-                .align(Alignment.TopCenter)
-                .offset {
-                    IntOffset(0, -with(density) { 16.dp.toPx() }.roundToInt())
-                }
-                .drawBehind {
-                    drawRect(
-                        Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            1f to pageBg.copy(alpha = 0.55f),
-                            startY = 0f,
-                            endY = size.height,
-                        )
-                    )
-                }
-        )
     }
 }
 

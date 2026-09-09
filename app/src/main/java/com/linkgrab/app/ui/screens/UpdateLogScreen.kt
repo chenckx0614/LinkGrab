@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.9", "2026-09-09", listOf(
+        "移除鸿蒙 7 底栏上方的渐变颜色蒙层：深色模式下它显示成一条突兀的透明条",
+        "鸿蒙 7 底栏光效改为跟手：按压到其他标签时光点几乎立即跟着移动过去，并提高了光效亮度让跟随清晰可见",
+    )),
     UpdateLogItem("2.1.8", "2026-09-09", listOf(
         "修正鸿蒙 7 底栏按压光晕：之前是一个只罩住单个标签的小圆斑浮在底栏上，现在改为从指尖向整个胶囊控件内部扩散",
         "鸿蒙 7 底栏光晕加入扩散动感：半径随按压进度从 40% 扩散到覆盖整个控件，配合容器裁剪形成光在控件内散开的观感",
