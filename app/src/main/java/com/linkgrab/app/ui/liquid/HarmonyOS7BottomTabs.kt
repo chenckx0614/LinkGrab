@@ -128,18 +128,23 @@ fun HarmonyOS7BottomTabs(
         val barHeightPx = with(density) { barHeight.toPx() }
         val edgeStrokePx = with(density) { 2.dp.toPx() }
 
-        // 指尖弥散光的尺寸：约 1.1 倍标签宽，足够包裹一个标签。
-        val glowSizePx = tabWidthPx * 1.1f
+        // 指尖弥散光的半径：要能覆盖整个胶囊容器并在内部散开，而不是一个
+        // 只罩住单个标签的小圆斑。取容器宽度的 1.15 倍，配合容器的 clip，
+        // 视觉上就是光从指尖向整个控件内部扩散、并在边缘衰减。
+        val barWidthPx = with(density) { barWidth.toPx() }
+        val glowRadiusPx = barWidthPx * 1.15f
 
         // 两个渐变对象都缓存为固定实例（不随动画变化），动画只改
-        // translationX / alpha，避免每帧分配 Brush + Color。
-        val glowBrush = remember(edgeGlowColor, glowSizePx) {
+        // translate 位移与 alpha，避免每帧分配 Brush + Color。
+        val glowBrush = remember(edgeGlowColor, glowRadiusPx) {
             Brush.radialGradient(
-                0.0f to edgeGlowColor.copy(alpha = 0.14f),
+                0.0f to edgeGlowColor.copy(alpha = 0.20f),
+                0.25f to edgeGlowColor.copy(alpha = 0.12f),
                 0.55f to edgeGlowColor.copy(alpha = 0.05f),
+                0.8f to edgeGlowColor.copy(alpha = 0.015f),
                 1.0f to Color.Transparent,
-                center = Offset(glowSizePx / 2f, glowSizePx / 2f),
-                radius = glowSizePx / 2f,
+                center = Offset(glowRadiusPx, glowRadiusPx),
+                radius = glowRadiusPx,
             )
         }
         // 边缘光的亮度分布固定（中心偏亮、两端衰减），整体强度交给 alpha。
@@ -214,16 +219,20 @@ fun HarmonyOS7BottomTabs(
                     if (strength > 0.001f) {
                         val cx = glowCenterPx.value
                         val cy = size.height / 2f
-                        // 指尖弥散光：把原点平移到指尖，画缓存好的径向渐变。
-                        translate(cx - glowSizePx / 2f, cy - glowSizePx / 2f) {
+                        // 指尖弥散光：圆心钉在指尖，半径随按压进度从小扩散到
+                        // 覆盖整个容器 —— 视觉上就是光从指尖在控件内部散开。
+                        // 渐变中心始终等于 drawCircle 的 center，所以绘制半径
+                        // 变化时取到的仍是渐变的中心部分（最亮处），扩散自然。
+                        // 容器自身的 clip 裁掉超出胶囊的部分。
+                        translate(cx - glowRadiusPx, cy - glowRadiusPx) {
                             drawCircle(
                                 brush = glowBrush,
-                                radius = glowSizePx / 2f,
-                                center = Offset(glowSizePx / 2f, glowSizePx / 2f),
+                                radius = glowRadiusPx * (0.40f + 0.60f * strength),
+                                center = Offset(glowRadiusPx, glowRadiusPx),
                                 alpha = strength,
                             )
                         }
-                        // 边缘光：沿容器边缘的描边，亮度自中心向两端衰减。
+                        // 边缘光：光扩散到控件边界时照亮容器边缘。
                         drawRoundRect(
                             brush = edgeBrush,
                             topLeft = Offset(1f, 1f),

@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.8", "2026-09-09", listOf(
+        "修正鸿蒙 7 底栏按压光晕：之前是一个只罩住单个标签的小圆斑浮在底栏上，现在改为从指尖向整个胶囊控件内部扩散",
+        "鸿蒙 7 底栏光晕加入扩散动感：半径随按压进度从 40% 扩散到覆盖整个控件，配合容器裁剪形成光在控件内散开的观感",
+    )),
     UpdateLogItem("2.1.7", "2026-09-09", listOf(
         "修复三种底栏切换/按压动画掉帧与丢动画（鸿蒙 7）：光效改为在绘制阶段读取动画值，之前在组合期判断导致每帧重组整个底栏",
         "修复三种底栏切换/按压动画掉帧与丢动画（鸿蒙 7）：径向渐变改为 remember 缓存固定实例 + translate 移动，动画期间每帧零对象分配",
