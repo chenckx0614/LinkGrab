@@ -126,7 +126,8 @@ fun LiquidBottomTabs(
                 onDragStopped = {
                     val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
                     currentIndex = targetIndex
-                    animateToValue(targetIndex.toFloat())
+                    // 拖拽收尾的 snap 仍属于拖拽驱动，保留 chromaticAberration。
+                    animateToValue(targetIndex.toFloat(), fromDrag = true)
                     animationScope.launch {
                         offsetAnimation.animateTo(
                             0f,
@@ -273,12 +274,14 @@ fun LiquidBottomTabs(
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
                         // chromaticAberration 的 lens 是这条路径上最贵的
-                        // 效果，静止时必须完全摘掉，不能传 0 半径。
+                        // 效果，静止时必须完全摘掉，不能传 0 半径；
+                        // 点击切换也直接跳过（只留给拖拽），点击是最频繁的
+                        // 操作，省下的 AGSL 采样对帧率最明显。
                         if (progress > 0.01f) {
                             lens(
                                 10f.dp.toPx() * progress,
                                 14f.dp.toPx() * progress,
-                                chromaticAberration = true
+                                chromaticAberration = dampedDragAnimation.dragDriven
                             )
                         }
                     },

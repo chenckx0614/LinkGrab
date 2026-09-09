@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.7", "2026-09-09", listOf(
+        "修复三种底栏切换/按压动画掉帧与丢动画（鸿蒙 7）：光效改为在绘制阶段读取动画值，之前在组合期判断导致每帧重组整个底栏",
+        "修复三种底栏切换/按压动画掉帧与丢动画（鸿蒙 7）：径向渐变改为 remember 缓存固定实例 + translate 移动，动画期间每帧零对象分配",
+        "修复三种底栏切换/按压动画掉帧与丢动画（HyperOS4）：遮罩颜色不再每帧 lerp 出新 Color 实例，改为常态色打底 + 按压色 alpha 叠加",
+        "修复三种底栏切换/按压动画掉帧与丢动画（iOS27）：最贵的色散效果（chromaticAberration）现在只在拖拽时开启，点击切换直接跳过",
+    )),
     UpdateLogItem("2.1.6", "2026-09-09", listOf(
         "新增 HarmonyOS 7 风格底栏：悬浮胶囊 + 沉浸光感材质 + 光感形变按压反馈",
         "HarmonyOS 7 底栏按官方规范采用固定宽度居中（2 页签 168vp / 3 页签 248vp），不撑满屏幕",

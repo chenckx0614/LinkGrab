@@ -41,6 +41,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
@@ -124,8 +125,40 @@ fun HarmonyOS7BottomTabs(
 
         val tabWidthPx = with(density) { barWidth.toPx() } / tabsCount
         val cornerRadiusPx = with(density) { barCorner.toPx() }
+        val barHeightPx = with(density) { barHeight.toPx() }
+        val edgeStrokePx = with(density) { 2.dp.toPx() }
 
-        val glowCenterPx = remember { Animatable(0f) }
+        // 指尖弥散光的尺寸：约 1.1 倍标签宽，足够包裹一个标签。
+        val glowSizePx = tabWidthPx * 1.1f
+
+        // 两个渐变对象都缓存为固定实例（不随动画变化），动画只改
+        // translationX / alpha，避免每帧分配 Brush + Color。
+        val glowBrush = remember(edgeGlowColor, glowSizePx) {
+            Brush.radialGradient(
+                0.0f to edgeGlowColor.copy(alpha = 0.14f),
+                0.55f to edgeGlowColor.copy(alpha = 0.05f),
+                1.0f to Color.Transparent,
+                center = Offset(glowSizePx / 2f, glowSizePx / 2f),
+                radius = glowSizePx / 2f,
+            )
+        }
+        // 边缘光的亮度分布固定（中心偏亮、两端衰减），整体强度交给 alpha。
+        val edgeBrush = remember(edgeGlowColor, tabWidthPx) {
+            Brush.radialGradient(
+                0.0f to edgeGlowColor.copy(alpha = 0.50f),
+                0.45f to edgeGlowColor.copy(alpha = 0.26f),
+                1.0f to Color.Transparent,
+                center = Offset(tabWidthPx * 1.5f, barHeightPx / 2f),
+                radius = tabWidthPx * 1.6f,
+            )
+        }
+
+        // 初始就落在选中项中心，避免首帧多余的位移动画。
+        val glowCenterPx = remember {
+            val i = selectedTabIndex()
+            val pos = if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
+            Animatable(pos * tabWidthPx + tabWidthPx / 2f)
+        }
         val glowStrength = remember { Animatable(0f) }
         val containerPress = remember { Animatable(0f) }
 
@@ -170,36 +203,34 @@ fun HarmonyOS7BottomTabs(
                     onDrawSurface = { drawRect(containerColor) },
                 )
                 .clip(RoundedCornerShape(barCorner))
-                // 光感形变：沿容器边缘流转的光，从指尖位置向外衰减。
+                // 光感形变：指尖弥散光 + 沿容器边缘流转的光。
+                // 性能关键：
+                // 1) 全部在 draw 阶段读取 Animatable.value —— 只触发 draw 失效，
+                //    零重组（若在组合期用 if 判断，每帧都会重组整个底栏）。
+                // 2) brush 由 remember 缓存为固定实例，配合 translate 移动，
+                //    每帧零对象分配，避免 GC 抖动。
                 .drawBehind {
                     val strength = glowStrength.value
                     if (strength > 0.001f) {
-                        val center = Offset(glowCenterPx.value, size.height / 2f)
-                        // 照亮边缘而非中心：只画描边，亮度沿边缘随距离衰减。
+                        val cx = glowCenterPx.value
+                        val cy = size.height / 2f
+                        // 指尖弥散光：把原点平移到指尖，画缓存好的径向渐变。
+                        translate(cx - glowSizePx / 2f, cy - glowSizePx / 2f) {
+                            drawCircle(
+                                brush = glowBrush,
+                                radius = glowSizePx / 2f,
+                                center = Offset(glowSizePx / 2f, glowSizePx / 2f),
+                                alpha = strength,
+                            )
+                        }
+                        // 边缘光：沿容器边缘的描边，亮度自中心向两端衰减。
                         drawRoundRect(
-                            brush = Brush.radialGradient(
-                                0.0f to edgeGlowColor.copy(alpha = 0.55f * strength),
-                                0.45f to edgeGlowColor.copy(alpha = 0.28f * strength),
-                                1.0f to Color.Transparent,
-                                center = center,
-                                radius = size.width.coerceAtLeast(size.height),
-                            ),
+                            brush = edgeBrush,
                             topLeft = Offset(1f, 1f),
                             size = Size(size.width - 2f, size.height - 2f),
                             cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                            style = Stroke(width = with(density) { 2.dp.toPx() }),
-                        )
-                        // 指尖附近极淡的一层弥散光，模拟光在介质中的漫反射。
-                        drawCircle(
-                            brush = Brush.radialGradient(
-                                0.0f to edgeGlowColor.copy(alpha = 0.12f * strength),
-                                0.6f to edgeGlowColor.copy(alpha = 0.04f * strength),
-                                1.0f to Color.Transparent,
-                                center = center,
-                                radius = tabWidthPx * 0.8f,
-                            ),
-                            radius = tabWidthPx * 0.8f,
-                            center = center,
+                            style = Stroke(width = edgeStrokePx),
+                            alpha = strength,
                         )
                     }
                 },

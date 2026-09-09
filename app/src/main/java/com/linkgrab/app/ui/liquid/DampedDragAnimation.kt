@@ -61,6 +61,16 @@ class DampedDragAnimation(
 
     private val velocityTracker = VelocityTracker()
 
+    /**
+     * 是否由拖拽驱动当前这一轮动画。
+     *
+     * 普通字段而非 State：它只在 drawBackdrop 的 effects lambda（绘制阶段）
+     * 里读取，不需要触发重组。用途是让最贵的 chromaticAberration 只在拖拽
+     * 时开启，点击切换直接跳过 —— 点击是最频繁的操作，能省下大量 AGSL 采样。
+     */
+    var dragDriven: Boolean = false
+        private set
+
     val value: Float get() = valueAnimation.value
     val progress: Float get() = (value - valueRange.start) / (valueRange.endInclusive - valueRange.start)
     val targetValue: Float get() = valueAnimation.targetValue
@@ -72,6 +82,7 @@ class DampedDragAnimation(
     val modifier: Modifier = Modifier.pointerInput(Unit) {
         inspectDragGestures(
             onDragStart = { down ->
+                dragDriven = true
                 onDragStarted(down.position)
                 press()
             },
@@ -119,7 +130,12 @@ class DampedDragAnimation(
         }
     }
 
-    fun animateToValue(value: Float, pressPeak: Float = 1f) {
+    /**
+     * @param pressPeak 按压峰值，控制 lens/阴影强度（点击用较低值减负）。
+     * @param fromDrag 是否由拖拽收尾触发；拖拽时允许开启 chromaticAberration。
+     */
+    fun animateToValue(value: Float, pressPeak: Float = 1f, fromDrag: Boolean = false) {
+        dragDriven = fromDrag
         animationScope.launch {
             mutatorMutex.mutate {
                 press(pressPeak)

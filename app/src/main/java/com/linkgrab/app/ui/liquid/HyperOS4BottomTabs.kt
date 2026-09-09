@@ -153,6 +153,12 @@ fun HyperOS4BottomTabs(
             }
         }
 
+        // 遮罩常态色与按压色预先建好：绘制期只做 alpha 叠加，
+        // 不再每帧 lerp 出新 Color 实例，消除动画中的对象分配与 GC 抖动。
+        val maskPressColor =
+            if (isLightTheme) Color(0xFF3C3C43)
+            else Color.White
+
         Box(
             Modifier
                 .fillMaxWidth()
@@ -189,9 +195,12 @@ fun HyperOS4BottomTabs(
                     }
                     .clip(RoundedCornerShape(27.dp))
                     .drawBehind {
-                        drawRect(
-                            lerp(maskNormalColor, maskPressedColor, maskPress.value)
-                        )
+                        // 常态色打底，按压色以 alpha 叠加，避免每帧 lerp 分配。
+                        drawRect(maskNormalColor)
+                        val press = maskPress.value
+                        if (press > 0.001f) {
+                            drawRect(maskPressColor, alpha = 0.10f * press)
+                        }
                     },
             )
 
