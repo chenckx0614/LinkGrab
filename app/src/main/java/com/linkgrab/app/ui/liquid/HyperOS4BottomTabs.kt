@@ -24,18 +24,20 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -71,7 +73,10 @@ fun HyperOS4BottomTabs(
     backdrop: Backdrop,
     tabsCount: Int,
     modifier: Modifier = Modifier,
-    content: @Composable RowScope.(selectIndex: (Int) -> Unit) -> Unit
+    content: @Composable RowScope.(
+        selectIndex: (Int) -> Unit,
+        reportPress: (index: Int, pressed: Boolean) -> Unit,
+    ) -> Unit
 ) {
     val isLightTheme = !isInDarkTheme()
 
@@ -82,10 +87,16 @@ fun HyperOS4BottomTabs(
     val strokeColor =
         if (isLightTheme) Color.White.copy(alpha = 0.65f)
         else Color.White.copy(alpha = 0.10f)
-    // 选中遮罩：浅灰椭圆
-    val maskColor =
+    // 选中遮罩：浅灰椭圆；按下时加深
+    val maskNormalColor =
         if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.12f)
         else Color.White.copy(alpha = 0.14f)
+    val maskPressedColor =
+        if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.22f)
+        else Color.White.copy(alpha = 0.24f)
+
+    // 按压中的标签：遮罩会跟过去，松开(未点击)则弹回选中项
+    var pressedIndex by remember { mutableStateOf<Int?>(null) }
 
     BoxWithConstraints(
         modifier = modifier,
@@ -99,12 +110,24 @@ fun HyperOS4BottomTabs(
         val maskWidth = with(density) { (tabWidthPx - maskInsetPx * 2).toDp() }
 
         val selectedIndex = selectedTabIndex()
+        val displayIndex = pressedIndex ?: selectedIndex
         val maskPosition by animateFloatAsState(
             targetValue =
-                if (isLtr) selectedIndex.toFloat()
-                else (tabsCount - 1 - selectedIndex).toFloat(),
+                if (isLtr) displayIndex.toFloat()
+                else (tabsCount - 1 - displayIndex).toFloat(),
             animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
             label = "maskSlide",
+        )
+        // 按下时遮罩整体缩小一点(参考图二的收缩感)
+        val maskScale by animateFloatAsState(
+            targetValue = if (pressedIndex != null) 0.88f else 1f,
+            animationSpec = spring(dampingRatio = 0.68f, stiffness = 520f),
+            label = "maskScale",
+        )
+        val maskColor by animateColorAsState(
+            targetValue = if (pressedIndex != null) maskPressedColor else maskNormalColor,
+            animationSpec = tween(140),
+            label = "maskColor",
         )
 
         Box(
@@ -123,7 +146,7 @@ fun HyperOS4BottomTabs(
                 )
                 .border(1.dp, strokeColor, RoundedCornerShape(32.dp)),
         ) {
-            // ---- 选中项背后的浅灰椭圆遮罩(滑动) ----
+            // ---- 椭圆遮罩：跟随选中项，按压时跟到按压项并缩小加深 ----
             Box(
                 Modifier
                     .offset {
@@ -135,6 +158,10 @@ fun HyperOS4BottomTabs(
                     .padding(vertical = maskInset)
                     .width(maskWidth)
                     .fillMaxHeight()
+                    .graphicsLayer {
+                        scaleX = maskScale
+                        scaleY = maskScale
+                    }
                     .clip(RoundedCornerShape(27.dp))
                     .background(maskColor),
             )
@@ -143,7 +170,12 @@ fun HyperOS4BottomTabs(
             Row(
                 Modifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically,
-                content = { content { index -> onTabSelected(index) } },
+                content = {
+                    content(
+                        { index -> onTabSelected(index) },
+                        { index, pressed -> pressedIndex = if (pressed) index else null },
+                    )
+                },
             )
         }
     }
@@ -155,6 +187,7 @@ fun HyperOS4TabItem(
     label: String,
     selected: Boolean,
     modifier: Modifier = Modifier,
+    onPress: (pressed: Boolean) -> Unit = {},
     onClick: () -> Unit,
 ) {
     val isLightTheme = !isInDarkTheme()
@@ -171,17 +204,10 @@ fun HyperOS4TabItem(
         label = "contentColor",
     )
 
-    // 按下涟漪：标签中心的深灰圆(参考图二)
-    val pressColor =
-        if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.20f)
-        else Color.White.copy(alpha = 0.22f)
+    // 按压状态上报给父组件：遮罩会跟到被按压的标签，而不是在标签上画圆。
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val pressAlpha by animateFloatAsState(
-        targetValue = if (isPressed) 1f else 0f,
-        animationSpec = tween(120),
-        label = "pressAlpha",
-    )
+    LaunchedEffect(isPressed) { onPress(isPressed) }
 
     Box(
         modifier = modifier
@@ -194,14 +220,6 @@ fun HyperOS4TabItem(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        // 按下时中心出现的深灰圆，尺寸刚好包住图标+文字
-        Box(
-            Modifier
-                .size(56.dp)
-                .alpha(pressAlpha)
-                .clip(CircleShape)
-                .background(pressColor),
-        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,

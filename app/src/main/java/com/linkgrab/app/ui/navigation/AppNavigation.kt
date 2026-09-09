@@ -427,24 +427,27 @@ fun AppNavigation(
                         backdrop = liquidBackdrop,
                         tabsCount = 3,
                         modifier = bottomModifier,
-                    ) { selectIndex ->
+                    ) { selectIndex, reportPress ->
                         HyperOS4TabItem(
                             Icons.Default.Home,
                             "首页",
                             selected = selectedIndex == 0,
-                            Modifier.weight(1f)
+                            onPress = { reportPress(0, it) },
+                            modifier = Modifier.weight(1f),
                         ) { selectIndex(0) }
                         HyperOS4TabItem(
                             Icons.Default.Build,
                             "工具箱",
                             selected = selectedIndex == 1,
-                            Modifier.weight(1f)
+                            onPress = { reportPress(1, it) },
+                            modifier = Modifier.weight(1f),
                         ) { selectIndex(1) }
                         HyperOS4TabItem(
                             Icons.Default.Settings,
                             "设置",
                             selected = selectedIndex == 2,
-                            Modifier.weight(1f)
+                            onPress = { reportPress(2, it) },
+                            modifier = Modifier.weight(1f),
                         ) { selectIndex(2) }
                     }
                 } else {
