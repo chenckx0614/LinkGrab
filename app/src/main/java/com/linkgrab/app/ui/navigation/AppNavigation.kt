@@ -91,6 +91,8 @@ import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
+import com.linkgrab.app.ui.liquid.HyperOS4BottomTabs
+import com.linkgrab.app.ui.liquid.HyperOS4TabItem
 import com.linkgrab.app.ui.liquid.LiquidBottomTabs
 import com.linkgrab.app.ui.screens.VideoToAudioScreen
 import com.linkgrab.app.ui.theme.iosBackground
@@ -212,6 +214,7 @@ fun AppNavigation(
     val currentDestination = navBackStackEntry?.destination
 
     val showBottomBar = currentDestination?.route in bottomNavRoutes
+    val bottomBarStyle by viewModel.bottomBarStyle.collectAsState()
     val context = LocalContext.current
 
     // 「解析成功跳结果页」是一次性事件，不能由持久状态推导。
@@ -399,32 +402,62 @@ fun AppNavigation(
         }
         if (showBottomBar) {
             Box(Modifier.align(Alignment.BottomCenter)) {
-                LiquidBottomTabs(
-                    selectedTabIndex = {
-                        when (currentDestination?.route) {
-                            Screen.Toolbox.route -> 1
-                            Screen.Settings.route -> 2
-                            else -> 0
-                        }
-                    },
-                    onTabSelected = { index ->
-                        val route = when (index) {
-                            1 -> Screen.Toolbox.route
-                            2 -> Screen.Settings.route
-                            else -> Screen.Home.route
-                        }
-                        navigateToTab(route)
-                    },
-                    backdrop = liquidBackdrop,
-                    tabsCount = 3,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 12.dp)
-                        .navigationBarsPadding(),
-                ) { selectIndex ->
-                    LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { selectIndex(0) }
-                    LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { selectIndex(1) }
-                    LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { selectIndex(2) }
+                val selectedIndex = when (currentDestination?.route) {
+                    Screen.Toolbox.route -> 1
+                    Screen.Settings.route -> 2
+                    else -> 0
+                }
+                val onTabSelected: (Int) -> Unit = { index ->
+                    val route = when (index) {
+                        1 -> Screen.Toolbox.route
+                        2 -> Screen.Settings.route
+                        else -> Screen.Home.route
+                    }
+                    navigateToTab(route)
+                }
+                val bottomModifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp)
+                    .navigationBarsPadding()
+
+                if (bottomBarStyle == 1) {
+                    HyperOS4BottomTabs(
+                        selectedTabIndex = { selectedIndex },
+                        onTabSelected = onTabSelected,
+                        tabsCount = 3,
+                        modifier = bottomModifier,
+                    ) { selectIndex ->
+                        HyperOS4TabItem(
+                            Icons.Default.Home,
+                            "首页",
+                            selected = selectedIndex == 0,
+                            Modifier.weight(1f)
+                        ) { selectIndex(0) }
+                        HyperOS4TabItem(
+                            Icons.Default.Build,
+                            "工具箱",
+                            selected = selectedIndex == 1,
+                            Modifier.weight(1f)
+                        ) { selectIndex(1) }
+                        HyperOS4TabItem(
+                            Icons.Default.Settings,
+                            "设置",
+                            selected = selectedIndex == 2,
+                            Modifier.weight(1f)
+                        ) { selectIndex(2) }
+                    }
+                } else {
+                    LiquidBottomTabs(
+                        selectedTabIndex = { selectedIndex },
+                        onTabSelected = onTabSelected,
+                        backdrop = liquidBackdrop,
+                        tabsCount = 3,
+                        modifier = bottomModifier,
+                    ) { selectIndex ->
+                        LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { selectIndex(0) }
+                        LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { selectIndex(1) }
+                        LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { selectIndex(2) }
+                    }
                 }
             }
         }

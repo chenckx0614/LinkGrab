@@ -47,6 +47,7 @@ fun SettingsScreen(viewModel: MainViewModel, onNavigateToUpdateLog: () -> Unit =
     val liveUpdates by viewModel.liveUpdatesEnabled.collectAsState()
     val updateResult by viewModel.updateResult.collectAsState()
     val checkingUpdate by viewModel.isCheckingUpdate.collectAsState()
+    val bottomBarStyle by viewModel.bottomBarStyle.collectAsState()
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) viewModel.toggleLiveUpdates(true) }
 
     IOS26Canvas {
@@ -102,6 +103,28 @@ fun SettingsScreen(viewModel: MainViewModel, onNavigateToUpdateLog: () -> Unit =
                         IOS26Choice("跟随系统", colorMode == 0, { viewModel.setColorMode(0) }, Modifier.weight(1f))
                         IOS26Choice("浅色", colorMode == 1, { viewModel.setColorMode(1) }, Modifier.weight(1f))
                         IOS26Choice("深色", colorMode == 2, { viewModel.setColorMode(2) }, Modifier.weight(1f))
+                    }
+
+                    Text(
+                        "底栏样式",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = iosLabel(),
+                        letterSpacing = (-0.3).sp,
+                        modifier = Modifier.padding(top = 22.dp),
+                    )
+                    Text(
+                        "选择 LinkGrab 的底部导航风格",
+                        fontSize = 14.sp,
+                        color = iosSecondaryLabel(),
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        IOS26Choice("iOS27", bottomBarStyle == 0, { viewModel.setBottomBarStyle(0) }, Modifier.weight(1f))
+                        IOS26Choice("HyperOS4", bottomBarStyle == 1, { viewModel.setBottomBarStyle(1) }, Modifier.weight(1f))
                     }
                 }
             }

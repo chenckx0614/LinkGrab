@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.2", "2026-09-09", listOf(
+        "新增 HyperOS4 风格底栏：可在设置-外观中切换",
+        "HyperOS4 底栏：悬浮胶囊容器，图标+文字垂直排列，选中态高对比深色，未选中态柔和灰色",
+        "HyperOS4 底栏按下反馈：在按下的标签背后出现深色圆形涟漪，与参考图保持一致",
+        "保留现有 iOS27 液态玻璃底栏作为默认样式",
+    )),
     UpdateLogItem("2.1.1", "2026-09-09", listOf(
         "增强小红书链接识别：扩展短链变体(xhs.link)、更宽松的中英文括号/方括号包裹、更好的结尾标点清理",
         "小红书解析增加多路 fallback：__INITIAL_STATE__ → JSON-LD → og:image/meta → 移动 UA 重试 → 任意 xhscdn 图片兜底，降低「解析成功但看不到内容」的概率",

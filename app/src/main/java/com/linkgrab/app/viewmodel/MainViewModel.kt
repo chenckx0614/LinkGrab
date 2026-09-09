@@ -68,6 +68,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _predictiveBack = MutableStateFlow(0)
     val predictiveBack: StateFlow<Int> = _predictiveBack.asStateFlow()
 
+    private val _bottomBarStyle = MutableStateFlow(0)
+    val bottomBarStyle: StateFlow<Int> = _bottomBarStyle.asStateFlow()
+
     private val _updateResult = MutableStateFlow<UpdateResult?>(null)
     val updateResult: StateFlow<UpdateResult?> = _updateResult.asStateFlow()
 
@@ -100,6 +103,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.liveUpdatesEnabled.collect { _liveUpdatesEnabled.value = it }
         }
         viewModelScope.launch {
+            settingsRepository.bottomBarStyle.collect { _bottomBarStyle.value = it }
+        }
+        viewModelScope.launch {
             settingsRepository.guideShown.collect {
                 _guideShown.value = it
                 _dataLoaded.value = true
@@ -124,6 +130,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setPredictiveBack(mode: Int) {
         viewModelScope.launch { settingsRepository.setPredictiveBack(mode) }
+    }
+
+    fun setBottomBarStyle(style: Int) {
+        viewModelScope.launch { settingsRepository.setBottomBarStyle(style) }
     }
 
     fun toggleLiveUpdates(enabled: Boolean) {
