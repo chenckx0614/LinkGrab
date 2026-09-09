@@ -156,7 +156,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null, platform = platform)
+            // 新解析开始时立刻清掉上一次的结果——这是唯一允许出现空结果的
+            // 时机。绝不要在结果页 onDispose 时清状态：pop 转场期间结果页仍在
+            // 组合里，退出瞬间清 result 会让还在屏幕上的页面塌成骨架屏
+            // （用户看到的「返回白屏」），还会让首页在动画收尾帧多一次重组。
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                error = null,
+                result = null,
+                platform = platform,
+            )
 
             parseRepository.parse(url)
                 .onSuccess { result ->
@@ -177,9 +186,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // 退出结果页时在转场末尾触发，只清 result 字段：整体重建 UiState 会让
-    // 正在做进场动画的首页多一次全量重组，正好卡在动画收尾的那一帧。
-    fun clearResult() { _uiState.value = _uiState.value.copy(result = null) }
     fun clearError() { _uiState.value = _uiState.value.copy(error = null) }
 
     // ==================== History ====================

@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.9", "2026-09-09", listOf(
+        "修复解析结果页返回时偶发白屏：之前在结果页销毁时才清空解析结果，而 pop 转场期间页面还在屏幕上，清空瞬间整页塌成骨架屏；现在改为在开始新解析时才清结果，页面销毁不动任何状态",
+        "结果页增加空状态兜底：若结果为空且不在加载中，自动退回上一页，不再停留在一个只有返回键的空白页",
+    )),
     UpdateLogItem("2.0.8", "2026-09-09", listOf(
         "解析结果页进出不再卡顿：转场 340ms 期间先只画占位，动画落地后才加载图片 / 建播放器。Coil 解码首屏大图和 ExoPlayer 的 build+prepare 都是主线程重活，之前一直跟转场动画抢帧",
         "结果页新增概览条：一眼看清来源平台、媒体数量、实况张数",

@@ -117,10 +117,6 @@ fun ResultScreen(
     // 视频结果页的播放器：返回时先暂停，避免转场动画期间继续解码
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
 
-    DisposableEffect(Unit) {
-        onDispose { viewModel.clearResult() }
-    }
-
     // 系统返回手势：优先于导航层的 BackHandler，返回前先暂停播放，
     // 避免转场动画期间仍在解码导致掉帧。
     BackHandler {
@@ -182,6 +178,11 @@ fun ResultScreen(
     ) { _ ->
         Box(Modifier.fillMaxSize()) {
         if (result == null) {
+            // 兜底：result 为空且不在加载中（状态被异常清空的场景），
+            // 自动退回，不留一个只有返回键的空页面。
+            if (!uiState.isLoading) {
+                LaunchedEffect(Unit) { onBack() }
+            }
             Box(modifier = Modifier.fillMaxSize().padding(top = topInset + IOS26HeaderHeight)) {
                 ResultLoadingSkeleton()
             }
