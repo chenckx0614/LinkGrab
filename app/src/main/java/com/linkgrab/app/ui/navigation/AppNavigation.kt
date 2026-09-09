@@ -289,6 +289,7 @@ fun AppNavigation(
 
             composable(Screen.Guide.route) {
                 GuideScreen(
+                    viewModel = viewModel,
                     onFinished = {
                         viewModel.markGuideShown()
                         navController.navigate(Screen.Home.route) {

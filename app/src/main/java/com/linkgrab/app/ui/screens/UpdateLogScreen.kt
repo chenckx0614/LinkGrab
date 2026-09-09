@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.0", "2026-09-09", listOf(
+        "重构首次启动引导页：三张介绍页改用真实图标卡片，页面背景加入跟随主题色的柔和光晕",
+        "引导页新增最后一页「选择底栏样式」：iOS 27 / HyperOS 4 / HarmonyOS 7 三选一，每张卡片带迷你底栏预览，可直观对比风格差异",
+        "首次启动时选择的底栏样式会直接保存，之后仍可在设置-外观中更换",
+        "页面指示器改为选中项拉长成小胶囊的弹性动画，按钮与跳过排版对齐不再跳动",
+    )),
     UpdateLogItem("2.1.11", "2026-09-09", listOf(
         "紧急修复：解析完成后进入结果页闪退（v2.1.10 引入）",
         "原因：结果页底栏毛玻璃误用了导航层的 liquidBackdrop —— 它采样整个 NavHost，而结果页（含这条底栏）就在 NavHost 内，底栏采样它等于采样自己，形成循环引用崩溃",
