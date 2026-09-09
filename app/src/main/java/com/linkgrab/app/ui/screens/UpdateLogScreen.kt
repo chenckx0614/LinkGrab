@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.7", "2026-09-09", listOf(
+        "揪出吸顶头那条线的真凶：backdrop 库的 drawBackdrop 默认会给形状画「高光描边 + 投影」（rim light），且不受滚动进度门控，静止时也画 —— 全宽矩形的描边下边缘就是那条线，之前换了三版渐变都没用",
+        "吸顶头显式关闭 highlight / shadow，静止状态下顶部完全零绘制",
+    )),
     UpdateLogItem("2.0.6", "2026-09-09", listOf(
         "重做吸顶头结构：玻璃层（含模糊）收窄到 bar 本体，下面另起一层不含模糊的纯色渐隐，整块遮罩不再比标题低一大截",
         "修复吸顶头底边的「线」：backdrop 的 blur 是整块矩形统一模糊，模糊区边缘必然是硬边；现在把它藏在 bar 底边并用接近不透明的底色压住",

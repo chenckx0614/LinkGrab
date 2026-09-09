@@ -532,6 +532,12 @@ fun IOS26BlurHeader(
                 .drawBackdrop(
                     backdrop = backdrop,
                     shape = { RectangleShape },
+                    // 真凶在这：库默认给形状画「高光描边 + 投影」（Liquid Glass
+                    // 的 rim light），且不受 progress 门控，静止时也画。
+                    // 全宽矩形的描边下边缘 + 投影 = 那条一直去不掉的「线」。
+                    // 必须显式关掉。
+                    highlight = { null },
+                    shadow = { null },
                     // 未滚动时 backdrop 图层根本不录（见
                     // rememberBackdropLayerActive），这里什么都不画。
                     // vibrancy() = saturation 1.5x ColorFilter，在中性灰
