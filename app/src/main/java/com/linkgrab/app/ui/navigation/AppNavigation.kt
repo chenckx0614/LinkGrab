@@ -413,10 +413,10 @@ fun AppNavigation(
                         .padding(horizontal = 16.dp)
                         .padding(bottom = 12.dp)
                         .navigationBarsPadding(),
-                ) {
-                    LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { navigateToTab(Screen.Home.route) }
-                    LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { navigateToTab(Screen.Toolbox.route) }
-                    LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { navigateToTab(Screen.Settings.route) }
+                ) { selectIndex ->
+                    LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { selectIndex(0) }
+                    LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { selectIndex(1) }
+                    LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { selectIndex(2) }
                 }
             }
         }

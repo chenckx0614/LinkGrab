@@ -73,7 +73,7 @@ fun LiquidBottomTabs(
     backdrop: Backdrop,
     tabsCount: Int,
     modifier: Modifier = Modifier,
-    content: @Composable RowScope.() -> Unit
+    content: @Composable RowScope.(selectIndex: (Int) -> Unit) -> Unit
 ) {
     val isLightTheme = !isInDarkTheme()
     val accentColor =
@@ -145,12 +145,23 @@ fun LiquidBottomTabs(
                 }
             )
         }
-        LaunchedEffect(selectedTabIndex) {
-            snapshotFlow { selectedTabIndex() }
+        // selectedTabIndex 是个 lambda，每次重组都是新实例；拿它当
+        // LaunchedEffect 的 key 会让这个 effect 反复重启，观察被打断。
+        // 用 rememberUpdatedState 包一层，effect 只启动一次。
+        val selectedIndex by androidx.compose.runtime.rememberUpdatedState(selectedTabIndex())
+        LaunchedEffect(Unit) {
+            snapshotFlow { selectedIndex }
                 .collectLatest { index ->
                     currentIndex = index
                 }
         }
+        // 点标签时改内部 currentIndex —— 这样选中胶囊（那块玻璃「遮罩」）
+        // 才会走 animateToValue 滑过去。之前标签的 onClick 直接调导航，
+        // 绕过了这里，所以点击没有滑动动画（只有拖拽有）。
+        val selectTab: (Int) -> Unit = { index ->
+            currentIndex = index.fastCoerceIn(0, tabsCount - 1)
+        }
+        val tabContent = content
         LaunchedEffect(dampedDragAnimation) {
             snapshotFlow { currentIndex }
                 .drop(1)
@@ -200,7 +211,7 @@ fun LiquidBottomTabs(
                 .fillMaxWidth()
                 .padding(4f.dp),
             verticalAlignment = Alignment.CenterVertically,
-            content = content
+            content = { tabContent(selectTab) }
         )
 
         // ---- Layer 2: invisible tinted duplicate recorded into tabsBackdrop ----
@@ -236,7 +247,7 @@ fun LiquidBottomTabs(
                 .padding(horizontal = 4f.dp)
                 .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
             verticalAlignment = Alignment.CenterVertically,
-            content = content
+            content = { tabContent(selectTab) }
         )
 
         // ---- Layer 3: the draggable selection capsule ----

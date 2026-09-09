@@ -475,10 +475,13 @@ fun IOS26Divider(modifier: Modifier = Modifier) {
 val IOS26HeaderHeight = 52.dp
 
 /**
- * Extra height below the bar over which the blur fades out. Without it the
- * blurred region ends on a hard edge, which reads as a divider line.
+ * 玻璃层（含 blur）只到 bar 底边，下面这一段是**不含模糊**的纯色渐隐，
+ * 负责把 bar 底边溶进页面。不能太长，否则整块遮罩会显得比 bar 低很多。
  */
-private val IOS26HeaderFade = 28.dp
+private val IOS26HeaderFade = 16.dp
+
+/** 吸顶玻璃底色的不透明度。越接近 1 越能压住 blur 的硬边，但越不「透」。 */
+private const val BarTintAlpha = 0.9f
 
 /** 滚动超过这段距离后，吸顶模糊才开始出现。 */
 val IOS26HeaderScrollThreshold = 56.dp
@@ -511,46 +514,56 @@ fun IOS26BlurHeader(
     val bg = iosBackground()
     val titleColor = iosLabel()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    // 渐变断点要按状态栏高度算：bar 区域是 [topInset, topInset+52dp]，
-    // fade 区域是之后 28dp。直接写 0.65 会在刘海/挖孔屏上错位。
-    val totalHeaderDpValue = topInset.value + IOS26HeaderHeight.value + IOS26HeaderFade.value
-    val barEndFrac = (topInset.value + IOS26HeaderHeight.value) / totalHeaderDpValue
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(topInset + IOS26HeaderHeight + IOS26HeaderFade)
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { RectangleShape },
-                // 只在滚动后才挂模糊 + tint；未滚动时 backdrop 图层根本不录
-                // （见 rememberBackdropLayerActive），所以这里不画任何东西。
-                // vibrancy() 内部 = saturation 1.5x 的 ColorFilter，在中性灰
-                // 页面上会形成偏色矩形，所以去掉，只靠 blur 自然混合颜色。
-                effects = {
-                    val p = progress
-                    if (p > 0.01f) {
-                        blur((26f * p).dp.toPx())
-                    }
-                },
-                // 渐变方向反过来：顶部到 bar 底是不透明的 frosted tint，
-                // bar 底以下 28dp 渐变到完全透明。这样 box 底边不会停在
-                // 100% 不透明的页面底色上（那会与下方未模糊内容形成硬边
-                // / "线"），而是让 blur 后的"失焦版"内容透出来，下方
-                // 紧接着同一段内容的"对焦版"——defocus→focus 是软过渡。
-                onDrawSurface = {
-                    val p = progress
-                    if (p > 0.01f) {
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                0f to bg.copy(alpha = 0.8f * p),
-                                barEndFrac to bg.copy(alpha = 0.8f * p),
-                                1f to Color.Transparent,
-                            ),
-                        )
-                    }
-                },
-            ),
+            .height(topInset + IOS26HeaderHeight + IOS26HeaderFade),
     ) {
+        // 1) 玻璃层：只覆盖 bar 本体（topInset + 52dp）。
+        //    backdrop 的 blur 是整块矩形统一模糊、做不了空间渐变，所以
+        //    「模糊 → 清晰」的边界必然是硬的。把它放在 bar 底边、用接近
+        //    不透明的底色压住，就基本看不见了。
+        //    之前模糊一路铺到 topInset+80dp，硬边落在 bar 下方 28dp ——
+        //    就是那条「线」，而且明显「太靠下」。
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(topInset + IOS26HeaderHeight)
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RectangleShape },
+                    // 未滚动时 backdrop 图层根本不录（见
+                    // rememberBackdropLayerActive），这里什么都不画。
+                    // vibrancy() = saturation 1.5x ColorFilter，在中性灰
+                    // 页面会偏色，已去掉，只靠 blur 混合颜色。
+                    effects = {
+                        val p = progress
+                        if (p > 0.01f) {
+                            blur((20f * p).dp.toPx())
+                        }
+                    },
+                    onDrawSurface = {
+                        val p = progress
+                        if (p > 0.01f) {
+                            drawRect(bg.copy(alpha = BarTintAlpha * p))
+                        }
+                    },
+                )
+        )
+        // 2) 渐隐层：不含模糊，只是把 bar 的底色在**清晰**内容上再往下
+        //    晕开 16dp，让 bar 底边溶进页面而不是一刀切。
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(IOS26HeaderFade)
+                .align(Alignment.BottomCenter)
+                .graphicsLayer { alpha = progress }
+                .background(
+                    Brush.verticalGradient(
+                        listOf(bg.copy(alpha = BarTintAlpha), Color.Transparent),
+                    )
+                )
+        )
         Row(
             Modifier
                 .fillMaxWidth()

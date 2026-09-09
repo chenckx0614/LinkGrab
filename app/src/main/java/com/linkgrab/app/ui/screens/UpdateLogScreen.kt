@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.6", "2026-09-09", listOf(
+        "重做吸顶头结构：玻璃层（含模糊）收窄到 bar 本体，下面另起一层不含模糊的纯色渐隐，整块遮罩不再比标题低一大截",
+        "修复吸顶头底边的「线」：backdrop 的 blur 是整块矩形统一模糊，模糊区边缘必然是硬边；现在把它藏在 bar 底边并用接近不透明的底色压住",
+        "修复底栏点击没有滑动动画：标签的点击之前直接调导航、绕过了内部选中状态，现在点击也走 animateToValue，玻璃遮罩会滑过去",
+        "底栏外部选中态同步改用 rememberUpdatedState，不再因为 lambda 每次重组都换实例而反复重启观察",
+    )),
     UpdateLogItem("2.0.5", "2026-09-08", listOf(
         "修复吸顶头底部的「线」：渐变方向反了——之前是顶部半透明、底部 100% 不透明页面底色，色带与下方未模糊内容形成硬边；现在改为顶部到 bar 底 80% frosted tint、bar 底以下 28dp 渐变到全透明，defocus→focus 软过渡",
         "渐变断点按状态栏高度动态计算（barEndFrac = (topInset+52dp)/(topInset+80dp)），刘海/挖孔屏上 bar 底位置仍准确",
