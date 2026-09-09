@@ -99,10 +99,11 @@ fun HarmonyOS7BottomTabs(
         if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.10f)
         else Color.White.copy(alpha = 0.12f)
 
-    // 光晕颜色：使用系统蓝的高亮版本，半径做大一些，让「光感」更明显。
+    // 光晕颜色：遵循规范「低透明度、高亮度」原则。光感交互是克制的光晕，
+    // 不是大面积高亮 —— 官方的强档效果图并非默认档位。
     val glowColor =
-        if (isLightTheme) Color(0xFF0088FF).copy(alpha = 0.30f)
-        else Color(0xFF4CADFF).copy(alpha = 0.26f)
+        if (isLightTheme) Color(0xFF4DA6FF).copy(alpha = 0.16f)
+        else Color(0xFF4CADFF).copy(alpha = 0.14f)
 
     var pressedIndex by remember { mutableStateOf<Int?>(null) }
 
@@ -161,13 +162,13 @@ fun HarmonyOS7BottomTabs(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(56.dp)
                 .graphicsLayer {
-                    // 按压时整体轻微下凹，模拟光感形变。
+                    // 按压时容器轻微向手指位置形变（下沉），幅度克制。
                     val press = containerPress.value
-                    scaleX = 1f - 0.020f * press
-                    scaleY = 1f - 0.020f * press
-                    alpha = 0.97f + 0.03f * (1f - press)
+                    scaleX = 1f - 0.012f * press
+                    scaleY = 1f - 0.012f * press
+                    alpha = 0.98f + 0.02f * (1f - press)
                 }
                 .drawBackdrop(
                     backdrop = backdrop,
@@ -186,8 +187,9 @@ fun HarmonyOS7BottomTabs(
                 val pressed = pressedIndex ?: selectedIndexState
                 val positionFloat = if (isLtr) pressed.toFloat() else (tabsCount - 1 - pressed).toFloat()
                 val centerX = positionFloat * tabWidthPx + tabWidthPx / 2f
-                // 光晕半径：从标签中心向外扩散到接近 2.2 倍标签宽，确保明显可见。
-                val radius = tabWidthPx * (0.55f + glowRadius.value * 1.65f)
+                // 光晕收敛到约 1.2 倍标签宽：规范强调「低透明度、高亮度」的
+                // 克制光效，指尖位置是光源，照亮容器边缘而非整片铺满。
+                val radius = tabWidthPx * (0.45f + glowRadius.value * 0.75f)
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -195,7 +197,7 @@ fun HarmonyOS7BottomTabs(
                             drawCircle(
                                 brush = Brush.radialGradient(
                                     0.0f to glowColor,
-                                    0.55f to glowColor.copy(alpha = glowColor.alpha * 0.55f),
+                                    0.5f to glowColor.copy(alpha = glowColor.alpha * 0.45f),
                                     1.0f to Color.Transparent,
                                     center = Offset(centerX, size.height / 2f),
                                     radius = radius,
