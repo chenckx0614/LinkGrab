@@ -95,6 +95,7 @@ import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
+import com.linkgrab.app.ui.theme.iosTertiaryBackground
 import com.linkgrab.app.viewmodel.DownloadState
 import com.linkgrab.app.viewmodel.MainViewModel
 
@@ -151,6 +152,16 @@ fun ResultScreen(
         }
     }
 
+    // 进场转场 340ms 期间先只画轻量占位，等动画落地再挂真正的媒体内容。
+    // Coil 解码首屏图片、ExoPlayer 的 build+prepare 都是主线程上的重活，
+    // 跟转场动画抢帧就是「进去卡顿」的主要来源。退出方向相反：先暂停播放
+    // 再走转场（见 onBack / DisposableEffect）。
+    var heavyContentReady by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(320)
+        heavyContentReady = true
+    }
+
     val headerBackdrop = rememberLayerBackdrop()
     val gridState = rememberLazyGridState()
     val videoScrollState = rememberScrollState()
@@ -182,6 +193,8 @@ fun ResultScreen(
                 .padding(top = topInset + IOS26HeaderHeight)
                 .padding(horizontal = 20.dp),
         ) {
+            ResultSummaryStrip(result)
+            Spacer(modifier = Modifier.height(10.dp))
             when (result.type) {
                 MediaType.IMAGE -> {
                     LazyVerticalGrid(
@@ -212,12 +225,15 @@ fun ResultScreen(
                                         }
                                     },
                             ) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context).data(imageUrl).crossfade(true).build(),
-                                    contentDescription = "图片 ${index + 1}",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                // 转场未落地前不加载图片，只留占位底色
+                                if (heavyContentReady) {
+                                    AsyncImage(
+                                        model = ImageRequest.Builder(context).data(imageUrl).crossfade(true).build(),
+                                        contentDescription = "图片 ${index + 1}",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
                                 // 实况照片徽标
                                 if (isLive && !selectionMode) {
                                     Box(
@@ -380,19 +396,21 @@ fun ResultScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         result.videoUrl?.let { videoUrl ->
-                            val exoPlayer = remember {
-                                ExoPlayer.Builder(context).build().apply {
+                            // 转场结束才建播放器：build + prepare 都是主线程重活
+                            val exoPlayer = remember(heavyContentReady) {
+                                if (!heavyContentReady) null
+                                else ExoPlayer.Builder(context).build().apply {
                                     setMediaItem(MediaItem.fromUri(videoUrl))
                                     repeatMode = Player.REPEAT_MODE_ONE
                                     prepare()
                                 }
                             }
                             // 退出页面时先暂停，避免转场期间仍在解码拖慢动画
-                            DisposableEffect(Unit) {
-                                player = exoPlayer
+                            DisposableEffect(exoPlayer) {
+                                if (exoPlayer != null) player = exoPlayer
                                 onDispose {
-                                    exoPlayer.pause()
-                                    exoPlayer.release()
+                                    exoPlayer?.pause()
+                                    exoPlayer?.release()
                                     if (player === exoPlayer) player = null
                                 }
                             }
@@ -403,20 +421,32 @@ fun ResultScreen(
                                     .aspectRatio(16f / 9f)
                                     .clip(IOSCornerSmall)
                                     .background(Color.Black)
-                                    .clickable { exoPlayer.playWhenReady = !exoPlayer.playWhenReady },
+                                    .clickable { exoPlayer?.let { it.playWhenReady = !it.playWhenReady } },
                                 contentAlignment = Alignment.Center,
                             ) {
-                                AndroidView(
-                                    // 布局里声明了 surface_type=texture_view，SurfaceView 在
-                                    // 转场动画中会脱离图层变换，必须换成 TextureView。
-                                    factory = { ctx ->
-                                        (android.view.LayoutInflater.from(ctx)
-                                            .inflate(R.layout.player_view_texture, null) as PlayerView).apply {
-                                            this.player = exoPlayer
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                if (exoPlayer != null) {
+                                    AndroidView(
+                                        // 布局里声明了 surface_type=texture_view，SurfaceView 在
+                                        // 转场动画中会脱离图层变换，必须换成 TextureView。
+                                        factory = { ctx ->
+                                            (android.view.LayoutInflater.from(ctx)
+                                                .inflate(R.layout.player_view_texture, null) as PlayerView).apply {
+                                                this.player = exoPlayer
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                } else {
+                                    // 转场期间先用封面占位，避免 prepare 抢帧
+                                    result.coverUrl?.let { coverUrl ->
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context).data(coverUrl).crossfade(false).build(),
+                                            contentDescription = "视频封面",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    }
+                                }
                             }
                         } ?: run {
                             result.coverUrl?.let { coverUrl ->
@@ -524,6 +554,51 @@ fun ResultScreen(
             },
         )
     }
+}
+
+/**
+ * 结果概览条：一眼看清来源平台、媒体数量、实况张数。
+ * 之前这些信息散在标题和按钮文案里，页面上方没有任何定位信息，
+ * 进来第一眼不知道解析出了什么。
+ */
+@Composable
+private fun ResultSummaryStrip(result: com.linkgrab.app.data.model.MediaResult) {
+    val liveCount = if (result.type == MediaType.IMAGE) {
+        result.images.indices.count { result.isLivePhoto(it) }
+    } else {
+        0
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(IOSCornerSmall)
+            .background(iosTertiaryBackground())
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            result.source.ifEmpty { "未知来源" },
+            color = iosBlue(),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        ResultStripDot()
+        Text(
+            if (result.type == MediaType.VIDEO) "视频" else "${result.images.size} 张图片",
+            color = iosSecondaryLabel(),
+            fontSize = 13.sp,
+        )
+        if (liveCount > 0) {
+            ResultStripDot()
+            Text("实况 $liveCount", color = iosSecondaryLabel(), fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun ResultStripDot() {
+    Box(Modifier.size(3.dp).clip(CircleShape).background(iosSecondaryLabel()))
 }
 
 @Composable

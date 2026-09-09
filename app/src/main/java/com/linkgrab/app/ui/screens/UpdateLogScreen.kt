@@ -17,6 +17,13 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.0.8", "2026-09-09", listOf(
+        "解析结果页进出不再卡顿：转场 340ms 期间先只画占位，动画落地后才加载图片 / 建播放器。Coil 解码首屏大图和 ExoPlayer 的 build+prepare 都是主线程重活，之前一直跟转场动画抢帧",
+        "结果页新增概览条：一眼看清来源平台、媒体数量、实况张数",
+        "历史记录里相同内容不再重复显示：按平台+标题去重（分享链接每次带的 token 都不同，只比 url 会漏）",
+        "历史记录右上角新增「选择」：进入多选后可勾选批量删除，选中卡片描边高亮",
+        "重做删除确认弹窗：换成 iOS 26 风格的圆角面板 + 红色删除图标，替换原来简陋的系统默认弹窗",
+    )),
     UpdateLogItem("2.0.7", "2026-09-09", listOf(
         "揪出吸顶头那条线的真凶：backdrop 库的 drawBackdrop 默认会给形状画「高光描边 + 投影」（rim light），且不受滚动进度门控，静止时也画 —— 全宽矩形的描边下边缘就是那条线，之前换了三版渐变都没用",
         "吸顶头显式关闭 highlight / shadow，静止状态下顶部完全零绘制",

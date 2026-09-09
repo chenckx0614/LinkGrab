@@ -192,6 +192,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { historyRepository.delete(item) }
     }
 
+    fun deleteHistoryItems(items: List<HistoryItem>) {
+        viewModelScope.launch { historyRepository.deleteMany(items) }
+    }
+
     // ==================== Update ====================
 
     fun checkForUpdate() {
