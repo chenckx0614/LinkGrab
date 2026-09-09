@@ -88,12 +88,12 @@ class DampedDragAnimation(
         }
     }
 
-    fun press() {
+    fun press(peak: Float = 1f) {
         velocityTracker.resetTracking()
         animationScope.launch {
-            launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
-            launch { scaleXAnimation.animateTo(pressedScale, scaleXAnimationSpec) }
-            launch { scaleYAnimation.animateTo(pressedScale, scaleYAnimationSpec) }
+            launch { pressProgressAnimation.animateTo(peak, pressProgressAnimationSpec) }
+            launch { scaleXAnimation.animateTo(1f + (pressedScale - 1f) * peak, scaleXAnimationSpec) }
+            launch { scaleYAnimation.animateTo(1f + (pressedScale - 1f) * peak, scaleYAnimationSpec) }
         }
     }
 
@@ -119,10 +119,10 @@ class DampedDragAnimation(
         }
     }
 
-    fun animateToValue(value: Float) {
+    fun animateToValue(value: Float, pressPeak: Float = 1f) {
         animationScope.launch {
             mutatorMutex.mutate {
-                press()
+                press(pressPeak)
                 val targetValue = value.coerceIn(valueRange)
                 launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
                 if (velocity != 0f) {

@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.5", "2026-09-09", listOf(
+        "底栏切换动画掉帧优化（iOS27）：点击驱动的滑动按压峰值从 1.0 降到 0.5，lens/阴影半径减半，转场中 AGSL 采样成本大降",
+        "底栏切换动画掉帧优化（iOS27）：静止时彻底摘掉 lens/chromaticAberration/highlight/shadow/innerShadow（之前传 0 半径仍走 shader 路径，每帧白付采样）",
+        "底栏切换动画掉帧优化（HyperOS4）：遮罩滑动/缩放/变色从重组驱动（animateXxxAsState）改为 Animatable + snapshotFlow 事件驱动，动画过程零重组，drawBackdrop 节点不再反复重建",
+    )),
     UpdateLogItem("2.1.4", "2026-09-09", listOf(
         "HyperOS4 底栏按压交互修正：按下不再是圆形涟漪，而是椭圆遮罩整体缩小、加深",
         "按住任意标签时遮罩会跟随滑动到该标签，松开未点击则弹回选中项，与 HyperOS4 真机行为一致",

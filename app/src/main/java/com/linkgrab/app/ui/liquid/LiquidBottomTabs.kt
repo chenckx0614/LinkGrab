@@ -166,7 +166,9 @@ fun LiquidBottomTabs(
             snapshotFlow { currentIndex }
                 .drop(1)
                 .collectLatest { index ->
-                    dampedDragAnimation.animateToValue(index.toFloat())
+                    // 点击路径用 0.5 的按压峰值：lens/阴影半径减半，
+                    // 点击转场中的 AGSL 采样成本大幅下降，视觉几乎无差。
+                    dampedDragAnimation.animateToValue(index.toFloat(), pressPeak = 0.5f)
                     onTabSelected(index)
                 }
         }
@@ -230,14 +232,18 @@ fun LiquidBottomTabs(
                         val progress = dampedDragAnimation.pressProgress
                         vibrancy()
                         blur(8f.dp.toPx())
-                        lens(
-                            24f.dp.toPx() * progress,
-                            24f.dp.toPx() * progress
-                        )
+                        // 静止时不挂 lens：lens(0,0) 仍会走 AGSL shader 路径，
+                        // 在转场动画中白付每帧采样成本。
+                        if (progress > 0.01f) {
+                            lens(
+                                24f.dp.toPx() * progress,
+                                24f.dp.toPx() * progress
+                            )
+                        }
                     },
                     highlight = {
                         val progress = dampedDragAnimation.pressProgress
-                        Highlight.Default.copy(alpha = progress)
+                        if (progress > 0.01f) Highlight.Default.copy(alpha = progress) else null
                     },
                     onDrawSurface = { drawRect(containerColor) }
                 )
@@ -266,26 +272,32 @@ fun LiquidBottomTabs(
                     shape = { Capsule() },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        lens(
-                            10f.dp.toPx() * progress,
-                            14f.dp.toPx() * progress,
-                            chromaticAberration = true
-                        )
+                        // chromaticAberration 的 lens 是这条路径上最贵的
+                        // 效果，静止时必须完全摘掉，不能传 0 半径。
+                        if (progress > 0.01f) {
+                            lens(
+                                10f.dp.toPx() * progress,
+                                14f.dp.toPx() * progress,
+                                chromaticAberration = true
+                            )
+                        }
                     },
                     highlight = {
                         val progress = dampedDragAnimation.pressProgress
-                        Highlight.Default.copy(alpha = progress)
+                        if (progress > 0.01f) Highlight.Default.copy(alpha = progress) else null
                     },
                     shadow = {
                         val progress = dampedDragAnimation.pressProgress
-                        Shadow(alpha = progress)
+                        if (progress > 0.01f) Shadow(alpha = progress) else null
                     },
                     innerShadow = {
                         val progress = dampedDragAnimation.pressProgress
-                        InnerShadow(
-                            radius = 8f.dp * progress,
-                            alpha = progress
-                        )
+                        if (progress > 0.01f) {
+                            InnerShadow(
+                                radius = 8f.dp * progress,
+                                alpha = progress
+                            )
+                        } else null
                     },
                     layerBlock = {
                         scaleX = dampedDragAnimation.scaleX

@@ -1,10 +1,9 @@
 package com.linkgrab.app.ui.liquid
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,12 +31,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -51,6 +54,8 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.shapes.Capsule
 import com.linkgrab.app.ui.theme.isInDarkTheme
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -95,7 +100,9 @@ fun HyperOS4BottomTabs(
         if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.22f)
         else Color.White.copy(alpha = 0.24f)
 
-    // 按压中的标签：遮罩会跟过去，松开(未点击)则弹回选中项
+    // 按压中的标签：遮罩会跟过去，松开(未点击)则弹回选中项。
+    // 注意：pressedIndex 只在 snapshotFlow 里读取，组合期不读 ——
+    // 这样按压/松开不会触发底栏重组，动画全程只有 draw/layout 失效。
     var pressedIndex by remember { mutableStateOf<Int?>(null) }
 
     BoxWithConstraints(
@@ -109,26 +116,42 @@ fun HyperOS4BottomTabs(
         val maskInsetPx = with(density) { maskInset.toPx() }
         val maskWidth = with(density) { (tabWidthPx - maskInsetPx * 2).toDp() }
 
-        val selectedIndex = selectedTabIndex()
-        val displayIndex = pressedIndex ?: selectedIndex
-        val maskPosition by animateFloatAsState(
-            targetValue =
-                if (isLtr) displayIndex.toFloat()
-                else (tabsCount - 1 - displayIndex).toFloat(),
-            animationSpec = spring(dampingRatio = 0.82f, stiffness = 420f),
-            label = "maskSlide",
-        )
-        // 按下时遮罩整体缩小一点(参考图二的收缩感)
-        val maskScale by animateFloatAsState(
-            targetValue = if (pressedIndex != null) 0.88f else 1f,
-            animationSpec = spring(dampingRatio = 0.68f, stiffness = 520f),
-            label = "maskScale",
-        )
-        val maskColor by animateColorAsState(
-            targetValue = if (pressedIndex != null) maskPressedColor else maskNormalColor,
-            animationSpec = tween(140),
-            label = "maskColor",
-        )
+        val selectedIndexState by rememberUpdatedState(selectedTabIndex())
+
+        // 动画全部用 Animatable + snapshotFlow 驱动：animateXxxAsState 是
+        // 重组驱动的，target 每次变化都会重组整个底栏 lambda，drawBackdrop
+        // 节点跟着重建 —— 这是点击掉帧的主因。Animatable 只在启动时
+        // 改一次 target，动画过程零重组。
+        val initialPosition = remember {
+            val i = selectedTabIndex()
+            if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
+        }
+        val maskPosition = remember { Animatable(initialPosition) }
+        val maskScale = remember { Animatable(1f) }
+        val maskPress = remember { Animatable(0f) } // 0=常态 1=按下
+
+        LaunchedEffect(Unit) {
+            snapshotFlow {
+                val i = pressedIndex ?: selectedIndexState
+                if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
+            }.collectLatest { target ->
+                maskPosition.animateTo(
+                    target,
+                    spring(dampingRatio = 0.82f, stiffness = 420f),
+                )
+            }
+        }
+        LaunchedEffect(Unit) {
+            snapshotFlow { pressedIndex != null }.collectLatest { pressed ->
+                launch {
+                    maskScale.animateTo(
+                        if (pressed) 0.88f else 1f,
+                        spring(dampingRatio = 0.68f, stiffness = 520f),
+                    )
+                }
+                launch { maskPress.animateTo(if (pressed) 1f else 0f, tween(140)) }
+            }
+        }
 
         Box(
             Modifier
@@ -147,11 +170,13 @@ fun HyperOS4BottomTabs(
                 .border(1.dp, strokeColor, RoundedCornerShape(32.dp)),
         ) {
             // ---- 椭圆遮罩：跟随选中项，按压时跟到按压项并缩小加深 ----
+            // 位置/缩放/颜色都在 draw 或 layout 阶段读 Animatable.value，
+            // 动画过程零重组。
             Box(
                 Modifier
                     .offset {
                         IntOffset(
-                            x = (maskPosition * tabWidthPx + maskInsetPx).roundToInt(),
+                            x = (maskPosition.value * tabWidthPx + maskInsetPx).roundToInt(),
                             y = 0,
                         )
                     }
@@ -159,11 +184,15 @@ fun HyperOS4BottomTabs(
                     .width(maskWidth)
                     .fillMaxHeight()
                     .graphicsLayer {
-                        scaleX = maskScale
-                        scaleY = maskScale
+                        scaleX = maskScale.value
+                        scaleY = maskScale.value
                     }
                     .clip(RoundedCornerShape(27.dp))
-                    .background(maskColor),
+                    .drawBehind {
+                        drawRect(
+                            lerp(maskNormalColor, maskPressedColor, maskPress.value)
+                        )
+                    },
             )
 
             // ---- 标签内容 ----
