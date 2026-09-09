@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.1.10", "2026-09-09", listOf(
+        "解析结果页底部操作栏改为毛玻璃：实时高斯模糊滚动到栏底的图片/视频内容，从近乎不透明的实色变为通透玻璃",
+        "底栏模糊区域延伸到屏幕底部安全区，与系统毛玻璃导航栏观感一致",
+    )),
     UpdateLogItem("2.1.9", "2026-09-09", listOf(
         "移除鸿蒙 7 底栏上方的渐变颜色蒙层：深色模式下它显示成一条突兀的透明条",
         "鸿蒙 7 底栏光效改为跟手：按压到其他标签时光点几乎立即跟着移动过去，并提高了光效亮度让跟随清晰可见",

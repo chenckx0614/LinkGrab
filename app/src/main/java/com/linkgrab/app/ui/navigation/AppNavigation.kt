@@ -354,6 +354,9 @@ fun AppNavigation(
                 ResultScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
+                    // 把页面 backdrop 传给结果页：底部操作栏用它做毛玻璃模糊，
+                    // 让滚动到栏底下的图片/视频内容透出来。
+                    backdrop = liquidBackdrop,
                 )
             }
             composable(

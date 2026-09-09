@@ -80,8 +80,11 @@ import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
 import com.linkgrab.app.R
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
@@ -107,6 +110,7 @@ import com.linkgrab.app.viewmodel.MainViewModel
 fun ResultScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
+    backdrop: Backdrop? = null,
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -172,6 +176,7 @@ fun ResultScreen(
             result?.let { safeResult ->
                 ResultBottomBar(
                     result = safeResult,
+                    backdrop = backdrop,
                     selectionMode = selectionMode,
                     selectedImages = selectedImages,
                     downloadState = downloadState,
@@ -541,6 +546,7 @@ private fun ResultBottomBar(
     downloadState: DownloadState,
     onCopy: (String) -> Unit,
     onDownloadAll: (List<Int>) -> Unit,
+    backdrop: Backdrop? = null,
 ) {
     val buttonText: String
     val buttonEnabled: Boolean
@@ -578,10 +584,28 @@ private fun ResultBottomBar(
         }
     }
 
+    // 毛玻璃底栏：有页面 backdrop 时取样真实模糊（内容透过来），否则退回
+    // 半透明实色。注意 v2.0.7 的教训：drawBackdrop 的默认 highlight/shadow
+    // 必须显式关掉，否则全宽矩形会在底边画出一条描边「线」。
+    val barTint = iosBackground().copy(alpha = 0.70f)
+    val barSolid = iosBackground().copy(alpha = 0.92f)
+    val baseModifier = if (backdrop != null) {
+        Modifier.drawBackdrop(
+            backdrop = backdrop,
+            shape = { androidx.compose.ui.graphics.RectangleShape },
+            effects = { blur(18.dp.toPx()) },
+            highlight = { null },
+            shadow = { null },
+            onDrawSurface = { drawRect(barTint) },
+        )
+    } else {
+        Modifier.background(barSolid)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(iosBackground().copy(alpha = 0.92f))
+            .then(baseModifier)
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
