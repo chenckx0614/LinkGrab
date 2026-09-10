@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.3", "2026-09-10", listOf(
+        "底栏选择页改为直接嵌入**真实**底栏组件：液态玻璃、HyperOS 4、HarmonyOS 7 三种都是装上后的原样效果，不再是简化示意图",
+        "预览里的底栏可以点：点图标会切换选中项，三种风格同时联动，方便对比各自的选中动画",
+        "底栏玻璃现在采样引导页背景光晕，折射与模糊都是真实效果",
+        "背景光晕跟随翻页做轻微视差位移，翻页时前后景更有层次",
+    )),
     UpdateLogItem("2.2.2", "2026-09-10", listOf(
         "修复 2.2.1 首次启动闪退：回退了「等设置读出来再创建导航、把引导页当作起始页」的改动，导航图创建时机恢复原样",
         "首屏不再闪一帧首页：改为在跳转到引导页完成前，用一层与应用背景同色的遮挡层盖住内容，效果相同但不改导航结构",

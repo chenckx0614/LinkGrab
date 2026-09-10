@@ -37,9 +37,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -75,6 +78,14 @@ import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryBackground
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.linkgrab.app.ui.liquid.HarmonyOS7BottomTabs
+import com.linkgrab.app.ui.liquid.HarmonyOS7TabItem
+import com.linkgrab.app.ui.liquid.HyperOS4BottomTabs
+import com.linkgrab.app.ui.liquid.HyperOS4TabItem
+import com.linkgrab.app.ui.liquid.LiquidBottomTabs
 import com.linkgrab.app.ui.theme.isInDarkTheme
 import com.linkgrab.app.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
@@ -144,6 +155,12 @@ fun GuideScreen(
     val last = pager.currentPage == pageCount - 1
     var selectedStyle by remember { mutableIntStateOf(0) }
 
+    // 底栏预览要采样一层真实内容，玻璃才有东西可透。这层挂在最底的背景光晕
+    // 上，而底栏不在它内部，不会形成自引用（v2.1.11 踩过的坑）。
+    val previewBackdrop = rememberLayerBackdrop()
+    // 预览里当前选中的标签：点预览里的图标可以切换，方便对比三种选中动画。
+    var previewTab by remember { mutableIntStateOf(0) }
+
     // 主题色随页面平滑过渡，背景光晕才不会在翻页时突然跳色。
     val targetAccent = if (last) iosBlue() else pages[pager.currentPage].accent
     val accent by animateColorAsState(
@@ -154,7 +171,12 @@ fun GuideScreen(
 
     IOS26Canvas {
         Box(Modifier.fillMaxSize()) {
-            GuideAurora(accent)
+            // 背景光晕同时充当底栏玻璃的采样源，并随翻页做轻微视差位移。
+            GuideAurora(
+                accent = accent,
+                parallax = pager.currentPage + pager.currentPageOffsetFraction,
+                modifier = Modifier.layerBackdrop(previewBackdrop),
+            )
 
             Column(
                 Modifier
@@ -178,7 +200,13 @@ fun GuideScreen(
                         if (index < pages.size) {
                             GuideIntroPage(pages[index])
                         } else {
-                            GuideStylePage(selectedStyle) { selectedStyle = it }
+                            GuideStylePage(
+                                selected = selectedStyle,
+                                previewTab = previewTab,
+                                backdrop = previewBackdrop,
+                                onSelect = { selectedStyle = it },
+                                onPreviewTab = { previewTab = it },
+                            )
                         }
                     }
                 }
@@ -260,7 +288,11 @@ private fun Modifier.guidePageTransition(pager: PagerState, index: Int): Modifie
  * 背景装饰：两团缓慢漂移的柔光 + 底部压暗。颜色跟随当前页主题色平滑过渡。
  */
 @Composable
-private fun GuideAurora(accent: Color) {
+private fun GuideAurora(
+    accent: Color,
+    parallax: Float = 0f,
+    modifier: Modifier = Modifier,
+) {
     val base = iosBackground()
     val isDark = isInDarkTheme()
     val infinite = rememberInfiniteTransition(label = "guideAurora")
@@ -275,7 +307,7 @@ private fun GuideAurora(accent: Color) {
     )
 
     Box(
-        Modifier
+        modifier
             .fillMaxSize()
             .drawBehind {
                 val w = size.width
@@ -284,6 +316,8 @@ private fun GuideAurora(accent: Color) {
                 if (w <= 0f || h <= 0f) return@drawBehind
                 val strong = if (isDark) 0.30f else 0.24f
                 val soft = if (isDark) 0.20f else 0.15f
+                // 视差：背景只跟随翻页位移的一小部分，形成前后景的层次。
+                val shift = -parallax * w * 0.10f
 
                 // 右上主光团
                 drawRect(
@@ -291,7 +325,7 @@ private fun GuideAurora(accent: Color) {
                         0.0f to accent.copy(alpha = strong),
                         0.45f to accent.copy(alpha = strong * 0.34f),
                         1.0f to Color.Transparent,
-                        center = Offset(w * (0.88f - 0.16f * drift), h * (0.15f + 0.07f * drift)),
+                        center = Offset(w * (0.88f - 0.16f * drift) + shift, h * (0.15f + 0.07f * drift)),
                         radius = w * 0.92f,
                     )
                 )
@@ -301,7 +335,7 @@ private fun GuideAurora(accent: Color) {
                         0.0f to accent.copy(alpha = soft),
                         0.5f to accent.copy(alpha = soft * 0.30f),
                         1.0f to Color.Transparent,
-                        center = Offset(w * (0.08f + 0.18f * drift), h * (0.58f - 0.08f * drift)),
+                        center = Offset(w * (0.08f + 0.18f * drift) + shift * 1.6f, h * (0.58f - 0.08f * drift)),
                         radius = w * 0.85f,
                     )
                 )
@@ -427,9 +461,20 @@ private fun GuideHero(page: GuidePage) {
     }
 }
 
-/** 最后一页：底栏样式选择。 */
+/**
+ * 最后一页：底栏样式选择。
+ *
+ * 卡片里放的是**真实**的底栏组件（不是示意图），玻璃、折射、光效都跟装上之后
+ * 一致；点预览里的图标还能切换选中项，直接对比三种风格的选中动画。
+ */
 @Composable
-private fun GuideStylePage(selected: Int, onSelect: (Int) -> Unit) {
+private fun GuideStylePage(
+    selected: Int,
+    previewTab: Int,
+    backdrop: Backdrop,
+    onSelect: (Int) -> Unit,
+    onPreviewTab: (Int) -> Unit,
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -446,22 +491,26 @@ private fun GuideStylePage(selected: Int, onSelect: (Int) -> Unit) {
             letterSpacing = (-0.7).sp,
         )
         Text(
-            "之后也可以在「设置」里随时更换",
+            "下面是真实效果，点预览里的图标可以切换选中项",
             fontSize = 14.sp,
             color = iosSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 8.dp),
         )
-        Spacer(Modifier.height(24.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(Modifier.height(22.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             barStyles.forEach { option ->
                 GuideStyleCard(
                     option = option,
                     selected = selected == option.id,
-                    onClick = { onSelect(option.id) },
+                    previewTab = previewTab,
+                    backdrop = backdrop,
+                    onSelect = { onSelect(option.id) },
+                    onPreviewTab = onPreviewTab,
                 )
             }
         }
+        Spacer(Modifier.height(4.dp))
     }
 }
 
@@ -469,7 +518,10 @@ private fun GuideStylePage(selected: Int, onSelect: (Int) -> Unit) {
 private fun GuideStyleCard(
     option: BarStyleOption,
     selected: Boolean,
-    onClick: () -> Unit,
+    previewTab: Int,
+    backdrop: Backdrop,
+    onSelect: () -> Unit,
+    onPreviewTab: (Int) -> Unit,
 ) {
     val stroke by animateColorAsState(
         targetValue = if (selected) iosBlue() else iosSecondaryLabel().copy(alpha = 0.14f),
@@ -485,8 +537,8 @@ private fun GuideStyleCard(
             .clip(RoundedCornerShape(20.dp))
             .background(bg)
             .border(if (selected) 2.dp else 1.dp, stroke, RoundedCornerShape(20.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .clickable(onClick = onSelect)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -523,83 +575,145 @@ private fun GuideStyleCard(
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        MiniBarPreview(style = option.id, selected = selected)
+        Spacer(Modifier.height(10.dp))
+        // 预览"屏幕"：给真实底栏一块底色，模拟它贴在页面底部的样子。
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(84.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    if (isInDarkTheme()) Color.White.copy(alpha = 0.06f)
+                    else Color.Black.copy(alpha = 0.04f)
+                )
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            RealBottomBar(
+                style = option.id,
+                selectedIndex = previewTab,
+                backdrop = backdrop,
+                // 点预览里的图标：既切预览，也顺手选中这种样式。
+                onTabSelected = { index ->
+                    onSelect()
+                    onPreviewTab(index)
+                },
+            )
+        }
     }
 }
 
-/**
- * 卡片里的迷你底栏示意图，用来区分三种风格的视觉特征：
- * - iOS 27：撑满的玻璃胶囊 + 选中项蓝色圆胶囊
- * - HyperOS 4：撑满的毛玻璃胶囊 + 选中项灰色椭圆遮罩
- * - HarmonyOS 7：居中的窄胶囊 + 选中项图标变蓝
- */
+/** 预览里用的真实底栏组件，样式与 AppNavigation 里完全一致。 */
 @Composable
-private fun MiniBarPreview(style: Int, selected: Boolean) {
-    val isLight = !isInDarkTheme()
-    val accent = if (isLight) Color(0xFF0088FF) else Color(0xFF4CADFF)
-    val glass = if (isLight) Color.White.copy(alpha = 0.62f) else Color(0xFF2C2C2E).copy(alpha = 0.62f)
-    val stroke = if (isLight) Color(0xFF1A1A1A).copy(alpha = 0.10f) else Color.White.copy(alpha = 0.14f)
-    val dot = if (isLight) Color(0xFF1A1A1A).copy(alpha = 0.30f) else Color.White.copy(alpha = 0.34f)
-    val corner = if (style == 2) 22.dp else 18.dp
-
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(46.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            Modifier
-                .then(if (style == 2) Modifier.fillMaxWidth(0.74f) else Modifier.fillMaxWidth())
-                .height(40.dp)
-                .clip(RoundedCornerShape(corner))
-                .background(glass)
-                .border(1.dp, stroke, RoundedCornerShape(corner))
-        ) {
-            Row(
-                Modifier.fillMaxSize().padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                repeat(3) { i ->
-                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
-                        val isActive = i == 1
-                        // 选中态底层：三种风格各不相同
-                        when {
-                            !isActive -> Unit
-                            style == 0 -> Box(
-                                Modifier
-                                    .size(26.dp)
-                                    .clip(CircleShape)
-                                    .background(accent)
-                            )
-                            style == 1 -> Box(
-                                Modifier
-                                    .size(width = 30.dp, height = 28.dp)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(
-                                        if (isLight) Color(0xFF3C3C43).copy(alpha = 0.20f)
-                                        else Color.White.copy(alpha = 0.20f)
-                                    )
-                            )
-                            else -> Unit // HarmonyOS 7 靠图标颜色区分
-                        }
-                        // 图标位（用小圆点示意）
-                        Box(
-                            Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    when {
-                                        !isActive -> dot
-                                        style == 0 -> Color.White.copy(alpha = 0.9f)
-                                        else -> accent
-                                    }
-                                )
-                        )
-                    }
-                }
-            }
+private fun RealBottomBar(
+    style: Int,
+    selectedIndex: Int,
+    backdrop: Backdrop,
+    onTabSelected: (Int) -> Unit,
+) {
+    when (style) {
+        1 -> HyperOS4BottomTabs(
+            selectedTabIndex = { selectedIndex },
+            onTabSelected = onTabSelected,
+            backdrop = backdrop,
+            tabsCount = 3,
+            modifier = Modifier.fillMaxWidth(),
+        ) { selectIndex, reportPress ->
+            HyperOS4TabItem(
+                Icons.Default.Home,
+                "首页",
+                selected = selectedIndex == 0,
+                onPress = { reportPress(0, it) },
+                modifier = Modifier.weight(1f),
+            ) { selectIndex(0) }
+            HyperOS4TabItem(
+                Icons.Default.Build,
+                "工具箱",
+                selected = selectedIndex == 1,
+                onPress = { reportPress(1, it) },
+                modifier = Modifier.weight(1f),
+            ) { selectIndex(1) }
+            HyperOS4TabItem(
+                Icons.Default.Settings,
+                "设置",
+                selected = selectedIndex == 2,
+                onPress = { reportPress(2, it) },
+                modifier = Modifier.weight(1f),
+            ) { selectIndex(2) }
         }
+        2 -> HarmonyOS7BottomTabs(
+            selectedTabIndex = { selectedIndex },
+            onTabSelected = onTabSelected,
+            backdrop = backdrop,
+            tabsCount = 3,
+            modifier = Modifier.fillMaxWidth(),
+        ) { selectIndex, reportPress ->
+            HarmonyOS7TabItem(
+                Icons.Default.Home,
+                "首页",
+                selected = selectedIndex == 0,
+                onPress = { reportPress(0, it) },
+                modifier = Modifier.weight(1f),
+            ) { selectIndex(0) }
+            HarmonyOS7TabItem(
+                Icons.Default.Build,
+                "工具箱",
+                selected = selectedIndex == 1,
+                onPress = { reportPress(1, it) },
+                modifier = Modifier.weight(1f),
+            ) { selectIndex(1) }
+            HarmonyOS7TabItem(
+                Icons.Default.Settings,
+                "设置",
+                selected = selectedIndex == 2,
+                onPress = { reportPress(2, it) },
+                modifier = Modifier.weight(1f),
+            ) { selectIndex(2) }
+        }
+        else -> LiquidBottomTabs(
+            selectedTabIndex = { selectedIndex },
+            onTabSelected = onTabSelected,
+            backdrop = backdrop,
+            tabsCount = 3,
+            modifier = Modifier.fillMaxWidth(),
+        ) { selectIndex ->
+            GuideLiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { selectIndex(0) }
+            GuideLiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { selectIndex(1) }
+            GuideLiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { selectIndex(2) }
+        }
+    }
+}
+
+/** 液态玻璃底栏的标签（与 AppNavigation 里的 LiquidTabItem 一致）。 */
+@Composable
+private fun GuideLiquidTabItem(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = label,
+            tint = iosLabel(),
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            label,
+            color = iosLabel(),
+            fontSize = 10.sp,
+            lineHeight = 10.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = (-0.1).sp,
+        )
     }
 }
