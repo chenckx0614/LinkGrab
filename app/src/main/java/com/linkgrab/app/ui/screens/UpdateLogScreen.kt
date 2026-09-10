@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.9", "2026-09-10", listOf(
+        "修复 iOS 27 底栏的蓝色遮罩：Layer 2 之前用 drawBackdrop 录制时把 containerColor 背景和 backdrop 又画了一遍进去，经胶囊折射后形成蓝色块；改为只 clip + layerBackdrop + tint 录制 tab 内容本身",
+        "蓝色强调色略微降低强度（alpha 0.85）并仅作用于 tab 图标/文字，胶囊玻璃后的蓝色更干净、不再像遮罩",
+    )),
     UpdateLogItem("2.2.8", "2026-09-10", listOf(
         "回退 v2.2.7 的吸顶标题栏玻璃增强：降低 tint alpha + 加 hairline 后在页面上出现了一条明显横线，先恢复为 v2.2.6 的实色过渡方案",
     )),
