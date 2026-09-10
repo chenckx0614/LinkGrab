@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.5", "2026-09-10", listOf(
+        "修复 iOS 27 底栏长按未选中的标签时滑块不跟手：手指落下即按坐标滑到对应标签，长按、点击、拖拽现在都即时响应",
+        "iOS 27 底栏性能优化：静止时不再挂 lens 折射 shader（原来是每帧无条件跑），Layer 2 的重复高光叠加移除，滑动与按压更跟手",
+    )),
     UpdateLogItem("2.2.4", "2026-09-10", listOf(
         "引导页选好样式进入主页时，底栏会从引导页里那根预览条所在的位置缓缓落到屏幕底部：位置、大小、透明度都是连续过渡，像是同一根条被放了下去",
         "落位用弹性曲线并带一点点回落，横向与缩放置信度稍快、竖直方向更慢更软，整体约 0.7 秒落定",
