@@ -122,17 +122,10 @@ fun LiquidBottomTabs(
                 visibilityThreshold = 0.001f,
                 initialScale = 1f,
                 pressedScale = 78f / 56f,
-                onDragStarted = { down ->
-                    // 手指一落下来就按 x 坐标把胶囊滑到最近的标签：这样无论
-                    // 长按、点击还是拖拽，选中项都会立刻跟手。之前长按未选中
-                    // 的标签时，拖拽手势在没产生移动前就结束、标签的 clickable
-                    // 又被抢走，导致滑块不动。
-                    val landed = (down.x / tabWidth)
-                        .fastRoundToInt()
-                        .fastCoerceIn(0, tabsCount - 1)
-                    if (landed != currentIndex) {
-                        currentIndex = landed
-                    }
+                onDragStarted = {
+                    // 不在这里改 currentIndex：拖拽手势自己的 press() 和
+                    // LaunchedEffect(currentIndex) 的 animateToValue() 会同时
+                    // 修改同一组 Animatable，导致胶囊/光晕来回跳。
                 },
                 onDragStopped = {
                     val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)

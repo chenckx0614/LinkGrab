@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.6", "2026-09-10", listOf(
+        "修复 iOS 27 底栏长按已选中的标签时胶囊/光晕来回跳：回退了拖拽手势内直接改 currentIndex 的做法，避免 press 动画与 LaunchedEffect 的 press 动画竞争同一组 Animatable",
+        "长按未选中标签的切换改为走 tab 项的 onLongClick 兜底：三种底栏的 tab 都支持长按触发选择，不再依赖拖拽手势",
+    )),
     UpdateLogItem("2.2.5", "2026-09-10", listOf(
         "修复 iOS 27 底栏长按未选中的标签时滑块不跟手：手指落下即按坐标滑到对应标签，长按、点击、拖拽现在都即时响应",
         "iOS 27 底栏性能优化：静止时不再挂 lens 折射 shader（原来是每帧无条件跑），Layer 2 的重复高光叠加移除，滑动与按压更跟手",
