@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.1", "2026-09-10", listOf(
+        "修复首次启动时会先闪一帧首页再跳到引导页：改为等设置读取完成后再创建导航，起始页直接就是引导页或首页，中间只铺一层与应用背景同色的底",
+        "重做引导页翻页动画：不再整页横向推走，改为淡入淡出 + 轻微缩放 + 轻微滞后位移，页面在到达屏幕边缘前就已淡出，不再有被硬切一半的割裂感",
+        "引导页视觉重做：主图标改为带渐变、投影与呼吸光环的圆角方块，并缓慢上下浮动；背景改为两团随页面主题色平滑过渡、缓慢漂移的柔光",
+        "新增欢迎页，底栏样式选择卡片改用次级背景填充与对勾选中态，选择页支持纵向滚动",
+    )),
     UpdateLogItem("2.2.0", "2026-09-09", listOf(
         "重构首次启动引导页：三张介绍页改用真实图标卡片，页面背景加入跟随主题色的柔和光晕",
         "引导页新增最后一页「选择底栏样式」：iOS 27 / HyperOS 4 / HarmonyOS 7 三选一，每张卡片带迷你底栏预览，可直观对比风格差异",

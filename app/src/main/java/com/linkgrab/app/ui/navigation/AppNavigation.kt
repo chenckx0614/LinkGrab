@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -176,6 +177,17 @@ private val tabFadeOut: ExitTransition = fadeOut(tween(130))
 /** 30% parallax offset for the page that stays behind. */
 private const val Parallax = 0.30f
 
+/**
+ * 引导页的进出场：淡入淡出，不做横移——引导页是"层"不是"栈里的一页"。
+ */
+private val guideEnter: EnterTransition = fadeIn(tween(260, easing = iosEasing))
+private val guideExit: ExitTransition = fadeOut(tween(220, easing = iosEasing))
+
+/** 引导结束进入主界面：淡入 + 轻微放大，避免从右侧硬推进来。 */
+private val guideFinishEnter: EnterTransition =
+    fadeIn(tween(340, easing = iosEasing)) +
+        scaleIn(initialScale = 0.96f, animationSpec = tween(340, easing = iosEasing))
+
 private val pushEnter: EnterTransition = slideInHorizontally(
     animationSpec = tween(TransitionMs, easing = iosEasing),
     initialOffsetX = { it },
@@ -200,8 +212,17 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(): Boo
     initialState.destination.route in bottomNavRoutes &&
         targetState.destination.route in bottomNavRoutes
 
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.isFromGuide(): Boolean =
+    initialState.destination.route == Screen.Guide.route
+
 private fun iosEnter(transition: EnterTransition): EnterSpec =
-    { if (isTabSwitch()) tabFadeIn else transition }
+    {
+        when {
+            isTabSwitch() -> tabFadeIn
+            isFromGuide() -> guideFinishEnter
+            else -> transition
+        }
+    }
 
 private fun iosExit(transition: ExitTransition): ExitSpec =
     { if (isTabSwitch()) tabFadeOut else transition }
@@ -240,23 +261,22 @@ fun AppNavigation(
     ) {
         navController.popBackStack()
     }
-    val guideShown by viewModel.guideShown.collectAsState()
     val dataLoaded by viewModel.dataLoaded.collectAsState()
-    var guideChecked by remember { mutableStateOf(false) }
+    // 起始页等设置读出来再定。以前 NavHost 一律从首页起步，DataStore 读出
+    // "没看过引导"后再 navigate 到引导页，中间会闪一帧首页。
+    val startDestination = remember(dataLoaded) {
+        if (viewModel.guideShown.value) Screen.Home.route else Screen.Guide.route
+    }
     val liquidBackdrop = rememberLayerBackdrop {
         drawRect(Color.White.copy(alpha = 0.08f))
         drawContent()
     }
 
-    LaunchedEffect(dataLoaded) {
-        if (dataLoaded && !guideChecked) {
-            guideChecked = true
-            if (!guideShown) {
-                navController.navigate(Screen.Guide.route) {
-                    popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
-                }
-            }
-        }
+    // 设置还没读出来之前先只铺一层与应用背景同色的底：既不会闪白，也不会
+    // 先渲染一帧首页，NavHost 直接以正确的起始页创建。
+    if (!dataLoaded) {
+        Box(Modifier.fillMaxSize().background(iosBackground()))
+        return
     }
 
     // Bottom-tab navigation: keep a single instance per tab and restore its
@@ -283,11 +303,15 @@ fun AppNavigation(
         Box(Modifier.fillMaxSize().background(iosBackground())) {
             NavHost(
                 navController = navController,
-                startDestination = Screen.Home.route,
+                startDestination = startDestination,
                 modifier = Modifier.fillMaxSize().layerBackdrop(liquidBackdrop),
             ) {
 
-            composable(Screen.Guide.route) {
+            composable(
+                Screen.Guide.route,
+                enterTransition = { guideEnter },
+                exitTransition = { guideExit },
+            ) {
                 GuideScreen(
                     viewModel = viewModel,
                     onFinished = {
