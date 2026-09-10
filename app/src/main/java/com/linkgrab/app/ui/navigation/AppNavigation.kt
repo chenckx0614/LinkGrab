@@ -3,6 +3,7 @@ package com.linkgrab.app.ui.navigation
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
@@ -47,12 +48,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Alignment
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -270,6 +280,8 @@ fun AppNavigation(
     val dataLoaded by viewModel.dataLoaded.collectAsState()
     // 是否正等着跳引导页：设置读出来的那一刻决定，跳到引导页后即清除。
     var pendingGuide by remember { mutableStateOf(false) }
+    // 从引导页过来时，底栏的出发位置（就是引导页里那根预览条的位置）。
+    var barEntryFrom by remember { mutableStateOf<Rect?>(null) }
     val liquidBackdrop = rememberLayerBackdrop {
         drawRect(Color.White.copy(alpha = 0.08f))
         drawContent()
@@ -326,9 +338,11 @@ fun AppNavigation(
             ) {
                 GuideScreen(
                     viewModel = viewModel,
-                    onFinished = {
+                    onFinished = { previewRect ->
                         viewModel.markGuideShown()
                         pendingGuide = false
+                        // 记下预览条的位置，底栏会从那里"落"到屏幕底部。
+                        barEntryFrom = previewRect
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Guide.route) { inclusive = true }
                         }
@@ -441,7 +455,55 @@ fun AppNavigation(
             }
         }
         if (showBottomBar) {
-            Box(Modifier.align(Alignment.BottomCenter)) {
+            // 底栏"落位"动画：从引导页里那根预览条的位置，缓降到屏幕底部。
+            // 外层 Box 不做任何位移，用来测它就位后的真实位置。
+            var barHomeRect by remember { mutableStateOf<Rect?>(null) }
+            val barShiftX = remember { Animatable(0f) }
+            val barShiftY = remember { Animatable(0f) }
+            val barScale = remember { Animatable(1f) }
+            // 有入场来源时先透明，等拿到目标位置再开始，避免闪一帧。
+            val barAlpha = remember { Animatable(if (barEntryFrom != null) 0f else 1f) }
+
+            LaunchedEffect(barEntryFrom) {
+                val from = barEntryFrom ?: return@LaunchedEffect
+                // 等底栏完成首次布局，才能算位移量。
+                val home = snapshotFlow { barHomeRect }.filterNotNull().first()
+                barShiftX.snapTo(from.center.x - home.center.x)
+                barShiftY.snapTo(from.center.y - home.center.y)
+                barScale.snapTo((from.width / home.width).coerceIn(0.55f, 1.1f))
+                barAlpha.snapTo(0.25f)
+                launch { barAlpha.animateTo(1f, tween(260, easing = iosEasing)) }
+                launch { barScale.animateTo(1f, spring(dampingRatio = 0.88f, stiffness = 190f)) }
+                launch { barShiftX.animateTo(0f, spring(dampingRatio = 0.88f, stiffness = 190f)) }
+                // 竖直方向更慢更软：像被"放下去"一样沉到底部，带一点点回落。
+                barShiftY.animateTo(0f, spring(dampingRatio = 0.78f, stiffness = 115f))
+                barEntryFrom = null
+            }
+
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .onGloballyPositioned { coords ->
+                        barHomeRect = Rect(
+                            coords.positionInRoot(),
+                            Size(coords.size.width.toFloat(), coords.size.height.toFloat()),
+                        )
+                    }
+            ) {
+                Box(
+                    Modifier
+                        .offset {
+                            IntOffset(
+                                barShiftX.value.roundToInt(),
+                                barShiftY.value.roundToInt(),
+                            )
+                        }
+                        .graphicsLayer {
+                            scaleX = barScale.value
+                            scaleY = barScale.value
+                            alpha = barAlpha.value
+                        }
+                ) {
                 val selectedIndex = when (currentDestination?.route) {
                     Screen.Toolbox.route -> 1
                     Screen.Settings.route -> 2
@@ -533,6 +595,7 @@ fun AppNavigation(
                         }
                     }
                 }
+                } // 落位动画层
             }
             // 遮挡层（见 coveringSplash）：铺在 NavHost 之上，盖住还没轮到出场的内容。
             if (coveringSplash) {

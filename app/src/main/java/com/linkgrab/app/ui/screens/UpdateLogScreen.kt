@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.4", "2026-09-10", listOf(
+        "引导页选好样式进入主页时，底栏会从引导页里那根预览条所在的位置缓缓落到屏幕底部：位置、大小、透明度都是连续过渡，像是同一根条被放了下去",
+        "落位用弹性曲线并带一点点回落，横向与缩放置信度稍快、竖直方向更慢更软，整体约 0.7 秒落定",
+        "若取不到预览位置（例如直接跳过）则不做动画，底栏照常规出现",
+    )),
     UpdateLogItem("2.2.3", "2026-09-10", listOf(
         "底栏选择页改为直接嵌入**真实**底栏组件：液态玻璃、HyperOS 4、HarmonyOS 7 三种都是装上后的原样效果，不再是简化示意图",
         "预览里的底栏可以点：点图标会切换选中项，三种风格同时联动，方便对比各自的选中动画",

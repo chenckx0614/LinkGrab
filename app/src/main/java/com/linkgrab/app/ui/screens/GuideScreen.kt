@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -58,11 +59,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -146,7 +151,8 @@ private val barStyles = listOf(
 @Composable
 fun GuideScreen(
     viewModel: MainViewModel,
-    onFinished: () -> Unit,
+    // 回传选中那张卡片里预览底栏的屏幕位置，主页用它做"底栏落位"的衔接动画。
+    onFinished: (Rect?) -> Unit,
 ) {
     // 介绍页 + 最后一张底栏选择页
     val pageCount = pages.size + 1
@@ -160,6 +166,8 @@ fun GuideScreen(
     val previewBackdrop = rememberLayerBackdrop()
     // 预览里当前选中的标签：点预览里的图标可以切换，方便对比三种选中动画。
     var previewTab by remember { mutableIntStateOf(0) }
+    // 选中卡片里预览底栏的位置（屏幕坐标），完成引导时交给主页做衔接动画。
+    var previewRect by remember { mutableStateOf<Rect?>(null) }
 
     // 主题色随页面平滑过渡，背景光晕才不会在翻页时突然跳色。
     val targetAccent = if (last) iosBlue() else pages[pager.currentPage].accent
@@ -204,6 +212,7 @@ fun GuideScreen(
                                 selected = selectedStyle,
                                 previewTab = previewTab,
                                 backdrop = previewBackdrop,
+                                onPreviewRect = { previewRect = it },
                                 onSelect = { selectedStyle = it },
                                 onPreviewTab = { previewTab = it },
                             )
@@ -242,7 +251,7 @@ fun GuideScreen(
                     {
                         if (last) {
                             viewModel.setBottomBarStyle(selectedStyle)
-                            onFinished()
+                            onFinished(previewRect)
                         } else {
                             scope.launch { pager.animateScrollToPage(pager.currentPage + 1) }
                         }
@@ -472,6 +481,7 @@ private fun GuideStylePage(
     selected: Int,
     previewTab: Int,
     backdrop: Backdrop,
+    onPreviewRect: (Rect) -> Unit,
     onSelect: (Int) -> Unit,
     onPreviewTab: (Int) -> Unit,
 ) {
@@ -505,6 +515,7 @@ private fun GuideStylePage(
                     selected = selected == option.id,
                     previewTab = previewTab,
                     backdrop = backdrop,
+                    onPreviewRect = onPreviewRect,
                     onSelect = { onSelect(option.id) },
                     onPreviewTab = onPreviewTab,
                 )
@@ -520,6 +531,7 @@ private fun GuideStyleCard(
     selected: Boolean,
     previewTab: Int,
     backdrop: Backdrop,
+    onPreviewRect: (Rect) -> Unit,
     onSelect: () -> Unit,
     onPreviewTab: (Int) -> Unit,
 ) {
@@ -577,10 +589,25 @@ private fun GuideStyleCard(
         }
         Spacer(Modifier.height(10.dp))
         // 预览"屏幕"：给真实底栏一块底色，模拟它贴在页面底部的样子。
+        // 选中的那张卡上报自己的屏幕位置，主页的底栏落位动画要用到。
         Box(
             Modifier
                 .fillMaxWidth()
                 .height(84.dp)
+                .then(
+                    if (selected) {
+                        Modifier.onGloballyPositioned { coords ->
+                            onPreviewRect(
+                                Rect(
+                                    coords.positionInRoot(),
+                                    Size(coords.size.width.toFloat(), coords.size.height.toFloat()),
+                                )
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
                 .clip(RoundedCornerShape(16.dp))
                 .background(
                     if (isInDarkTheme()) Color.White.copy(alpha = 0.06f)
