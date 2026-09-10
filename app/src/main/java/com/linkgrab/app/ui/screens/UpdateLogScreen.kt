@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.7", "2026-09-10", listOf(
+        "吸顶标题栏的玻璃沉浸效果增强：blur 从 20dp 提到 30dp，底色不透明度大幅降低（浅色 0.18 / 深色 0.28），更像 iOS 系统毛玻璃",
+        "吸顶头触发阈值从 56dp 降到 36dp，上滑一点就开始出现毛玻璃；底部新增 0.5dp hairline separator，强化玻璃边缘",
+    )),
     UpdateLogItem("2.2.6", "2026-09-10", listOf(
         "修复 iOS 27 底栏长按已选中的标签时胶囊/光晕来回跳：回退了拖拽手势内直接改 currentIndex 的做法，避免 press 动画与 LaunchedEffect 的 press 动画竞争同一组 Animatable",
         "长按未选中标签的切换改为走 tab 项的 onLongClick 兜底：三种底栏的 tab 都支持长按触发选择，不再依赖拖拽手势",

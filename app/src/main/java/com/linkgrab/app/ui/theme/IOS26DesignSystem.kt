@@ -480,11 +480,11 @@ val IOS26HeaderHeight = 52.dp
  */
 private val IOS26HeaderFade = 16.dp
 
-/** 吸顶玻璃底色的不透明度。越接近 1 越能压住 blur 的硬边，但越不「透」。 */
-private const val BarTintAlpha = 0.9f
+/** 吸顶玻璃底色的不透明度。iOS 的毛玻璃要「透」就必须低 opacity + 高 blur。 */
+private val BarTintAlpha: Float @Composable get() = if (isInDarkTheme()) 0.28f else 0.18f
 
-/** 滚动超过这段距离后，吸顶模糊才开始出现。 */
-val IOS26HeaderScrollThreshold = 56.dp
+/** 滚动超过这段距离后，吸顶模糊才开始出现。越小越早进入毛玻璃状态。 */
+val IOS26HeaderScrollThreshold = 36.dp
 
 /**
  * iOS 26-style pinned navigation bar. It stays attached to the top of the
@@ -513,6 +513,7 @@ fun IOS26BlurHeader(
     )
     val bg = iosBackground()
     val titleColor = iosLabel()
+    val tintAlpha = BarTintAlpha
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     Box(
         modifier = modifier
@@ -545,13 +546,13 @@ fun IOS26BlurHeader(
                     effects = {
                         val p = progress
                         if (p > 0.01f) {
-                            blur((20f * p).dp.toPx())
+                            blur((30f * p).dp.toPx())
                         }
                     },
                     onDrawSurface = {
                         val p = progress
                         if (p > 0.01f) {
-                            drawRect(bg.copy(alpha = BarTintAlpha * p))
+                            drawRect(bg.copy(alpha = tintAlpha * p))
                         }
                     },
                 )
@@ -566,9 +567,19 @@ fun IOS26BlurHeader(
                 .graphicsLayer { alpha = progress }
                 .background(
                     Brush.verticalGradient(
-                        listOf(bg.copy(alpha = BarTintAlpha), Color.Transparent),
+                        listOf(bg.copy(alpha = tintAlpha), Color.Transparent),
                     )
                 )
+        )
+        // 3) 顶部分割线：滚动后出现一条极细的高光线，像 iOS 导航栏的
+        //    hairline，强化玻璃边缘的存在感。
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(0.5.dp)
+                .align(Alignment.BottomCenter)
+                .graphicsLayer { alpha = progress * 0.55f }
+                .background(iosSeparator().copy(alpha = 0.45f))
         )
         Row(
             Modifier
