@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -279,6 +280,8 @@ private fun GuideAurora(accent: Color) {
             .drawBehind {
                 val w = size.width
                 val h = size.height
+                // 半径为 0 时 Android 的 RadialGradient 会直接抛异常，先挡掉。
+                if (w <= 0f || h <= 0f) return@drawBehind
                 val strong = if (isDark) 0.30f else 0.24f
                 val soft = if (isDark) 0.20f else 0.15f
 
@@ -373,7 +376,7 @@ private fun GuideHero(page: GuidePage) {
     Box(
         modifier = Modifier
             .size(212.dp)
-            .padding(top = float.dp),
+            .offset(y = float.dp),
         contentAlignment = Alignment.Center,
     ) {
         // 呼吸光环
@@ -381,6 +384,8 @@ private fun GuideHero(page: GuidePage) {
             Modifier
                 .matchParentSize()
                 .drawBehind {
+                    // 半径为 0 时 Android 的 RadialGradient 会抛异常，兜个底。
+                    if (size.minDimension <= 0f) return@drawBehind
                     drawRect(
                         Brush.radialGradient(
                             0.0f to page.accent.copy(alpha = 0.32f * pulse),

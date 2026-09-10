@@ -178,9 +178,8 @@ private val tabFadeOut: ExitTransition = fadeOut(tween(130))
 private const val Parallax = 0.30f
 
 /**
- * 引导页的进出场：淡入淡出，不做横移——引导页是"层"不是"栈里的一页"。
+ * 引导页离场：淡出收尾，不做横向推移——引导页更像"一层"而不是"栈里的一页"。
  */
-private val guideEnter: EnterTransition = fadeIn(tween(260, easing = iosEasing))
 private val guideExit: ExitTransition = fadeOut(tween(220, easing = iosEasing))
 
 /** 引导结束进入主界面：淡入 + 轻微放大，避免从右侧硬推进来。 */
@@ -225,7 +224,14 @@ private fun iosEnter(transition: EnterTransition): EnterSpec =
     }
 
 private fun iosExit(transition: ExitTransition): ExitSpec =
-    { if (isTabSwitch()) tabFadeOut else transition }
+    {
+        when {
+            isTabSwitch() -> tabFadeOut
+            // 去引导页时首页直接让位，不要在后面横向滑走。
+            targetState.destination.route == Screen.Guide.route -> ExitTransition.None
+            else -> transition
+        }
+    }
 
 @Composable
 fun AppNavigation(
@@ -262,22 +268,26 @@ fun AppNavigation(
         navController.popBackStack()
     }
     val dataLoaded by viewModel.dataLoaded.collectAsState()
-    // 起始页等设置读出来再定。以前 NavHost 一律从首页起步，DataStore 读出
-    // "没看过引导"后再 navigate 到引导页，中间会闪一帧首页。
-    val startDestination = remember(dataLoaded) {
-        if (viewModel.guideShown.value) Screen.Home.route else Screen.Guide.route
-    }
+    // 是否正等着跳引导页：设置读出来的那一刻决定，跳到引导页后即清除。
+    var pendingGuide by remember { mutableStateOf(false) }
     val liquidBackdrop = rememberLayerBackdrop {
         drawRect(Color.White.copy(alpha = 0.08f))
         drawContent()
     }
 
-    // 设置还没读出来之前先只铺一层与应用背景同色的底：既不会闪白，也不会
-    // 先渲染一帧首页，NavHost 直接以正确的起始页创建。
-    if (!dataLoaded) {
-        Box(Modifier.fillMaxSize().background(iosBackground()))
-        return
+    LaunchedEffect(dataLoaded) {
+        if (dataLoaded && !viewModel.guideShown.value) {
+            pendingGuide = true
+            navController.navigate(Screen.Guide.route) {
+                popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
+            }
+        }
     }
+
+    // 设置还没读出来、或正在去引导页的路上，用一层与应用背景同色的遮挡盖住
+    // NavHost。这样首页一帧都不会露出来（以前就是这里闪一下）。
+    val coveringSplash = !dataLoaded ||
+        (pendingGuide && currentDestination?.route != Screen.Guide.route)
 
     // Bottom-tab navigation: keep a single instance per tab and restore its
     // state. Without popUpTo/saveState, repeated tab taps keep pushing new
@@ -303,19 +313,22 @@ fun AppNavigation(
         Box(Modifier.fillMaxSize().background(iosBackground())) {
             NavHost(
                 navController = navController,
-                startDestination = startDestination,
+                startDestination = Screen.Home.route,
                 modifier = Modifier.fillMaxSize().layerBackdrop(liquidBackdrop),
             ) {
 
             composable(
                 Screen.Guide.route,
-                enterTransition = { guideEnter },
+                // 进场直接替换（不做淡入）：这一跳被遮挡层盖着，不能让首页
+                // 在后面透出来；离场才用淡出，给"进入主界面"一个柔和收尾。
+                enterTransition = { EnterTransition.None },
                 exitTransition = { guideExit },
             ) {
                 GuideScreen(
                     viewModel = viewModel,
                     onFinished = {
                         viewModel.markGuideShown()
+                        pendingGuide = false
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Guide.route) { inclusive = true }
                         }
@@ -520,6 +533,10 @@ fun AppNavigation(
                         }
                     }
                 }
+            }
+            // 遮挡层（见 coveringSplash）：铺在 NavHost 之上，盖住还没轮到出场的内容。
+            if (coveringSplash) {
+                Box(Modifier.fillMaxSize().background(iosBackground()))
             }
         }
     }
