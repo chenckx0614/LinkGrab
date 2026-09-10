@@ -17,6 +17,9 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.8", "2026-09-10", listOf(
+        "回退 v2.2.7 的吸顶标题栏玻璃增强：降低 tint alpha + 加 hairline 后在页面上出现了一条明显横线，先恢复为 v2.2.6 的实色过渡方案",
+    )),
     UpdateLogItem("2.2.7", "2026-09-10", listOf(
         "吸顶标题栏的玻璃沉浸效果增强：blur 从 20dp 提到 30dp，底色不透明度大幅降低（浅色 0.18 / 深色 0.28），更像 iOS 系统毛玻璃",
         "吸顶头触发阈值从 56dp 降到 36dp，上滑一点就开始出现毛玻璃；底部新增 0.5dp hairline separator，强化玻璃边缘",
