@@ -22,7 +22,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -228,23 +227,41 @@ fun LiquidBottomTabs(
         )
 
         // ---- Layer 2: invisible tinted duplicate recorded into tabsBackdrop ----
-        // 只录 tab 内容（图标/文字）本身，再染成强调色。之前用 drawBackdrop
-        // 会连带把 containerColor 背景和 backdrop 再画一遍进去，结果胶囊折射
-        // 时会出现一大块蓝色遮罩。现在只 clip + layerBackdrop + tint，去掉
-        // 所有 backdrop 效果和背景填充。
+        // 这一层是 Layer 3 胶囊玻璃的「模糊底」：必须保留 drawBackdrop 的
+        // blur，否则胶囊位置采样不到模糊内容、玻璃效果就没了。
+        // 但 onDrawSurface 的底色必须压到极低 alpha —— 它会被下面整层的
+        // ColorFilter.tint 一起染成蓝色，alpha 一高就是那块蓝色遮罩。
         Row(
             Modifier
                 .clearAndSetSemantics {}
                 .alpha(0f)
-                .clip(Capsule())
                 .layerBackdrop(tabsBackdrop)
                 .graphicsLayer {
                     translationX = panelOffset
-                    colorFilter = ColorFilter.tint(accentColor.copy(alpha = 0.85f))
                 }
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { Capsule() },
+                    effects = {
+                        val progress = dampedDragAnimation.pressProgress
+                        vibrancy()
+                        blur(8f.dp.toPx())
+                        // 静止时不挂 lens：lens(0,0) 仍会走 AGSL shader 路径，
+                        // 在转场动画中白付每帧采样成本。
+                        if (progress > 0.01f) {
+                            lens(
+                                24f.dp.toPx() * progress,
+                                24f.dp.toPx() * progress
+                            )
+                        }
+                    },
+                    highlight = { null },
+                    onDrawSurface = { drawRect(containerColor.copy(alpha = 0.06f)) }
+                )
                 .height(54f.dp)
                 .fillMaxWidth()
-                .padding(horizontal = 4f.dp),
+                .padding(horizontal = 4f.dp)
+                .graphicsLayer(colorFilter = ColorFilter.tint(accentColor.copy(alpha = 0.85f))),
             verticalAlignment = Alignment.CenterVertically,
             content = { tabContent(selectTab) }
         )

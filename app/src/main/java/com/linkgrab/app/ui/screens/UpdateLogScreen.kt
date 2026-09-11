@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.10", "2026-09-11", listOf(
+        "修复 iOS 27 底栏选中项丢失玻璃效果：v2.2.9 把 Layer 2 的 drawBackdrop 整个去掉了，而这层正是给胶囊提供「模糊底」的，导致选中位置采样不到模糊内容",
+        "现在恢复 Layer 2 的 blur，但把它的底色 alpha 从 0.4 压到 0.06 —— 底色会被整层 tint 染蓝，压低后既能保留玻璃模糊，又不会形成蓝色遮罩",
+    )),
     UpdateLogItem("2.2.9", "2026-09-10", listOf(
         "修复 iOS 27 底栏的蓝色遮罩：Layer 2 之前用 drawBackdrop 录制时把 containerColor 背景和 backdrop 又画了一遍进去，经胶囊折射后形成蓝色块；改为只 clip + layerBackdrop + tint 录制 tab 内容本身",
         "蓝色强调色略微降低强度（alpha 0.85）并仅作用于 tab 图标/文字，胶囊玻璃后的蓝色更干净、不再像遮罩",
