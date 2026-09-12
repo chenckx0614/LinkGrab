@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.first
 import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,6 +81,7 @@ import com.kyant.backdrop.shadow.Shadow
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -177,17 +179,24 @@ private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Toolbox.route, Scr
 private typealias EnterSpec = AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition
 private typealias ExitSpec = AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition
 
-private const val TransitionMs = 340
+/**
+ * push / pop 用不同时长：进入新页稍慢、更从容，返回更快、更干脆。
+ * 这是 iOS 手感的一部分——pop 永远比 push 短一截。
+ *
+ * 注意 push 的 Enter/Exit 必须同时长、pop 的 Enter/Exit 也必须同时长，
+ * 否则两个页面位移不同步，视觉上会「撕裂」。
+ */
+private const val PushMs = 380
+private const val PopMs = 300
 
 /** iOS system deceleration curve — fast start, long smooth tail. */
 private val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
-/** Tab-to-tab switches use a quick crossfade instead of a slide. */
-private val tabFadeIn: EnterTransition = fadeIn(tween(150))
-private val tabFadeOut: ExitTransition = fadeOut(tween(130))
-
 /** 30% parallax offset for the page that stays behind. */
 private const val Parallax = 0.30f
+
+/** 相邻标签页切换时的横向位移比例（很小，只做方向暗示）。 */
+private const val TabSlide = 0.05f
 
 /**
  * 引导页离场：淡出收尾，不做横向推移——引导页更像"一层"而不是"栈里的一页"。
@@ -200,24 +209,47 @@ private val guideFinishEnter: EnterTransition =
         scaleIn(initialScale = 0.96f, animationSpec = tween(340, easing = iosEasing))
 
 private val pushEnter: EnterTransition = slideInHorizontally(
-    animationSpec = tween(TransitionMs, easing = iosEasing),
+    animationSpec = tween(PushMs, easing = iosEasing),
     initialOffsetX = { it },
 )
 
 private val pushExit: ExitTransition = slideOutHorizontally(
-    animationSpec = tween(TransitionMs, easing = iosEasing),
+    animationSpec = tween(PushMs, easing = iosEasing),
     targetOffsetX = { (-it * Parallax).toInt() },
 )
 
 private val popEnter: EnterTransition = slideInHorizontally(
-    animationSpec = tween(TransitionMs, easing = iosEasing),
+    animationSpec = tween(PopMs, easing = iosEasing),
     initialOffsetX = { (-it * Parallax).toInt() },
 )
 
 private val popExit: ExitTransition = slideOutHorizontally(
-    animationSpec = tween(TransitionMs, easing = iosEasing),
+    animationSpec = tween(PopMs, easing = iosEasing),
     targetOffsetX = { it },
 )
+
+/** 底栏标签页的顺序，用来判断切换方向（决定新页从左边还是右边进来）。 */
+private fun tabIndex(route: String?): Int = when (route) {
+    Screen.Home.route -> 0
+    Screen.Toolbox.route -> 1
+    Screen.Settings.route -> 2
+    else -> 0
+}
+
+/**
+ * 标签页切换：不是单纯的淡入淡出，而是「顺着方向轻微推一下」。
+ * 向右切（Home→工具箱→设置）新页从右侧小幅进来，向左切反过来；
+ * 同时带一点缩放，让「换了一页」有实感，但幅度都很小以免头重脚轻。
+ */
+private val tabExit: ExitTransition = fadeOut(tween(160, easing = iosEasing))
+
+private fun tabEnter(dir: Int): EnterTransition =
+    fadeIn(tween(200, easing = iosEasing)) +
+        slideInHorizontally(
+            animationSpec = tween(300, easing = iosEasing),
+            initialOffsetX = { (it * TabSlide * dir).toInt() },
+        ) +
+        scaleIn(initialScale = 0.98f, animationSpec = tween(300, easing = iosEasing))
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(): Boolean =
     initialState.destination.route in bottomNavRoutes &&
@@ -229,7 +261,14 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.isFromGuide(): Boo
 private fun iosEnter(transition: EnterTransition): EnterSpec =
     {
         when {
-            isTabSwitch() -> tabFadeIn
+            isTabSwitch() -> {
+                // 方向由两个标签在底栏里的先后顺序决定，新页从该方向进来。
+                val dir =
+                    if (tabIndex(targetState.destination.route) >=
+                        tabIndex(initialState.destination.route)
+                    ) 1 else -1
+                tabEnter(dir)
+            }
             isFromGuide() -> guideFinishEnter
             else -> transition
         }
@@ -238,12 +277,54 @@ private fun iosEnter(transition: EnterTransition): EnterSpec =
 private fun iosExit(transition: ExitTransition): ExitSpec =
     {
         when {
-            isTabSwitch() -> tabFadeOut
+            isTabSwitch() -> tabExit
             // 去引导页时首页直接让位，不要在后面横向滑走。
             targetState.destination.route == Screen.Guide.route -> ExitTransition.None
             else -> transition
         }
     }
+
+/**
+ * 每个普通页面的外壳：只负责一层「左边缘投影」。
+ *
+ * 页面全屏时左边缘正好压在屏幕 x=0 上，投影落在屏幕外、看不见；
+ * 一旦开始 push/pop，页面横向移动、左边缘进入屏幕，投影自然显现——
+ * 于是两层页面之间有明确的上下层关系，而不是两张图在同一平面上硬切。
+ *
+ * 阴影是常驻的（不做动画），开销只是一层 elevation 绘制，比在转场里
+ * 逐帧驱动要便宜得多。
+ */
+@Composable
+private fun IOSPageSurface(content: @Composable () -> Unit) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .shadow(
+                elevation = 16.dp,
+                shape = RectangleShape,
+                clip = false,
+            )
+    ) {
+        content()
+    }
+}
+
+/**
+ * 统一的页面注册：所有普通页面共用同一套 push/pop 转场，
+ * 并自动套上 [IOSPageSurface]。避免在每个 composable 里重复抄四行。
+ */
+private fun NavGraphBuilder.iosPage(
+    route: String,
+    content: @Composable () -> Unit,
+) = composable(
+    route = route,
+    enterTransition = iosEnter(pushEnter),
+    exitTransition = iosExit(pushExit),
+    popEnterTransition = iosEnter(popEnter),
+    popExitTransition = iosExit(popExit),
+) {
+    IOSPageSurface { content() }
+}
 
 @Composable
 fun AppNavigation(
@@ -352,15 +433,9 @@ fun AppNavigation(
                 )
             }
 
-            // Bottom nav tabs — quick crossfade when switching between tabs,
-            // iOS parallax push/pop when opening or leaving a detail page.
-            composable(
-                Screen.Home.route,
-                enterTransition = iosEnter(pushEnter),
-                exitTransition = iosExit(pushExit),
-                popEnterTransition = iosEnter(popEnter),
-                popExitTransition = iosExit(popExit),
-            ) {
+            // Bottom nav tabs — 切换带方向感的小幅位移 + 缩放；
+            // 打开 / 离开详情页走 iOS 视差 push/pop（见 iosPage）。
+            iosPage(Screen.Home.route) {
                 HomeScreen(
                     viewModel = viewModel,
                     onNavigateToHistory = {
@@ -369,26 +444,14 @@ fun AppNavigation(
                     initialShareText = initialShareText,
                 )
             }
-            composable(
-                Screen.Toolbox.route,
-                enterTransition = iosEnter(pushEnter),
-                exitTransition = iosExit(pushExit),
-                popEnterTransition = iosEnter(popEnter),
-                popExitTransition = iosExit(popExit),
-            ) {
+            iosPage(Screen.Toolbox.route) {
                 ToolboxScreen(
                     onNavigateToVideoToAudio = { navController.navigate(Screen.VideoToAudio.route) },
                     onNavigateToImageConvert = { navController.navigate(Screen.ImageConvert.route) },
                 )
             }
 
-            composable(
-                Screen.Settings.route,
-                enterTransition = iosEnter(pushEnter),
-                exitTransition = iosExit(pushExit),
-                popEnterTransition = iosEnter(popEnter),
-                popExitTransition = iosExit(popExit),
-            ) {
+            iosPage(Screen.Settings.route) {
                 SettingsScreen(
                     viewModel = viewModel,
                     onNavigateToUpdateLog = {
@@ -398,54 +461,24 @@ fun AppNavigation(
             }
 
             // Detail pages — transitions come from the shared specs above.
-            composable(
-                Screen.Result.route,
-                enterTransition = iosEnter(pushEnter),
-                exitTransition = iosExit(pushExit),
-                popEnterTransition = iosEnter(popEnter),
-                popExitTransition = iosExit(popExit),
-            ) {
+            iosPage(Screen.Result.route) {
                 ResultScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable(
-                Screen.UpdateLog.route,
-                enterTransition = iosEnter(pushEnter),
-                exitTransition = iosExit(pushExit),
-                popEnterTransition = iosEnter(popEnter),
-                popExitTransition = iosExit(popExit),
-            ) {
+            iosPage(Screen.UpdateLog.route) {
                 UpdateLogScreen(
                     onBack = { navController.popBackStack() },
                 )
             }
-            composable(
-                Screen.VideoToAudio.route,
-                enterTransition = iosEnter(pushEnter),
-                exitTransition = iosExit(pushExit),
-                popEnterTransition = iosEnter(popEnter),
-                popExitTransition = iosExit(popExit),
-            ) {
+            iosPage(Screen.VideoToAudio.route) {
                 VideoToAudioScreen(onBack = { navController.popBackStack() })
             }
-            composable(
-                Screen.ImageConvert.route,
-                enterTransition = iosEnter(pushEnter),
-                exitTransition = iosExit(pushExit),
-                popEnterTransition = iosEnter(popEnter),
-                popExitTransition = iosExit(popExit),
-            ) {
+            iosPage(Screen.ImageConvert.route) {
                 ImageConvertScreen(onBack = { navController.popBackStack() })
             }
-            composable(
-                Screen.History.route,
-                enterTransition = iosEnter(pushEnter),
-                exitTransition = iosExit(pushExit),
-                popEnterTransition = iosEnter(popEnter),
-                popExitTransition = iosExit(popExit),
-            ) {
+            iosPage(Screen.History.route) {
                 HistoryScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },

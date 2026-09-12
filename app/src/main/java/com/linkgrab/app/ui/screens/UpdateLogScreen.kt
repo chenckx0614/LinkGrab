@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.2.11", "2026-09-12", listOf(
+        "转场节奏：进入新页面稍慢更从容（380ms），返回更快更干脆（300ms）——pop 比 push 短一截是 iOS 手感的一部分",
+        "页面之间新增一层左缘投影：页面全屏就位时投影落在屏幕外看不见，一旦开始推入／返回、页面横向移动，投影自然显现，两层页面有了明确的上下层关系",
+        "底栏标签切换不再只是淡入淡出：改为顺着方向做小幅位移 + 轻微缩放，往右切新页从右侧进、往左切反过来，换页更有实感",
+        "顺带把 8 处重复的转场定义收敛成一个统一的页面封装，后续调转场只改一处",
+    )),
     UpdateLogItem("2.2.10", "2026-09-11", listOf(
         "修复 iOS 27 底栏选中项丢失玻璃效果：v2.2.9 把 Layer 2 的 drawBackdrop 整个去掉了，而这层正是给胶囊提供「模糊底」的，导致选中位置采样不到模糊内容",
         "现在恢复 Layer 2 的 blur，但把它的底色 alpha 从 0.4 压到 0.06 —— 底色会被整层 tint 染蓝，压低后既能保留玻璃模糊，又不会形成蓝色遮罩",
