@@ -26,7 +26,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 
 @Composable
-fun ToolboxScreen(onNavigateToVideoToAudio: () -> Unit = {}, onNavigateToImageConvert: () -> Unit = {}) {
+fun ToolboxScreen(
+    onNavigateToVideoToAudio: () -> Unit = {},
+    onNavigateToImageConvert: () -> Unit = {},
+    onNavigateToMusic: () -> Unit = {},
+) {
     IOS26Canvas {
         IOS26StickyPage(title = "工具") {
             item {
@@ -34,6 +38,8 @@ fun ToolboxScreen(onNavigateToVideoToAudio: () -> Unit = {}, onNavigateToImageCo
             }
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
+                    ToolRow("音乐解析下载", "从酷我分享链接提取歌曲与歌词", onNavigateToMusic)
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
                     ToolRow("视频转音频", "提取音频并保存到音乐资料库", onNavigateToVideoToAudio)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
                     ToolRow("图片转换", "转换 JPG、PNG、WebP 或 BMP", onNavigateToImageConvert)

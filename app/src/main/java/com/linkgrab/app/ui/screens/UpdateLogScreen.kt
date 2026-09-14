@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.0", "2026-09-14", listOf(
+        "新增「音乐解析下载」：粘贴酷我音乐的分享链接，提取歌名、歌手、封面与完整歌词，支持 128k / 320k 音质下载到系统音乐库",
+        "说明：网易云、QQ 等平台的音频直链带一次性时效签名和防盗链，公共解析服务当前也大多不可用，因此这一版先接入链路最稳定的酷我；在酷我音乐 App 里「分享 → 复制链接」即可",
+    )),
     UpdateLogItem("2.2.11", "2026-09-12", listOf(
         "转场节奏：进入新页面稍慢更从容（380ms），返回更快更干脆（300ms）——pop 比 push 短一截是 iOS 手感的一部分",
         "页面之间新增一层左缘投影：页面全屏就位时投影落在屏幕外看不见，一旦开始推入／返回、页面横向移动，投影自然显现，两层页面有了明确的上下层关系",

@@ -100,6 +100,7 @@ import com.linkgrab.app.ui.screens.GuideScreen
 import com.linkgrab.app.ui.screens.HistoryScreen
 import com.linkgrab.app.ui.screens.HomeScreen
 import com.linkgrab.app.ui.screens.ImageConvertScreen
+import com.linkgrab.app.ui.screens.MusicScreen
 import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
@@ -129,6 +130,7 @@ sealed class Screen(val route: String, val title: String) {
     data object History : Screen("history", "历史记录")
     data object VideoToAudio : Screen("video_to_audio", "视频转音频")
     data object ImageConvert : Screen("image_convert", "图片转格式")
+    data object Music : Screen("music", "音乐解析下载")
 }
 
 /**
@@ -448,6 +450,7 @@ fun AppNavigation(
                 ToolboxScreen(
                     onNavigateToVideoToAudio = { navController.navigate(Screen.VideoToAudio.route) },
                     onNavigateToImageConvert = { navController.navigate(Screen.ImageConvert.route) },
+                    onNavigateToMusic = { navController.navigate(Screen.Music.route) },
                 )
             }
 
@@ -477,6 +480,9 @@ fun AppNavigation(
             }
             iosPage(Screen.ImageConvert.route) {
                 ImageConvertScreen(onBack = { navController.popBackStack() })
+            }
+            iosPage(Screen.Music.route) {
+                MusicScreen(onBack = { navController.popBackStack() })
             }
             iosPage(Screen.History.route) {
                 HistoryScreen(
