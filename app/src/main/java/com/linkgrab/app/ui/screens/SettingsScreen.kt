@@ -37,6 +37,7 @@ import com.linkgrab.app.ui.theme.IOS26Switch
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosError
 import com.linkgrab.app.update.UpdateResult
 import com.linkgrab.app.viewmodel.MainViewModel
 
@@ -135,6 +136,7 @@ fun SettingsScreen(viewModel: MainViewModel, onNavigateToUpdateLog: () -> Unit =
                     IOS26ListRow(
                         "软件更新",
                         "保持 LinkGrab 处于最新状态",
+                        onClick = { if (!checkingUpdate) viewModel.checkForUpdate() },
                     ) {
                         Text(
                             if (checkingUpdate) "检查中…" else "检查",
@@ -154,7 +156,7 @@ fun SettingsScreen(viewModel: MainViewModel, onNavigateToUpdateLog: () -> Unit =
                         )
                         is UpdateResult.CheckFailed -> Text(
                             "检查失败：${result.error}",
-                            color = com.linkgrab.app.ui.theme.IOSRed,
+                            color = iosError(),
                             modifier = Modifier.padding(top = 10.dp),
                             fontSize = 14.sp,
                         )

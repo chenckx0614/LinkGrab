@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.1", "2026-09-15", listOf(
+        "iOS 27 风格全局统一：新增 iOS 27 风格输入框、加载指示器与统一错误色，替换各页面残留的 Material3 OutlinedTextField 与 CircularProgressIndicator",
+        "设置页「软件更新」行支持整行点击；工具箱、设置列表行增加 iOS 风格按压缩放反馈",
+        "结果页、历史记录、骨架屏的背景色统一使用 iOS 27 语义色，移除 MaterialTheme.colorScheme 硬引用",
+    )),
     UpdateLogItem("2.3.0", "2026-09-14", listOf(
         "新增「音乐解析下载」：粘贴酷我音乐的分享链接，提取歌名、歌手、封面与完整歌词，支持 128k / 320k 音质下载到系统音乐库",
         "说明：网易云、QQ 等平台的音频直链带一次性时效签名和防盗链，公共解析服务当前也大多不可用，因此这一版先接入链路最稳定的酷我；在酷我音乐 App 里「分享 → 复制链接」即可",

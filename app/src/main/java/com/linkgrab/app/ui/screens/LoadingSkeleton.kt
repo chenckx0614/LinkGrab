@@ -14,9 +14,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.Dp
+import com.linkgrab.app.ui.theme.iosTertiaryBackground
 import androidx.compose.ui.unit.dp
 import com.valentinilk.shimmer.ShimmerBounds
 import com.valentinilk.shimmer.rememberShimmer
@@ -33,7 +33,7 @@ fun ShimmerBox(
         modifier = modifier
             .size(width, height)
             .clip(RoundedCornerShape(radius))
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .background(iosTertiaryBackground()),
     )
 }
 

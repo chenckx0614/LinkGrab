@@ -48,10 +48,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
@@ -61,8 +59,10 @@ import com.linkgrab.app.ui.theme.IOS26HeaderHeight
 import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
 import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosError
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosTertiaryBackground
@@ -188,14 +188,14 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
 
                 Text(
                     text = statusText,
-                    color = if (statusText.contains("失败")) MaterialTheme.colorScheme.error
+                    color = if (statusText.contains("失败")) iosError()
                     else iosSecondaryLabel(),
                     fontSize = 14.sp,
                 )
 
                 if (isProcessing) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    CircularProgressIndicator(modifier = Modifier.size(40.dp), color = iosBlue())
+                    IOS27CircularProgressIndicator(modifier = Modifier, size = 40.dp)
                 }
             }
 

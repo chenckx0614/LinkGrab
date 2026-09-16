@@ -34,9 +34,12 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -83,6 +86,7 @@ val IOSBlue = Color(0xFF007AFF)
 val IOSBlueDark = Color(0xFF0A84FF)
 val IOSGreen = Color(0xFF34C759)
 val IOSRed = Color(0xFFFF3B30)
+val IOSRedDark = Color(0xFFFF453A)
 val IOSOrange = Color(0xFFFF9500)
 val IOSPurple = Color(0xFFAF52DE)
 val IOSTeal = Color(0xFF5AC8FA)
@@ -154,6 +158,9 @@ fun iosGlass(): Color = if (isInDarkTheme()) IOSGlassDark else IOSGlassLight
 @Composable
 fun iosGlassStroke(): Color = if (isInDarkTheme()) IOSGlassStrokeDark else IOSGlassStrokeLight
 
+@Composable
+fun iosError(): Color = if (isInDarkTheme()) IOSRedDark else IOSRed
+
 // MARK: - Shape Tokens
 
 val IOSCornerLarge = RoundedCornerShape(32.dp)
@@ -208,10 +215,26 @@ fun IOS26ListRow(
     title: String,
     subtitle: String? = null,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        if (pressed && onClick != null) 0.98f else 1f,
+        spring(dampingRatio = 0.78f, stiffness = 680f),
+        label = "ios26ListRowScale",
+    )
+    val rowModifier = if (onClick != null) {
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(IOSCornerXSmall)
+            .clickable(interactionSource = source, indication = null, onClick = onClick)
+    } else {
+        modifier
+    }
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 12.dp),
+        modifier = rowModifier.fillMaxWidth().padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -308,6 +331,63 @@ fun IOS26OutlinedButton(
             letterSpacing = (-0.2).sp,
         )
     }
+}
+
+// MARK: - Text Field (iOS 27 style)
+
+@Composable
+fun IOS27TextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    placeholder: String? = null,
+    singleLine: Boolean = true,
+    keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
+) {
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(IOSCornerXSmall),
+        singleLine = singleLine,
+        keyboardOptions = keyboardOptions,
+        label = label?.let { { Text(it) } },
+        placeholder = placeholder?.let { { Text(it, color = iosTertiaryLabel()) } },
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = iosTertiaryBackground(),
+            unfocusedContainerColor = iosTertiaryBackground(),
+            disabledContainerColor = iosTertiaryBackground().copy(alpha = 0.5f),
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+            errorIndicatorColor = Color.Transparent,
+            focusedTextColor = iosLabel(),
+            unfocusedTextColor = iosLabel(),
+            focusedLabelColor = iosSecondaryLabel(),
+            unfocusedLabelColor = iosSecondaryLabel(),
+            cursorColor = iosBlue(),
+            focusedTrailingIconColor = iosSecondaryLabel(),
+            unfocusedTrailingIconColor = iosSecondaryLabel(),
+        ),
+        shape = IOSCornerXSmall,
+    )
+}
+
+// MARK: - Progress Indicator
+
+@Composable
+fun IOS27CircularProgressIndicator(
+    modifier: Modifier = Modifier,
+    size: Dp = 28.dp,
+    strokeWidth: Dp = 2.5.dp,
+) {
+    CircularProgressIndicator(
+        modifier = modifier.size(size),
+        color = iosBlue(),
+        strokeWidth = strokeWidth,
+    )
 }
 
 // MARK: - Choice Chip

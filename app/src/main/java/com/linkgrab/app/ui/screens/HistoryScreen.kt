@@ -23,7 +23,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -256,7 +255,7 @@ private fun HistoryCard(
             modifier = Modifier
                 .size(60.dp)
                 .clip(IOSCornerSmall)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(iosTertiaryBackground()),
         )
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(

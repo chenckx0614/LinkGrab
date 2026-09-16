@@ -28,10 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,8 +58,11 @@ import com.linkgrab.app.ui.theme.IOS26HeaderHeight
 import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
+import com.linkgrab.app.ui.theme.IOS27TextField
 import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosError
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosSeparator
@@ -146,20 +146,18 @@ fun MusicScreen(onBack: () -> Unit) {
 
                 // ---- 输入面板 ----
                 IOS26Panel(Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
+                    IOS27TextField(
                         value = input,
                         onValueChange = { input = it },
-                        label = { Text("酷我分享链接") },
-                        placeholder = { Text("https://kuwo.cn/play_detail/…") },
-                        singleLine = false,
+                        label = "酷我分享链接",
+                        placeholder = "https://kuwo.cn/play_detail/…",
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = false,
                     )
                     if (error != null) {
                         Text(
                             error.orEmpty(),
-                            color = MaterialTheme.colorScheme.error,
+                            color = iosError(),
                             fontSize = 13.sp,
                             modifier = Modifier.padding(top = 10.dp),
                         )

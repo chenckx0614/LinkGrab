@@ -40,11 +40,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -95,9 +93,11 @@ import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26Panel
+import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
 import com.linkgrab.app.ui.theme.IOSCornerSmall
 import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosGroupedBackground
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosTertiaryBackground
@@ -354,7 +354,7 @@ private fun ImageResultBody(
                         .fillMaxWidth()
                         .aspectRatio(1f)
                         .clip(IOSCornerSmall)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(iosTertiaryBackground())
                         .clickable { onImageClick(index) },
                 ) {
                     if (heavyContentReady) {
@@ -388,7 +388,7 @@ private fun ImageResultBody(
                             }
                             SmallRoundButton(
                                 onClick = { onDownloadImage(index, imageUrl) },
-                                bg = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                bg = iosGroupedBackground().copy(alpha = 0.85f),
                                 content = {
                                     Icon(Icons.Default.Download, contentDescription = "下载", modifier = Modifier.size(18.dp), tint = iosLabel())
                                 },
@@ -472,7 +472,7 @@ private fun VideoResultBody(
                         )
                     }
                     if (!heavyContentReady) {
-                        CircularProgressIndicator(color = iosBlue(), modifier = Modifier.size(28.dp))
+                        IOS27CircularProgressIndicator(modifier = Modifier, size = 28.dp)
                     } else {
                         PlayOverlay(modifier = Modifier.align(Alignment.Center))
                     }
@@ -488,7 +488,7 @@ private fun VideoResultBody(
                         .fillMaxWidth()
                         .heightIn(max = 320.dp)
                         .clip(IOSCornerSmall)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(iosTertiaryBackground()),
                 )
             }
         }

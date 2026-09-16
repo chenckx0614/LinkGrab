@@ -18,9 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +39,9 @@ import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS26StickyPage
+import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
+import com.linkgrab.app.ui.theme.IOS27TextField
+import com.linkgrab.app.ui.theme.iosError
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.viewmodel.MainViewModel
@@ -81,19 +81,17 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
                         fontSize = 14.sp,
                     )
                     Spacer(Modifier.height(16.dp))
-                    OutlinedTextField(
+                    IOS27TextField(
                         value = input,
                         onValueChange = { input = it },
-                        singleLine = false,
-                        label = { Text("分享链接") },
+                        label = "分享链接",
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = false,
                     )
                     AnimatedVisibility(state.error != null, enter = fadeIn(), exit = fadeOut()) {
                         Text(
                             state.error.orEmpty(),
-                            color = MaterialTheme.colorScheme.error,
+                            color = iosError(),
                             modifier = Modifier.padding(top = 10.dp),
                             fontSize = 14.sp,
                         )
@@ -105,7 +103,7 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
                     }
                     if (state.isLoading) {
                         Spacer(Modifier.height(14.dp))
-                        CircularProgressIndicator(modifier = Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.primary)
+                        IOS27CircularProgressIndicator(modifier = Modifier.padding(top = 4.dp))
                     }
                 }
             }
@@ -118,7 +116,7 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
                 if (platform != Platform.UNKNOWN) {
                     Text(
                         "已识别：${platform.displayName}",
-                        color = MaterialTheme.colorScheme.primary,
+                        color = iosBlue(),
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 4.dp),
                         fontSize = 14.sp,
