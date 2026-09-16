@@ -75,11 +75,16 @@ class UpdateChecker {
             Log.d(TAG, "Gitee latest: $latestVersion")
 
             if (isNewerVersion(latestVersion, currentVersion)) {
+                val apkUrl = release.assets
+                    .firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
+                    ?.browser_download_url
+                    ?: ""
                 UpdateResult.UpdateAvailable(
                     currentVersion = currentVersion,
                     latestVersion = latestVersion,
                     releaseNotes = releaseNotes,
-                    downloadUrl = GITEE_RELEASES_URL,
+                    htmlUrl = release.html_url ?: GITEE_RELEASES_URL,
+                    apkDownloadUrl = apkUrl,
                 )
             } else {
                 UpdateResult.UpToDate(currentVersion = currentVersion)
@@ -104,7 +109,11 @@ class UpdateChecker {
         val release = json.decodeFromString<GiteeRelease>(body)
         val latestVersion = release.tag_name.removePrefix("v")
         val releaseNotes = release.body ?: ""
-        val downloadUrl = release.html_url ?: "https://github.com/chenckx0614/LinkGrab/releases"
+        val htmlUrl = release.html_url ?: "https://github.com/chenckx0614/LinkGrab/releases"
+        val apkUrl = release.assets
+            .firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
+            ?.browser_download_url
+            ?: ""
 
         Log.d(TAG, "GitHub latest: $latestVersion")
 
@@ -113,7 +122,8 @@ class UpdateChecker {
                 currentVersion = currentVersion,
                 latestVersion = latestVersion,
                 releaseNotes = releaseNotes,
-                downloadUrl = downloadUrl,
+                htmlUrl = htmlUrl,
+                apkDownloadUrl = apkUrl,
             )
         } else {
             UpdateResult.UpToDate(currentVersion = currentVersion)
@@ -145,6 +155,14 @@ data class GiteeRelease(
     val body: String? = "",
     val html_url: String? = "",
     val published_at: String = "",
+    val assets: List<GiteeReleaseAsset> = emptyList(),
+)
+
+@Serializable
+data class GiteeReleaseAsset(
+    val name: String = "",
+    val browser_download_url: String = "",
+    val size: Long = 0,
 )
 
 sealed class UpdateResult {
@@ -152,7 +170,10 @@ sealed class UpdateResult {
         val currentVersion: String,
         val latestVersion: String,
         val releaseNotes: String,
-        val downloadUrl: String,
+        /**  release 页面，用于兜底打开浏览器 */
+        val htmlUrl: String,
+        /**  首个 .apk 资产的真实下载地址 */
+        val apkDownloadUrl: String,
     ) : UpdateResult()
 
     data class UpToDate(val currentVersion: String) : UpdateResult()

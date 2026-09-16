@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.2", "2026-09-16", listOf(
+        "应用内更新：检测到新版本后可直接在应用内下载 APK 并调起系统安装器，不再需要跳转到浏览器",
+        "更新对话框新增下载进度条；下载完成后自动显示「立即安装」，无 APK 资产时兜底打开 release 页面",
+        "Android 8+ 缺少「安装未知应用」权限时会先引导到系统设置授权，授权后可重试",
+    )),
     UpdateLogItem("2.3.1", "2026-09-15", listOf(
         "iOS 27 风格全局统一：新增 iOS 27 风格输入框、加载指示器与统一错误色，替换各页面残留的 Material3 OutlinedTextField 与 CircularProgressIndicator",
         "设置页「软件更新」行支持整行点击；工具箱、设置列表行增加 iOS 风格按压缩放反馈",

@@ -92,6 +92,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
@@ -115,9 +116,13 @@ import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
+import com.linkgrab.app.ui.theme.iosError
+import com.linkgrab.app.ui.theme.IOSGreen
 import com.linkgrab.app.ui.theme.iosGlass
 import com.linkgrab.app.ui.theme.iosGlassStroke
 import com.linkgrab.app.ui.theme.isInDarkTheme
+import com.linkgrab.app.update.UpdateDownloadStatus
+import com.linkgrab.app.update.UpdateResult
 import com.linkgrab.app.viewmodel.MainViewModel
 
 sealed class Screen(val route: String, val title: String) {
@@ -647,14 +652,16 @@ fun AppNavigation(
     }
 
     val updateResult by viewModel.updateResult.collectAsState()
+    val updateDownloadStatus by viewModel.updateDownloadStatus.collectAsState()
     updateResult?.let { result ->
-        if (result is com.linkgrab.app.update.UpdateResult.UpdateAvailable) {
+        if (result is UpdateResult.UpdateAvailable) {
             var showDialog by remember { mutableStateOf(true) }
             if (showDialog) {
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = {
                         showDialog = false
                         viewModel.dismissUpdate()
+                        viewModel.resetUpdateDownload()
                     },
                     title = { Text("发现新版本") },
                     text = {
@@ -664,23 +671,84 @@ fun AppNavigation(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(result.releaseNotes)
                             }
+                            when (val status = updateDownloadStatus) {
+                                is UpdateDownloadStatus.Downloading -> {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    LinearProgressIndicator(
+                                        progress = { status.progress / 100f },
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Text(
+                                        "${status.progress}%",
+                                        fontSize = 13.sp,
+                                        color = iosSecondaryLabel(),
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
+                                is UpdateDownloadStatus.Error -> {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        status.message,
+                                        color = iosError(),
+                                        fontSize = 13.sp,
+                                    )
+                                }
+                                is UpdateDownloadStatus.Downloaded -> {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        "下载完成，点击安装",
+                                        color = IOSGreen,
+                                        fontSize = 13.sp,
+                                    )
+                                }
+                                else -> Unit
+                            }
                         }
                     },
                     confirmButton = {
-                        Button(onClick = {
-                            try {
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(result.downloadUrl)))
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "无法打开链接", Toast.LENGTH_SHORT).show()
-                            }
-                            showDialog = false
-                            viewModel.dismissUpdate()
-                        }) { Text("去更新") }
+                        Button(
+                            onClick = {
+                                when (updateDownloadStatus) {
+                                    is UpdateDownloadStatus.Idle -> {
+                                        if (result.apkDownloadUrl.isNotBlank()) {
+                                            viewModel.downloadUpdate(result.apkDownloadUrl, result.latestVersion)
+                                        } else {
+                                            viewModel.openUpdateInBrowser(result.htmlUrl)
+                                            showDialog = false
+                                            viewModel.dismissUpdate()
+                                        }
+                                    }
+                                    is UpdateDownloadStatus.Downloaded -> {
+                                        val uri = (updateDownloadStatus as UpdateDownloadStatus.Downloaded).uri
+                                        viewModel.installUpdate(uri)
+                                    }
+                                    is UpdateDownloadStatus.Error -> {
+                                        viewModel.resetUpdateDownload()
+                                        viewModel.downloadUpdate(result.apkDownloadUrl, result.latestVersion)
+                                    }
+                                    else -> Unit
+                                }
+                            },
+                            enabled = updateDownloadStatus !is UpdateDownloadStatus.Downloading
+                                && updateDownloadStatus !is UpdateDownloadStatus.Installed,
+                        ) {
+                            Text(
+                                when (updateDownloadStatus) {
+                                    is UpdateDownloadStatus.Idle ->
+                                        if (result.apkDownloadUrl.isNotBlank()) "下载并安装" else "去浏览器下载"
+                                    is UpdateDownloadStatus.Downloading -> "下载中…"
+                                    is UpdateDownloadStatus.Downloaded -> "立即安装"
+                                    is UpdateDownloadStatus.Installed -> "已调起安装"
+                                    is UpdateDownloadStatus.Error -> "重试"
+                                }
+                            )
+                        }
                     },
                     dismissButton = {
                         Button(onClick = {
                             showDialog = false
                             viewModel.dismissUpdate()
+                            viewModel.resetUpdateDownload()
                         }) { Text("稍后") }
                     },
                 )

@@ -22,7 +22,10 @@ import com.linkgrab.app.data.repository.ParseRepository
 import com.linkgrab.app.data.repository.SettingsRepository
 import androidx.core.app.NotificationCompat
 import com.linkgrab.app.notification.LiveUpdatesHelper
+import android.net.Uri
 import com.linkgrab.app.update.UpdateChecker
+import com.linkgrab.app.update.UpdateDownloader
+import com.linkgrab.app.update.UpdateDownloadStatus
 import com.linkgrab.app.update.UpdateResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -84,6 +87,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val dataLoaded: StateFlow<Boolean> = _dataLoaded.asStateFlow()
 
     private val updateChecker = UpdateChecker()
+    private val updateDownloader = UpdateDownloader(application, viewModelScope)
+    val updateDownloadStatus = updateDownloader.status
 
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -235,6 +240,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissUpdate() { _updateResult.value = null }
+
+    fun downloadUpdate(apkUrl: String, version: String) {
+        updateDownloader.startDownload(apkUrl, version)
+    }
+
+    fun installUpdate(uri: Uri) {
+        updateDownloader.installApk(uri)
+    }
+
+    fun openUpdateInBrowser(url: String) {
+        updateDownloader.openInBrowser(url)
+    }
+
+    fun resetUpdateDownload() {
+        updateDownloader.reset()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        updateDownloader.cancel()
+    }
 
     // ==================== Download with Live Updates ====================
 
