@@ -22,10 +22,8 @@ import com.linkgrab.app.data.repository.ParseRepository
 import com.linkgrab.app.data.repository.SettingsRepository
 import androidx.core.app.NotificationCompat
 import com.linkgrab.app.notification.LiveUpdatesHelper
-import android.net.Uri
 import com.linkgrab.app.update.UpdateChecker
 import com.linkgrab.app.update.UpdateDownloader
-import com.linkgrab.app.update.UpdateDownloadStatus
 import com.linkgrab.app.update.UpdateResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
