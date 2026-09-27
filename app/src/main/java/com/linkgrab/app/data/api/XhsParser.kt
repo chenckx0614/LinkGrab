@@ -403,6 +403,16 @@ class XhsParser {
 
     // region: network
 
+    /**
+     * 展开分享短链（xhslink.com / xhslink.cn 等）为带 xsec_token 的笔记直链。
+     * 非短链输入原样返回。
+     *
+     * 实测：短链跳转这一步**不做 TLS 指纹检测**，任何 HTTP 客户端都能拿到
+     * 302 Location（诊断脚本里连被笔记页指纹墙拦截的 urllib 都能成功展开），
+     * 所以它是全链路里最可靠的一环，供 WebView 主通道先调用。
+     */
+    fun expandShareLink(url: String): String = expandShortLink(url)
+
     private fun expandShortLink(url: String): String {
         if (!shortLinkHost.containsMatchIn(url)) return url
         var current = url

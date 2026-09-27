@@ -108,20 +108,30 @@ class WebViewParser(private val context: Context) {
     // ==================== Xiaohongshu ====================
 
     private suspend fun parseXiaohongshu(url: String): Result<MediaResult> {
-        // Strategy 1: Direct HTTP (fast, ~1-2s)
-        val directResult = parseXiaohongshuDirect(url)
-        if (directResult.isSuccess) return directResult
+        // 每个通道的失败原因都收集起来，最终失败时一次性展示，
+        // 避免层层降级把真实原因掩盖（v2.3.5 之前的教训）。
+        val errors = mutableListOf<String>()
 
-        // Strategy 2: WebView 直接加载笔记页。小红书 Shield 会做 TLS 指纹检测，
-        // OkHttp 这类客户端会被 302 到登录页；WebView 的 Chromium 网络栈与真实
-        // 浏览器一致，可以正常拿到带 __INITIAL_STATE__ 的 SSR 笔记页。
-        runCatching { loadXhsNoteViaWebView(url) }.getOrNull()?.let {
-            return Result.success(it)
+        // Strategy 1: WebView 直载笔记页 —— Shield 的 TLS 指纹墙只拦 HTTP 库，
+        // WebView 的 Chromium 网络栈与真实浏览器一致，最可靠。
+        try {
+            loadXhsNoteViaWebView(url)?.let { return Result.success(it) }
+            errors.add("WebView直载: 未取得笔记数据")
+        } catch (e: Exception) {
+            errors.add("WebView直载: ${e.message}")
         }
 
+        // Strategy 2: Direct HTTP（部分网络环境下未被指纹墙拦截时可用，最快）
+        parseXiaohongshuDirect(url)
+            .onSuccess { return Result.success(it) }
+            .onFailure { errors.add("直连: ${it.message}") }
+
         // Strategy 3: 渲染后 DOM 刮图（不依赖 state 结构）
-        runCatching { loadXhsPageInWebView(url) }.getOrNull()?.let { result ->
-            if (result.isSuccess) return result
+        try {
+            loadXhsPageInWebView(url).onSuccess { return Result.success(it) }
+            errors.add("WebView渲染: 未刮到图片")
+        } catch (e: Exception) {
+            errors.add("WebView渲染: ${e.message}")
         }
 
         // Strategy 4: WebView with tools.emmmm.dev（历史方案，最后兜底）
@@ -142,9 +152,8 @@ class WebViewParser(private val context: Context) {
                 })()""".trimIndent()
             )
         } catch (e: Exception) {
-            val fallbackResult = parseXiaohongshuDirect(url)
-            if (fallbackResult.isSuccess) fallbackResult
-            else Result.failure(Exception("解析小红书失败: ${e.message}"))
+            errors.add("第三方: ${e.message}")
+            Result.failure(Exception("小红书各通道均失败 —— ${errors.joinToString("；")}"))
         }
     }
 
@@ -157,9 +166,26 @@ class WebViewParser(private val context: Context) {
      * WebView 的网络栈与用户浏览器相同，可以正常拿到 SSR 数据。
      * 桌面 UA 下 SSR HTML 自带完整笔记数据（图集 / 视频 / 实况都在 state 里）。
      */
+    /**
+     * 公开入口：WebView 直载小红书笔记页并解析（ParseRepository 的 XHS 主通道）。
+     *
+     * 前置关键步骤：先把短链展开成带 xsec_token 的笔记直链再交给 WebView。
+     * 短链跳转环节对部分客户端会「降级」到信息流页（什么笔记都拿不到），
+     * 而展开这一步用普通 HTTP 请求从未失败过——让 WebView 直接打开直链，
+     * 跳过这个不确定因素。
+     */
+    suspend fun parseXhsNoteInWebView(url: String): Result<MediaResult> {
+        val result = loadXhsNoteViaWebView(url)
+        return if (result != null) Result.success(result)
+        else Result.failure(Exception("内置浏览器未能取得笔记数据（可能被重定向到登录页或信息流页）"))
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private suspend fun loadXhsNoteViaWebView(url: String): MediaResult? =
         suspendCancellableCoroutine { cont ->
+            // 短链先展开，WebView 直接打开带令牌的笔记直链
+            val target = xhsNativeParser.expandShareLink(url)
+
             val handler = Handler(Looper.getMainLooper())
             var webView: WebView? = null
             var resumed = false
@@ -221,7 +247,7 @@ class WebViewParser(private val context: Context) {
                             handler.postDelayed({ tryExtract(view, 0) }, 800)
                         }
                     }
-                    loadUrl(url)
+                    loadUrl(target)
                 }
             }
 

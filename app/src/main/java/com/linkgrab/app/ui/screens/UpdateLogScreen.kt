@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.7", "2026-09-27", listOf(
+        "小红书解析方案重构：主通道改为「应用内展开短链 → 内置 WebView 直接打开带令牌的笔记直链」。诊断发现短链跳转环节对部分客户端会降级到信息流页（导致 WebView 拿不到笔记），而展开短链这一步用普通请求从未失败；先展开再打开，跳过这个不确定因素",
+        "解析失败时一次性展示所有通道的真实失败原因（WebView 直载 / 直连 / 渲染刮图 / 第三方），不再层层掩盖",
+        "实测确认：笔记页对非浏览器指纹客户端返回登录页（Shield 的 TLS 指纹检测），短链展开正常且带回 xsec_token；机器人 UA（Googlebot 等）也会被拦，第三方解析站 tools.emmmm.dev 已失效",
+    )),
     UpdateLogItem("2.3.6", "2026-09-27", listOf(
         "修复小红书笔记解析被安全拦截：小红书 Shield 会对网络客户端做 TLS 指纹检测，OkHttp 这类客户端访问笔记页会被 302 到登录页（实测 curl 能过、HTTP 库被拦）；现在改用内置 WebView（Chromium 网络栈，与真实浏览器指纹一致）直接加载笔记页并提取完整 SSR 数据，图集、视频、实况照片都能拿到",
         "诊断过程：直接复现 App 的请求链路，确认短链展开正常（302 带回 xsec_token）、笔记页 TLS 指纹被墙是唯一卡点",

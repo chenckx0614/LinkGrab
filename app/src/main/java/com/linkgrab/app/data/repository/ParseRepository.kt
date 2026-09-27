@@ -47,8 +47,22 @@ class ParseRepository(context: Context) {
                 if (native.isSuccess) native else parseWithFallback(native) { legacyParser.parse(cleanUrl) }
             }
             Platform.XIAOHONGSHU -> {
-                val native = xhsParser.parse(cleanUrl)
-                if (native.isSuccess) native else parseWithFallback(native) { legacyParser.parse(cleanUrl) }
+                // 小红书 Shield 会对 HTTP 库做 TLS 指纹检测（302 到登录页），
+                // 所以主通道换成：先展开短链（这一步任何客户端都可靠），
+                // 再用 WebView（Chromium 网络栈，指纹与真实浏览器一致）直载笔记页。
+                val noteUrl = xhsParser.expandShareLink(cleanUrl)
+
+                val viaWeb = runCatching { legacyParser.parseXhsNoteInWebView(noteUrl) }.getOrNull()
+                if (viaWeb != null && viaWeb.isSuccess) return viaWeb
+
+                // 兜底 1：原生 HTTP 直连（部分网络环境未被指纹墙拦截时可用，更快）
+                val native = xhsParser.parse(noteUrl)
+                if (native.isSuccess) return native
+
+                // 兜底 2：旧降级链（tools.emmmm.dev 等）
+                val legacy = runCatching { legacyParser.parse(noteUrl) }.getOrNull()
+                    ?: Result.failure(Exception("解析失败"))
+                if (legacy.isSuccess) legacy else native
             }
             Platform.UNKNOWN -> Result.failure(Exception("不支持的链接格式，请输入抖音或小红书链接"))
         }
