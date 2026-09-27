@@ -12,17 +12,27 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import okhttp3.Cookie
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import java.util.zip.CRC32
+import kotlin.random.Random
 
 /**
  * Native Xiaohongshu (RED) parser with multiple fallback strategies.
  *
  * The app has no X-S/X-T signature and no user Cookie, so it relies on the
- * public web page. XHS serves different HTML shells depending on UA, link age,
- * and whether the note requires login. This parser tries several extraction
- * methods in order and returns the first one that yields usable media.
+ * server-rendered page. 2026 年起小红书会向无 cookie 客户端返回验证壳页，
+ * 因此请求前必须先引导出 a1 / webId 匿名会话（见 anonymous session region），
+ * 且不能携带站内 Referer（会被当成 SPA 导航重定向到登录页）。
+ * 短链（xhslink.com/cn 等）必须完整展开，xsec_token 随跳转链传递。
+ *
+ * XHS serves different HTML shells depending on UA, link age, and whether the
+ * note requires login. This parser tries several extraction methods in order
+ * and returns the first one that yields usable media.
  *
  * Strategies:
  * 1. Desktop UA + window.__INITIAL_STATE__ (richest: title, author, live photos)
@@ -58,6 +68,7 @@ class XhsParser {
         RegexOption.DOT_MATCHES_ALL,
     )
     private val shortLinkHost = Regex("""https?://(?:www\.)?(xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)/""")
+    private val anchorPattern = Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
     suspend fun parse(shareUrl: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         runCatching {
@@ -310,28 +321,125 @@ class XhsParser {
 
     // endregion
 
+    // region: anonymous session
+    //
+    // 2026 年起小红书对不带 cookie 的请求经常返回验证壳页（而不是 SSR 内容），
+    // 必须像浏览器一样先引导出 a1 / webId 匿名会话再访问笔记页。
+    // 逻辑移植自 tamnd/xiaohongshu-cli（Apache-2.0）：先访问一次首页读
+    // Set-Cookie，IP 被墙拿不到 a1 时回退到本地合成。
+
+    private class AnonSession(val a1: String, val webId: String)
+
+    @Volatile
+    private var anonSession: AnonSession? = null
+
+    private fun anonSession(): AnonSession {
+        anonSession?.let { return it }
+        synchronized(this) {
+            anonSession?.let { return it }
+            return bootstrapSession().also { anonSession = it }
+        }
+    }
+
+    private fun bootstrapSession(): AnonSession {
+        try {
+            val request = Request.Builder().url("https://www.xiaohongshu.com/explore")
+                .header("User-Agent", desktopUa)
+                .header("Accept", "text/html,application/xhtml+xml")
+                .build()
+            noRedirectClient.newCall(request).execute().use { resp ->
+                var a1: String? = null
+                var webId: String? = null
+                for (cookie in Cookie.parseAll("https://www.xiaohongshu.com/".toHttpUrl(), resp.headers)) {
+                    when (cookie.name) {
+                        "a1" -> a1 = cookie.value
+                        "webId" -> webId = cookie.value
+                    }
+                }
+                if (!a1.isNullOrEmpty()) return AnonSession(a1, webId ?: md5Hex(a1))
+            }
+        } catch (_: Exception) {
+            // 首页引导失败不阻断解析，走合成 cookie 兜底
+        }
+        val a1 = syntheticA1()
+        return AnonSession(a1, md5Hex(a1))
+    }
+
+    /**
+     * 合成 a1：hex(毫秒时间戳) + 30 位 [a-z0-9] + "50000" + crc32 十进制，
+     * 截断到 52 位 —— 与浏览器实际下发的 a1 同构。
+     */
+    private fun syntheticA1(): String {
+        val tsHex = java.lang.Long.toHexString(System.currentTimeMillis())
+        val charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+        val random = buildString { repeat(30) { append(charset[Random.nextInt(charset.length)]) } }
+        val aPart = tsHex + random + "50000"
+        val crc = CRC32().apply { update(aPart.toByteArray()) }.value
+        val full = aPart + crc.toString()
+        return if (full.length > 52) full.substring(0, 52) else full
+    }
+
+    private fun md5Hex(value: String): String =
+        MessageDigest.getInstance("MD5").digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    private fun cookieHeader(): String {
+        val session = anonSession()
+        return "a1=${session.a1}; webId=${session.webId}"
+    }
+
+    // endregion
+
     // region: network
 
     private fun expandShortLink(url: String): String {
         if (!shortLinkHost.containsMatchIn(url)) return url
+        var current = url
+        var hops = 0
+        // 短链可能是一串 302，也可能返回 200 + HTML 跳转指针，逐跳解到非短链为止
+        while (shortLinkHost.containsMatchIn(current) && hops < 6) {
+            val next = nextHop(current) ?: break
+            if (next == current) break
+            current = next
+            hops++
+        }
+        return current
+    }
+
+    /**
+     * 一跳：优先 30x 的 location 头；没有的话（xhslink.cn 这类短链会返回
+     * 200 + `<a href="…">Found</a>` 跳转页，并不发 302）从页面里抠出第一个
+     * 指向小红书的链接。
+     */
+    private fun nextHop(url: String): String? {
         return try {
             val request = Request.Builder().url(url)
-                .header("User-Agent", mobileUa)
+                .header("User-Agent", desktopUa)
+                .header("Accept", "text/html,application/xhtml+xml")
                 .build()
             noRedirectClient.newCall(request).execute().use { resp ->
-                resp.header("location")?.takeIf { it.isNotBlank() } ?: url
+                val location = resp.header("location")?.takeIf { it.isNotBlank() }
+                if (location != null) {
+                    return resp.request.url.resolve(location)?.toString()
+                }
+                val body = resp.body?.string() ?: return null
+                anchorPattern.findAll(body)
+                    .mapNotNull { it.groupValues.getOrNull(1)?.trim()?.replace("&amp;", "&") }
+                    .firstOrNull { it.contains("xiaohongshu.com") }
             }
-        } catch (e: Exception) {
-            url
+        } catch (_: Exception) {
+            null
         }
     }
 
     private fun fetch(url: String, userAgent: String): Pair<String, String> {
         val request = Request.Builder().url(url)
             .header("User-Agent", userAgent)
-            .header("Referer", "https://www.xiaohongshu.com/")
+            // 注意不要带 Referer：站内 Referer 会被小红书当成 SPA 导航，
+            // 直接 302 到登录页（参考 xiaohongshu-cli 的抓取说明）。
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language", "zh-CN,zh;q=0.9")
+            .header("Cookie", cookieHeader())
             .build()
         client.newCall(request).execute().use { resp ->
             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")

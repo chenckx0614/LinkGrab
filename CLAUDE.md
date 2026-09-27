@@ -114,6 +114,7 @@ linkgrab/app/src/main/java/com/linkgrab/app/
 
 | 版本 | 日期 | 内容 |
 |------|------|------|
+| 2.3.4 | 2026-09-27 | 小红书解析修复：引导 a1/webId 匿名会话（被墙时本地合成）、移除站内 Referer（会被重定向到登录页）、短链展开支持 200+HTML 跳转指针并逐跳解析。会话逻辑移植自 tamnd/xiaohongshu-cli |
 | 2.3.3 | 2026-09-27 | 抖音清晰度修复：改从 video.bit_rate[] 按码率取最高画质档位（原来固定取 play_addr，恒定 720p）；优先 H.264；封面改用 origin_cover；修复 webp 过滤失效 |
 | 2.3.2 | 2026-09-16 | 应用内更新：检测到新版本后使用 DownloadManager 在后台下载 APK，下载完成后调起系统安装器；无 APK 资产时兜底打开 release 页面 |
 | 2.3.1 | 2026-09-15 | iOS 27 风格全局统一：新增 iOS 27 输入框/加载器/错误色，替换各页面残留 Material3 组件；列表行增加按压反馈 |

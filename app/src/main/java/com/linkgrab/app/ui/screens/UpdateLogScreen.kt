@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.4", "2026-09-27", listOf(
+        "修复小红书图片/笔记解析报错：小红书 2026 年起对不带 cookie 的请求返回验证壳页，现在解析前会先像浏览器一样引导出 a1 / webId 匿名会话（IP 被墙时本地合成同构的 a1 兜底）",
+        "移除站内 Referer 请求头：小红书会把带站内 Referer 的请求当作 SPA 导航重定向到登录页，这是此前解析失败的另一个原因",
+        "重写短链展开：xhslink.cn 这类短链并不返回 302，而是 200 + HTML 跳转指针页，现在会从页面里抠出真实地址，并支持逐跳展开短链链",
+        "会话引导与合成 a1 逻辑移植自开源项目 tamnd/xiaohongshu-cli（Apache-2.0）",
+    )),
     UpdateLogItem("2.3.3", "2026-09-27", listOf(
         "抖音视频清晰度修复：之前固定取 video.play_addr，而抖音这个字段恒定返回 720p 的播放地址，下载出来必然发虚；现在改为遍历 video.bit_rate[] 画质档位，按码率取最高一档",
         "画质档位优先选择 H.264：H.265 档位码率虽高但兼容性差，部分机型和系统相册播不出来，只有在全是 H.265 时才退而用之",
