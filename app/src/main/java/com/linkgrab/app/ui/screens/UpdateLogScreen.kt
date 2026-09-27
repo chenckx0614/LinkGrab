@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.3", "2026-09-27", listOf(
+        "抖音视频清晰度修复：之前固定取 video.play_addr，而抖音这个字段恒定返回 720p 的播放地址，下载出来必然发虚；现在改为遍历 video.bit_rate[] 画质档位，按码率取最高一档",
+        "画质档位优先选择 H.264：H.265 档位码率虽高但兼容性差，部分机型和系统相册播不出来，只有在全是 H.265 时才退而用之",
+        "抖音封面改为优先取 origin_cover 原图，之前取 cover 压缩小图，在结果页放大展示时明显发虚；图集封面直接使用第一张原图",
+        "修复 webp 过滤失效：抖音图片地址都带 ?biz_tag= 之类的查询串，原来的 endsWith(\".webp\") 永远为假，等于没筛；现在先去掉 query 再比后缀",
+    )),
     UpdateLogItem("2.3.2", "2026-09-16", listOf(
         "应用内更新：检测到新版本后可直接在应用内下载 APK 并调起系统安装器，不再需要跳转到浏览器",
         "更新对话框新增下载进度条；下载完成后自动显示「立即安装」，无 APK 资产时兜底打开 release 页面",

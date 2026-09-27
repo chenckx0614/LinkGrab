@@ -31,8 +31,10 @@ import java.util.concurrent.TimeUnit
  *    - images → images[] (album). `download_url_list` is preferred because it
  *      is the watermark-free original, otherwise `url_list` is used.
  *      Live Photos expose images[].video.play_addr.url_list[0].
- *    - video  → video.play_addr.url_list[0], rewrite `playwm` → `play`
- *               (watermark-free), then follow the 302 to the final mp4.
+ *    - video  → 高清档位来自 video.bit_rate[]（见 bestVideoUrl）。注意
+ *               video.play_addr 恒定是 `aweme/v1/play/?ratio=720p`，
+ *               直接用它下载必然是 720p 的糊图，只能当兜底。
+ *    - cover  → 优先 origin_cover（原图），cover 是压缩小图。
  *
  * No signature (X-Bogus / a_bogus) and no Cookie are required.
  */
@@ -92,16 +94,14 @@ class DouyinParser {
 
             if (images.isNotEmpty()) {
                 val title = data.string("desc")?.takeIf { it.isNotBlank() } ?: "抖音图文"
-                val cover = data["video"]?.jsonObject
-                    ?.get("cover")?.jsonObject
-                    ?.get("url_list")?.jsonArray
-                    ?.let { preferNonWebp(it) }
                 return@withContext Result.success(
                     MediaResult(
                         type = MediaType.IMAGE,
                         title = title,
                         images = images,
-                        coverUrl = cover ?: images.first(),
+                        // 图集封面直接用第一张原图：video.cover 只是压缩过的小图，
+                        // 在结果页放大展示时明显发虚。
+                        coverUrl = images.first(),
                         livePhotos = livePhotos,
                         source = "douyin",
                     )
@@ -109,20 +109,13 @@ class DouyinParser {
             }
 
             // ---- video (视频) ----
-            val playUrl = data["video"]?.jsonObject
-                ?.get("play_addr")?.jsonObject
-                ?.get("url_list")?.jsonArray
-                ?.let { firstUrl(it) }
-                ?.replace("playwm", "play")
+            val playUrl = bestVideoUrl(data)
                 ?: return@withContext Result.failure(Exception("未找到视频或图片地址"))
 
             // Follow the 302 to the final mp4 (西瓜视频 may have no redirect).
             val finalUrl = resolveRedirect(playUrl)
 
-            val cover = data["video"]?.jsonObject
-                ?.get("cover")?.jsonObject
-                ?.get("url_list")?.jsonArray
-                ?.let { preferNonWebp(it) }
+            val cover = bestCoverUrl(data)
 
             Result.success(
                 MediaResult(
@@ -172,14 +165,61 @@ class DouyinParser {
     private fun hasMedia(detail: JsonObject): Boolean {
         val album = detail["images"]?.jsonArray
         if (album != null && album.any { pickImageUrl(it.jsonObject) != null }) return true
-        return !videoPlayUrl(detail).isNullOrEmpty()
+        return !bestVideoUrl(detail).isNullOrEmpty()
     }
 
-    private fun videoPlayUrl(detail: JsonObject): String? =
-        detail["video"]?.jsonObject
-            ?.get("play_addr")?.jsonObject
-            ?.get("url_list")?.jsonArray
-            ?.let { firstUrl(it) }
+    /**
+     * 挑最高画质的视频地址。
+     *
+     * 抖音 web 接口里 `video.play_addr` 基本恒定是
+     * `.../aweme/v1/play/?video_id=…&ratio=720p` —— 也就是 720p，拿它下载必然糊。
+     * 真正分档的画质在 `video.bit_rate[]` 里，每档带自己的 `play_addr` 与 `bit_rate`，
+     * 这里按码率从高到低取一档。
+     *
+     * H.265 档位码率往往更高，但兼容性差（部分机型和系统相册播不出来），
+     * 所以优先在 H.264 档位里选最高码率，只有清一色 H.265 时才退而用之。
+     */
+    private fun bestVideoUrl(detail: JsonObject): String? {
+        val video = detail["video"]?.jsonObject ?: return null
+
+        val gears: List<Triple<String, Long, Boolean>> = video["bit_rate"]?.jsonArray
+            ?.mapNotNull { it as? JsonObject }
+            ?.mapNotNull { gear ->
+                val url = addrUrl(gear["play_addr"]) ?: return@mapNotNull null
+                val rate = (gear["bit_rate"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0L
+                val h265 = (gear["is_h265"] as? JsonPrimitive)?.contentOrNull
+                    ?.let { it == "1" || it.equals("true", ignoreCase = true) } ?: false
+                Triple(url, rate, h265)
+            }
+            .orEmpty()
+
+        val best = gears.filter { !it.third }.maxByOrNull { it.second }
+            ?: gears.maxByOrNull { it.second }
+        best?.first?.let { return it.replace("playwm", "play") }
+
+        // 没有 bit_rate 档位信息时退回默认地址（至少能拿到 720p，聊胜于无）。
+        val fallback = addrUrl(video["play_addr_h264"]) ?: addrUrl(video["play_addr"])
+        return fallback?.replace("playwm", "play")
+    }
+
+    /**
+     * 封面优先取 `origin_cover`（原图），`cover` / `dynamic_cover` 都是压缩小图，
+     * 在结果页放大展示时会明显发虚。
+     */
+    private fun bestCoverUrl(detail: JsonObject): String? {
+        val video = detail["video"]?.jsonObject ?: return null
+        for (key in listOf("origin_cover", "cover", "dynamic_cover")) {
+            val url = (video[key] as? JsonObject)
+                ?.get("url_list")?.jsonArray
+                ?.let { preferNonWebp(it) }
+            if (url != null && url.isNotEmpty()) return url
+        }
+        return null
+    }
+
+    /** `{ "url_list": [...] }` 这种结构的第一个可用地址。 */
+    private fun addrUrl(element: JsonElement?): String? =
+        (element as? JsonObject)?.get("url_list")?.jsonArray?.let { firstUrl(it) }
 
     /**
      * 旧的 HTML SSR 解析（iesdouyin 分享页 _ROUTER_DATA），作为接口失败时的兜底。
@@ -307,12 +347,22 @@ class DouyinParser {
             .firstOrNull { it.isNotEmpty() }
 
     /**
+     * 抖音的图片地址几乎都带查询串（`…~tplv-xxx.webp?biz_tag=…`），
+     * 所以判断 webp 必须先把 query / fragment 去掉再比后缀，
+     * 否则 `endsWith(".webp")` 永远为假，等于没筛。
+     */
+    private fun isWebp(url: String): Boolean {
+        val path = url.substringBefore('?').substringBefore('#')
+        return path.endsWith(".webp", ignoreCase = true)
+    }
+
+    /**
      * Prefer the first url_list entry that is not a .webp asset.
      */
     private fun preferNonWebp(urlList: JsonArray): String? {
         val urls = urlList.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
             .filter { it.isNotEmpty() }
-        return urls.firstOrNull { !it.endsWith(".webp") } ?: urls.firstOrNull()
+        return urls.firstOrNull { !isWebp(it) } ?: urls.firstOrNull()
     }
 
     /**
