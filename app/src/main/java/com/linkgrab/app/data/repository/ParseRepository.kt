@@ -44,14 +44,27 @@ class ParseRepository(context: Context) {
         return when (detectPlatform(cleanUrl)) {
             Platform.DOUYIN -> {
                 val native = douyinParser.parse(cleanUrl)
-                if (native.isSuccess) native else legacyParser.parse(cleanUrl)
+                if (native.isSuccess) native else parseWithFallback(native) { legacyParser.parse(cleanUrl) }
             }
             Platform.XIAOHONGSHU -> {
                 val native = xhsParser.parse(cleanUrl)
-                if (native.isSuccess) native else legacyParser.parse(cleanUrl)
+                if (native.isSuccess) native else parseWithFallback(native) { legacyParser.parse(cleanUrl) }
             }
             Platform.UNKNOWN -> Result.failure(Exception("不支持的链接格式，请输入抖音或小红书链接"))
         }
+    }
+
+    /**
+     * 降级链的失败信息往往更含糊（例如它自己的平台识别不认识某个短链变体时，
+     * 会报「不支持的链接格式」），而原生解析的错误才是真实原因。
+     * 降级也失败时优先回传原生错误，别让它被盖掉。
+     */
+    private inline fun parseWithFallback(
+        native: Result<MediaResult>,
+        legacy: () -> Result<MediaResult>,
+    ): Result<MediaResult> {
+        val fallback = legacy()
+        return if (fallback.isSuccess) fallback else native
     }
 
     /**

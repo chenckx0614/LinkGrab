@@ -39,7 +39,10 @@ class WebViewParser(private val context: Context) {
             """(https?://)?(www\.)?(douyin\.com|v\.douyin\.com|iesdouyin\.com)/.+"""
         )
         private val XIAOHONGSHU_PATTERN = Pattern.compile(
-            """(https?://)?(www\.)?(xiaohongshu\.com|xhslink\.com|xslink\.com)/.+"""
+            // 注意必须覆盖全部短链变体（xhslink.cn / xhs.link），否则 App 内复制的
+            // 分享文案会在降级链这里被误判成「不支持的链接格式」，把原生解析的
+            // 真实错误盖住。
+            """(https?://)?(www\.)?(xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)/.+"""
         )
     }
 

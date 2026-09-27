@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.5", "2026-09-27", listOf(
+        "修复「不支持的链接格式」误导性报错：降级解析链的平台识别漏了 xhslink.cn / xhs.link 短链变体，原生解析失败后会用它自己的「不支持」错误把真实原因盖住；现在降级也失败时优先展示原生解析的真实错误",
+        "短链解析加固：小红书会把「不认识的客户端」的分享短链降级跳到首页信息流而不是笔记页；现在展开短链时携带匿名会话并优先用移动端 UA，展开结果不是笔记页时退回原始短链直接跟重定向",
+        "兼容分享文案把短链从中间折行的情况（https://xhslink.cn/o 换行 /xxxx），提取链接前先拼回断点",
+    )),
     UpdateLogItem("2.3.4", "2026-09-27", listOf(
         "修复小红书图片/笔记解析报错：小红书 2026 年起对不带 cookie 的请求返回验证壳页，现在解析前会先像浏览器一样引导出 a1 / webId 匿名会话（IP 被墙时本地合成同构的 a1 兜底）",
         "移除站内 Referer 请求头：小红书会把带站内 Referer 的请求当作 SPA 导航重定向到登录页，这是此前解析失败的另一个原因",

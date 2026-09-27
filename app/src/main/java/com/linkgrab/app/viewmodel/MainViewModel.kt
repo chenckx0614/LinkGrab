@@ -167,8 +167,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun extractUrls(text: String): List<String> {
+        // 分享文案有时会把短链从中间折行（如 https://xhslink.cn/o ⏎ /ANysiW4TgYR），
+        // 先把「前一行以字母数字结尾 + 换行 + 下一行以 / 开头」的断点拼回去再抽链接。
+        val glued = text.replace(Regex("""(?<=[A-Za-z0-9])\r?\n(?=/)"""), "")
         val urlPattern = """https?://[^\s<>"{}|\\^`\[\]]+""".toRegex()
-        return urlPattern.findAll(text).map { it.value }.distinct().toList()
+        return urlPattern.findAll(glued).map { it.value }.distinct().toList()
     }
 
     private fun parseSingleUrl(url: String) {

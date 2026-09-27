@@ -70,13 +70,22 @@ class XhsParser {
     private val shortLinkHost = Regex("""https?://(?:www\.)?(xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)/""")
     private val anchorPattern = Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE)
 
+    /** 笔记页地址：/explore/{24位id} 或 /discovery/item/{24位id} */
+    private val notePathPattern = Regex("""xiaohongshu\.com/(?:explore|discovery/item)/([0-9a-fA-F]{24})""")
+
     suspend fun parse(shareUrl: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         runCatching {
             // 1) Short links must be expanded first: the canonical page needs xsec_token.
             val target = expandShortLink(shareUrl)
 
+            // 展开结果必须落在笔记页（/explore/{id} 或 /discovery/item/{id}）。
+            // 小红书对「不认识的客户端」会把短链降级跳到 /explore 信息流页，
+            // 这时候别拿信息流页去解析，退回原始短链直接跟重定向再试。
+            val resolvedTarget =
+                if (target == shareUrl || notePathPattern.containsMatchIn(target)) target else shareUrl
+
             // 2) Try desktop first (fastest, most complete)
-            val (finalUrl, desktopHtml) = fetch(target, desktopUa)
+            val (finalUrl, desktopHtml) = fetch(resolvedTarget, desktopUa)
             if (isNotFoundPage(finalUrl, desktopHtml)) {
                 return@withContext Result.failure(
                     Exception("链接已失效或缺少安全令牌(xsec_token)，请在小红书 App 中重新分享该笔记")
@@ -86,7 +95,7 @@ class XhsParser {
             parseFromHtml(desktopHtml)?.let { return@withContext Result.success(it) }
 
             // 3) Desktop didn't yield content. Try mobile rendering.
-            val (_, mobileHtml) = fetch(target, mobileUa)
+            val (_, mobileHtml) = fetch(resolvedTarget, mobileUa)
             parseFromHtml(mobileHtml)?.let { return@withContext Result.success(it) }
 
             // 4) Last resort: any xhscdn image we can scrape from the page
@@ -410,12 +419,24 @@ class XhsParser {
      * 一跳：优先 30x 的 location 头；没有的话（xhslink.cn 这类短链会返回
      * 200 + `<a href="…">Found</a>` 跳转页，并不发 302）从页面里抠出第一个
      * 指向小红书的链接。
+     *
+     * 短链的解析对客户端环境敏感：对「不认识的客户端」小红书会把它降级跳到
+     * /explore 信息流页而不是笔记页。分享短链生来是给手机端开的，所以先用
+     * 移动 UA + 匿名会话 cookie 试，再用桌面 UA 试一遍。
      */
     private fun nextHop(url: String): String? {
+        for (userAgent in listOf(mobileUa, desktopUa)) {
+            tryHop(url, userAgent)?.let { return it }
+        }
+        return null
+    }
+
+    private fun tryHop(url: String, userAgent: String): String? {
         return try {
             val request = Request.Builder().url(url)
-                .header("User-Agent", desktopUa)
+                .header("User-Agent", userAgent)
                 .header("Accept", "text/html,application/xhtml+xml")
+                .header("Cookie", cookieHeader())
                 .build()
             noRedirectClient.newCall(request).execute().use { resp ->
                 val location = resp.header("location")?.takeIf { it.isNotBlank() }
