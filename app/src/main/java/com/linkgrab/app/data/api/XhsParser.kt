@@ -87,8 +87,10 @@ class XhsParser {
             // 2) Try desktop first (fastest, most complete)
             val (finalUrl, desktopHtml) = fetch(resolvedTarget, desktopUa)
             if (isNotFoundPage(finalUrl, desktopHtml)) {
+                // 典型原因：Shield 的 TLS 指纹检测把 HTTP 客户端 302 到登录页
+                // （ParseRepository 会让 WebView 通道接手重试，这里说明真实原因）
                 return@withContext Result.failure(
-                    Exception("链接已失效或缺少安全令牌(xsec_token)，请在小红书 App 中重新分享该笔记")
+                    Exception("小红书网页端对当前网络环境做了安全拦截，未能获取笔记内容；请稍后重试或在 App 内重新分享")
                 )
             }
 
@@ -484,11 +486,25 @@ class XhsParser {
             ?.trimStart('=')
             ?.trim()
             ?: return null
+        return parseStateObject(raw)
+    }
+
+    /**
+     * 从 `window.__INITIAL_STATE__` 的原始字面量解析（供 WebView 通道复用：
+     * 浏览器端把 script 文本抠出来传回来，会带 undefined 字面量）。
+     */
+    fun parseStateLiteral(rawLiteral: String): MediaResult? {
+        val root = parseStateObject(rawLiteral) ?: return null
+        return parseInitialStateRoot(root)?.takeIf { it.hasContent }
+    }
+
+    private fun parseStateObject(raw: String): JsonObject? {
+        val normalized = raw.trim().trimStart('=').trim().trimEnd(';').trim()
 
         val candidates = buildList {
-            add(undefinedValue.replace(raw, "null"))
-            val aggressive = raw.replace(Regex("""\bundefined\b"""), "null")
-            if (aggressive != raw) add(aggressive)
+            add(undefinedValue.replace(normalized, "null"))
+            val aggressive = normalized.replace(Regex("""\bundefined\b"""), "null")
+            if (aggressive != normalized) add(aggressive)
         }
 
         for (candidate in candidates) {

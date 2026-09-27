@@ -12,6 +12,7 @@ import com.linkgrab.app.data.model.Platform
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -21,11 +22,14 @@ import kotlin.coroutines.resume
 /**
  * Multi-strategy parser:
  * - Douyin: Ucmao API → Direct HTML → WebView(peanutdl)
- * - Xiaohongshu: Direct HTML (fast, 1-2s) → WebView(tools.emmmm.dev, fallback)
+ * - Xiaohongshu: Direct HTML (fast, 1-2s) → WebView 直载笔记页（TLS 指纹墙兜底）
+ *   → WebView(tools.emmmm.dev, legacy fallback)
  */
 class WebViewParser(private val context: Context) {
 
     private val ucmaoParser = UcmaoParser()
+    private val xhsNativeParser = XhsParser()
+    private val json = Json { ignoreUnknownKeys = true }
 
     private val httpClient = OkHttpClient.Builder()
         .followRedirects(true)
@@ -108,7 +112,19 @@ class WebViewParser(private val context: Context) {
         val directResult = parseXiaohongshuDirect(url)
         if (directResult.isSuccess) return directResult
 
-        // Strategy 2: WebView with tools.emmmm.dev
+        // Strategy 2: WebView 直接加载笔记页。小红书 Shield 会做 TLS 指纹检测，
+        // OkHttp 这类客户端会被 302 到登录页；WebView 的 Chromium 网络栈与真实
+        // 浏览器一致，可以正常拿到带 __INITIAL_STATE__ 的 SSR 笔记页。
+        runCatching { loadXhsNoteViaWebView(url) }.getOrNull()?.let {
+            return Result.success(it)
+        }
+
+        // Strategy 3: 渲染后 DOM 刮图（不依赖 state 结构）
+        runCatching { loadXhsPageInWebView(url) }.getOrNull()?.let { result ->
+            if (result.isSuccess) return result
+        }
+
+        // Strategy 4: WebView with tools.emmmm.dev（历史方案，最后兜底）
         return try {
             parseWithWebView(
                 pageUrl = "https://tools.emmmm.dev/xiaohongshu?lang=zh-Hans",
@@ -131,6 +147,90 @@ class WebViewParser(private val context: Context) {
             else Result.failure(Exception("解析小红书失败: ${e.message}"))
         }
     }
+
+    /**
+     * 用 WebView（Chromium 网络栈，TLS 指纹与真实浏览器一致）直接加载笔记页，
+     * 从页面里抠出 `window.__INITIAL_STATE__` 的原始字面量，交给 XhsParser 解析。
+     *
+     * 背景：小红书 Shield 会做 TLS 指纹检测，OkHttp / HttpURLConnection 这类
+     * 客户端访问笔记页会被 302 到登录页（实测 curl 能过、urllib 被拦），
+     * WebView 的网络栈与用户浏览器相同，可以正常拿到 SSR 数据。
+     * 桌面 UA 下 SSR HTML 自带完整笔记数据（图集 / 视频 / 实况都在 state 里）。
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    private suspend fun loadXhsNoteViaWebView(url: String): MediaResult? =
+        suspendCancellableCoroutine { cont ->
+            val handler = Handler(Looper.getMainLooper())
+            var webView: WebView? = null
+            var resumed = false
+
+            val extractStateJs = """
+                (function(){
+                  try {
+                    var m = document.documentElement.innerHTML.match(/window\.__INITIAL_STATE__\s*=\s*([\s\S]*?)<\/script>/);
+                    if (m && m[1]) return m[1];
+                  } catch (e) {}
+                  return null;
+                })()
+            """.trimIndent()
+
+            val timeout = Runnable {
+                if (!resumed && cont.isActive) {
+                    resumed = true
+                    handler.post { webView?.destroy() }
+                    cont.resume(null)
+                }
+            }
+            handler.postDelayed(timeout, 15_000)
+
+            fun finish(result: MediaResult?) {
+                if (resumed || !cont.isActive) return
+                resumed = true
+                handler.removeCallbacks(timeout)
+                handler.post { webView?.destroy() }
+                cont.resume(result)
+            }
+
+            fun tryExtract(view: WebView?, attempt: Int) {
+                if (resumed || view == null) return
+                view.evaluateJavascript(extractStateJs) { encoded ->
+                    val rawLiteral = encoded?.takeIf { it != "null" }?.let {
+                        runCatching { json.decodeFromString<String>(it) }.getOrNull()
+                            ?: it.trim().removeSurrounding("\"")
+                    }
+                    val parsed = rawLiteral?.let { xhsNativeParser.parseStateLiteral(it) }
+                    if (parsed != null) {
+                        finish(parsed)
+                    } else if (attempt < 5) {
+                        handler.postDelayed({ tryExtract(view, attempt + 1) }, 700)
+                    } else {
+                        finish(null)
+                    }
+                }
+            }
+
+            handler.post {
+                webView = WebView(context).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.userAgentString =
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView?, loadedUrl: String?) {
+                            super.onPageFinished(view, loadedUrl)
+                            handler.postDelayed({ tryExtract(view, 0) }, 800)
+                        }
+                    }
+                    loadUrl(url)
+                }
+            }
+
+            cont.invokeOnCancellation {
+                resumed = true
+                handler.removeCallbacks(timeout)
+                handler.post { webView?.destroy() }
+            }
+        }
 
     /**
      * 直接在 WebView 中加载小红书页面，等待 JS 渲染后提取图片

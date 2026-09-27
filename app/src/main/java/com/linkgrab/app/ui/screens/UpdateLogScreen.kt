@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.6", "2026-09-27", listOf(
+        "修复小红书笔记解析被安全拦截：小红书 Shield 会对网络客户端做 TLS 指纹检测，OkHttp 这类客户端访问笔记页会被 302 到登录页（实测 curl 能过、HTTP 库被拦）；现在改用内置 WebView（Chromium 网络栈，与真实浏览器指纹一致）直接加载笔记页并提取完整 SSR 数据，图集、视频、实况照片都能拿到",
+        "诊断过程：直接复现 App 的请求链路，确认短链展开正常（302 带回 xsec_token）、笔记页 TLS 指纹被墙是唯一卡点",
+        "原「链接已失效或缺少安全令牌」的报错文案改为真实原因描述（网页端安全拦截）",
+    )),
     UpdateLogItem("2.3.5", "2026-09-27", listOf(
         "修复「不支持的链接格式」误导性报错：降级解析链的平台识别漏了 xhslink.cn / xhs.link 短链变体，原生解析失败后会用它自己的「不支持」错误把真实原因盖住；现在降级也失败时优先展示原生解析的真实错误",
         "短链解析加固：小红书会把「不认识的客户端」的分享短链降级跳到首页信息流而不是笔记页；现在展开短链时携带匿名会话并优先用移动端 UA，展开结果不是笔记页时退回原始短链直接跟重定向",
