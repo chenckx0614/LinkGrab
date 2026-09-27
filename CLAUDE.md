@@ -114,6 +114,7 @@ linkgrab/app/src/main/java/com/linkgrab/app/
 
 | 版本 | 日期 | 内容 |
 |------|------|------|
+| 2.3.9 | 2026-09-27 | 小红书主通道改为 Cronet（Chromium 网络栈 = Chrome 同源 TLS 指纹），照搬高星项目 JoeanAmier/XHS-Downloader 的方案（curl_cffi impersonate=chrome* 的等价实现）；通道顺序 Cronet→WebView→直连→旧链 |
 | 2.3.8 | 2026-09-27 | 紧急修复：v2.3.7 的小红书主通道在主线程协程里调阻塞网络请求（NetworkOnMainThreadException），整条链路从未执行；XHS 分支移到 IO 线程；失败时展示双通道原因 |
 | 2.3.7 | 2026-09-27 | 小红书方案重构：主通道 = 展开短链（OkHttp，从未失败）→ WebView 直载笔记直链（跳过短链跳转的降级不确定性）；失败时聚合展示各通道真实错误 |
 | 2.3.6 | 2026-09-27 | 小红书解析核心修复：Shield 的 TLS 指纹检测会拦截 HTTP 库客户端（302 到登录页），新增 WebView 直载笔记页通道（Chromium 指纹可过）提取 SSR 数据；短链展开本身正常（带回 xsec_token） |

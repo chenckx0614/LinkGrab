@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.9", "2026-09-27", listOf(
+        "小红书解析改用高星开源项目 JoeanAmier/XHS-Downloader 的方案：它的核心就是用 Chrome 同源的 TLS 指纹发普通 GET 请求读取笔记页（curl_cffi impersonate=chrome*），不签名、不需要 Cookie。Android 上没有 curl_cffi，等价实现是 Cronet（Google 官方的 Chromium 网络栈，TLS 与真实 Chrome 一致），现已接入并作为主通道",
+        "小红书解析通道顺序：Cronet（Chrome TLS）→ WebView → 直连 → 旧降级链，全部失败时会展示各通道原因",
+        "新增 Cronet 依赖（约增加几 MB 安装包体积）",
+    )),
     UpdateLogItem("2.3.8", "2026-09-27", listOf(
         "紧急修复：v2.3.7 重构的小红书主通道实际从未运行——展开短链是阻塞网络请求，却在主线程协程里调用，Android 直接抛 NetworkOnMainThreadException，整条链路一步都没执行；现已将整个小红书分支移到 IO 线程",
         "解析失败时同时展示 WebView 主通道与直连通道两个失败原因，方便定位问题",

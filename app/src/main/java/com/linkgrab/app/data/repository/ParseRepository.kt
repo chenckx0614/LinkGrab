@@ -1,6 +1,7 @@
 package com.linkgrab.app.data.repository
 
 import android.content.Context
+import com.linkgrab.app.data.api.CronetFetcher
 import com.linkgrab.app.data.api.DouyinParser
 import com.linkgrab.app.data.api.WebViewParser
 import com.linkgrab.app.data.api.XhsParser
@@ -22,6 +23,7 @@ class ParseRepository(context: Context) {
     private val douyinParser = DouyinParser()
     private val xhsParser = XhsParser()
     private val legacyParser = WebViewParser(context)
+    private val cronetFetcher = CronetFetcher(context)
 
     /**
      * Detect which platform the URL belongs to.
@@ -50,27 +52,40 @@ class ParseRepository(context: Context) {
             }
             Platform.XIAOHONGSHU -> withContext(Dispatchers.IO) {
                 // 注意：整个 XHS 分支必须在 IO 线程 —— expandShareLink 是阻塞
-                // 网络请求，在主线程协程里直接调用会抛 NetworkOnMainThreadException，
-                // 导致整条链路一步都没跑就失败（v2.3.7 的实际线上表现）。
-                // 小红书 Shield 会对 HTTP 库做 TLS 指纹检测（302 到登录页），
-                // 主通道：先展开短链（这一步任何客户端都可靠），
-                // 再用 WebView（Chromium 网络栈，指纹与真实浏览器一致）直载笔记页。
+                // 网络请求，在主线程协程里调用会抛 NetworkOnMainThreadException。
+                //
+                // 小红书 Shield 按 TLS 指纹识别客户端：OkHttp / HttpURLConnection
+                // 访问笔记页会被 302 到登录页。主通道采用高星项目
+                // JoeanAmier/XHS-Downloader 的方案：用 Chrome 同源的 TLS 指纹
+                // （其 curl_cffi impersonate="chrome*" / Android 侧的 Cronet）
+                // 直接 GET 笔记页，不签名、不需要 Cookie，从 SSR 取数据。
                 val noteUrl = xhsParser.expandShareLink(cleanUrl)
 
+                // 主通道：Cronet（Chrome TLS）直取笔记页 HTML → 复用同一份 SSR 解析
+                val viaCronet = runCatching {
+                    cronetFetcher.getHtml(
+                        noteUrl,
+                        cronetFetcher.browserHeaders(CronetFetcher.DESKTOP_CHROME_UA),
+                    )?.let { html -> xhsParser.parseHtml(html) }
+                }.getOrNull()
+                if (viaCronet != null) return@withContext Result.success(viaCronet)
+
+                // 兜底 1：WebView 直载笔记页（同样走 Chromium 网络栈，但会执行 JS）
                 val viaWeb = runCatching { legacyParser.parseXhsNoteInWebView(noteUrl) }.getOrNull()
                 if (viaWeb != null && viaWeb.isSuccess) return@withContext viaWeb
 
-                // 兜底 1：原生 HTTP 直连（部分网络环境未被指纹墙拦截时可用，更快）
+                // 兜底 2：OkHttp 直连（部分网络环境未被指纹墙拦截时可用，更快）
                 val native = xhsParser.parse(noteUrl)
                 if (native.isSuccess) return@withContext native
 
-                // 兜底 2：旧降级链（tools.emmmm.dev 等）
+                // 兜底 3：旧降级链
                 val legacy = runCatching { legacyParser.parse(noteUrl) }.getOrNull()
                     ?: Result.failure(Exception("解析失败"))
                 if (legacy.isSuccess) legacy
                 else Result.failure(Exception(
-                    // 主通道（WebView）与直连的失败原因都展示，方便定位
-                    "小红书解析失败：${viaWeb?.exceptionOrNull()?.message ?: "WebView通道无结果"}；直连：${native.exceptionOrNull()?.message ?: "无结果"}"
+                    "小红书解析失败：Cronet通道无结果（${if (cronetFetcher.available) "已启用" else "不可用"}）；" +
+                        "WebView通道：${viaWeb?.exceptionOrNull()?.message ?: "无结果"}；" +
+                        "直连：${native.exceptionOrNull()?.message ?: "无结果"}"
                 ))
             }
             Platform.UNKNOWN -> Result.failure(Exception("不支持的链接格式，请输入抖音或小红书链接"))

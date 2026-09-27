@@ -13,8 +13,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 242
-        versionName = "2.3.8"
+        versionCode = 243
+        versionName = "2.3.9"
     }
 
     buildTypes {
@@ -70,6 +70,12 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("io.github.kyant0:backdrop:2.0.0")
     implementation("io.github.kyant0:shapes:1.2.0")
+
+    // Cronet = Chromium 网络栈（TLS 指纹与真实 Chrome 一致）。
+    // 小红书 Shield 会按 TLS 指纹拦截普通 HTTP 客户端，高星项目
+    // JoeanAmier/XHS-Downloader 用 curl_cffi 的 impersonate="chrome*" 绕过，
+    // Android 上的等价方案就是 Cronet。
+    implementation("org.chromium.net:cronet-embedded:500.0.1")
 
     // Navigation
     implementation(libs.androidx.navigation.compose)

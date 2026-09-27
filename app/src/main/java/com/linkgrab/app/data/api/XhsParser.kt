@@ -500,6 +500,12 @@ class XhsParser {
     }
 
     /**
+     * 供 Cronet / WebView 等外部通道复用：直接解析拿到的笔记页 HTML。
+     * OkHttp 被 TLS 指纹墙拦截时，这些通道负责把 HTML 取回来，解析逻辑同一份。
+     */
+    fun parseHtml(html: String): MediaResult? = parseFromHtml(html)
+
+    /**
      * 从 `window.__INITIAL_STATE__` 的原始字面量解析（供 WebView 通道复用：
      * 浏览器端把 script 文本抠出来传回来，会带 undefined 字面量）。
      */
