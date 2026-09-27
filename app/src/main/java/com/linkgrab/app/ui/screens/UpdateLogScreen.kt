@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.3.8", "2026-09-27", listOf(
+        "紧急修复：v2.3.7 重构的小红书主通道实际从未运行——展开短链是阻塞网络请求，却在主线程协程里调用，Android 直接抛 NetworkOnMainThreadException，整条链路一步都没执行；现已将整个小红书分支移到 IO 线程",
+        "解析失败时同时展示 WebView 主通道与直连通道两个失败原因，方便定位问题",
+    )),
     UpdateLogItem("2.3.7", "2026-09-27", listOf(
         "小红书解析方案重构：主通道改为「应用内展开短链 → 内置 WebView 直接打开带令牌的笔记直链」。诊断发现短链跳转环节对部分客户端会降级到信息流页（导致 WebView 拿不到笔记），而展开短链这一步用普通请求从未失败；先展开再打开，跳过这个不确定因素",
         "解析失败时一次性展示所有通道的真实失败原因（WebView 直载 / 直连 / 渲染刮图 / 第三方），不再层层掩盖",

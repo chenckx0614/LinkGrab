@@ -6,6 +6,8 @@ import com.linkgrab.app.data.api.WebViewParser
 import com.linkgrab.app.data.api.XhsParser
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.Platform
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Parse pipeline (v2):
@@ -46,23 +48,30 @@ class ParseRepository(context: Context) {
                 val native = douyinParser.parse(cleanUrl)
                 if (native.isSuccess) native else parseWithFallback(native) { legacyParser.parse(cleanUrl) }
             }
-            Platform.XIAOHONGSHU -> {
+            Platform.XIAOHONGSHU -> withContext(Dispatchers.IO) {
+                // 注意：整个 XHS 分支必须在 IO 线程 —— expandShareLink 是阻塞
+                // 网络请求，在主线程协程里直接调用会抛 NetworkOnMainThreadException，
+                // 导致整条链路一步都没跑就失败（v2.3.7 的实际线上表现）。
                 // 小红书 Shield 会对 HTTP 库做 TLS 指纹检测（302 到登录页），
-                // 所以主通道换成：先展开短链（这一步任何客户端都可靠），
+                // 主通道：先展开短链（这一步任何客户端都可靠），
                 // 再用 WebView（Chromium 网络栈，指纹与真实浏览器一致）直载笔记页。
                 val noteUrl = xhsParser.expandShareLink(cleanUrl)
 
                 val viaWeb = runCatching { legacyParser.parseXhsNoteInWebView(noteUrl) }.getOrNull()
-                if (viaWeb != null && viaWeb.isSuccess) return viaWeb
+                if (viaWeb != null && viaWeb.isSuccess) return@withContext viaWeb
 
                 // 兜底 1：原生 HTTP 直连（部分网络环境未被指纹墙拦截时可用，更快）
                 val native = xhsParser.parse(noteUrl)
-                if (native.isSuccess) return native
+                if (native.isSuccess) return@withContext native
 
                 // 兜底 2：旧降级链（tools.emmmm.dev 等）
                 val legacy = runCatching { legacyParser.parse(noteUrl) }.getOrNull()
                     ?: Result.failure(Exception("解析失败"))
-                if (legacy.isSuccess) legacy else native
+                if (legacy.isSuccess) legacy
+                else Result.failure(Exception(
+                    // 主通道（WebView）与直连的失败原因都展示，方便定位
+                    "小红书解析失败：${viaWeb?.exceptionOrNull()?.message ?: "WebView通道无结果"}；直连：${native.exceptionOrNull()?.message ?: "无结果"}"
+                ))
             }
             Platform.UNKNOWN -> Result.failure(Exception("不支持的链接格式，请输入抖音或小红书链接"))
         }
