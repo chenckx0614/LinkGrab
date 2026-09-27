@@ -93,6 +93,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    private companion object {
+        /** 下载 CDN 媒体时使用的浏览器 UA（原来那个缺少 Chrome 尾巴，容易被 CDN 拒）。 */
+        const val BROWSER_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    }
+
     private var downloadJobCount = 0
 
     init {
@@ -298,7 +304,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun downloadVideo(context: Context, url: String, filename: String) {
+    fun downloadVideo(context: Context, url: String, filename: String) =
+        downloadVideo(context, listOf(url), filename)
+
+    /**
+     * 下载视频，支持**多个候选地址按顺序回退**。
+     *
+     * 实况照片的视频 CDN 地址常带时效签名，首选地址可能 403 / 已过期；
+     * 解析阶段已把 backupUrls 一并收下，这里逐个试。
+     */
+    fun downloadVideo(context: Context, urls: List<String>, filename: String) {
+        val candidates = urls.filter { it.isNotBlank() }.distinct()
+        if (candidates.isEmpty()) {
+            _downloadState.value = DownloadState.Error("没有可用的视频地址")
+            return
+        }
         val jobId = ++downloadJobCount
         viewModelScope.launch {
             _downloadState.value = DownloadState.Downloading(0)
@@ -307,51 +327,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             try {
                 withContext(Dispatchers.IO) {
-                    val request = Request.Builder().url(url)
-                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7)")
-                        .build()
-                    val response = httpClient.newCall(request).execute()
-                    val body = response.body ?: throw Exception("Empty response")
-                    val contentLength = body.contentLength()
-                    val inputStream = body.byteStream()
-
-                    val contentValues = ContentValues().apply {
-                        put(MediaStore.Video.Media.DISPLAY_NAME, filename)
-                        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/LinkGrab")
-                            put(MediaStore.Video.Media.IS_PENDING, 1)
+                    var lastError: Exception? = null
+                    for (candidate in candidates) {
+                        try {
+                            fetchAndSaveVideo(context, candidate, filename, jobId)
+                            lastError = null
+                            break
+                        } catch (e: Exception) {
+                            lastError = e
                         }
                     }
-                    val resolver = context.contentResolver
-                    val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
-                        ?: throw Exception("Failed to create file")
-
-                    resolver.openOutputStream(uri)?.use { out ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalRead = 0L
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            out.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-                            if (contentLength > 0) {
-                                val progress = ((totalRead * 100) / contentLength).toInt()
-                                if (downloadJobCount == jobId) {
-                                    _downloadState.value = DownloadState.Downloading(progress)
-                                    if (_liveUpdatesEnabled.value) {
-                                        liveUpdatesHelper.updateProgress(title = "LinkGrab", content = "下载视频: $progress%", progress = progress, maxProgress = 100)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    inputStream.close()
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        contentValues.clear()
-                        contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
-                        resolver.update(uri, contentValues, null, null)
-                    }
+                    lastError?.let { throw it }
                 }
                 if (downloadJobCount == jobId) {
                     _downloadState.value = DownloadState.Success
@@ -360,8 +346,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 if (downloadJobCount == jobId) {
                     _downloadState.value = DownloadState.Error(e.message ?: "Download failed")
-                    showDownloadCompleteNotification(context, "下载失败: ${e.message}", isVideo = false)
+                    showDownloadCompleteNotification(context, "下载失败: ${e.message}", isVideo = true)
                 }
+            }
+        }
+    }
+
+    /**
+     * 真正下载并写入相册。失败时抛异常（HTTP 状态码会带进 message），
+     * 交给上层决定是否换下一个候选地址。
+     */
+    private fun fetchAndSaveVideo(context: Context, url: String, filename: String, jobId: Int) {
+        val requestBuilder = Request.Builder().url(url)
+            .header("User-Agent", BROWSER_UA)
+        // 小红书 CDN 对空 Referer 的请求更容易 403
+        if (url.contains("xhscdn.com") || url.contains("xiaohongshu.com")) {
+            requestBuilder.header("Referer", "https://www.xiaohongshu.com/")
+        }
+        val response = httpClient.newCall(requestBuilder.build()).execute()
+        response.use { resp ->
+            if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+            val body = resp.body ?: throw Exception("Empty response")
+
+            // 有些情况下服务端会回一个 HTML 错误页而不是视频，直接写出会得到坏文件
+            val contentType = body.contentType()?.toString().orEmpty()
+            if (contentType.contains("text/html")) throw Exception("服务端返回了网页而不是视频")
+
+            val contentLength = body.contentLength()
+            val inputStream = body.byteStream()
+
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, filename)
+                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/LinkGrab")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
+                ?: throw Exception("Failed to create file")
+
+            try {
+                resolver.openOutputStream(uri)?.use { out ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalRead = 0L
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        out.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        if (contentLength > 0) {
+                            val progress = ((totalRead * 100) / contentLength).toInt()
+                            if (downloadJobCount == jobId) {
+                                _downloadState.value = DownloadState.Downloading(progress)
+                                if (_liveUpdatesEnabled.value) {
+                                    liveUpdatesHelper.updateProgress(
+                                        title = "LinkGrab",
+                                        content = "下载视频: $progress%",
+                                        progress = progress,
+                                        maxProgress = 100,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } ?: throw Exception("Failed to open output stream")
+            } catch (e: Exception) {
+                runCatching { resolver.delete(uri, null, null) }
+                throw e
+            } finally {
+                runCatching { inputStream.close() }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
             }
         }
     }

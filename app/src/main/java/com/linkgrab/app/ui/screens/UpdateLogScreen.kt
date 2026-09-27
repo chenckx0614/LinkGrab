@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.4.0", "2026-09-27", listOf(
+        "抖音视频新增「保存清晰度」选择：解析出全部画质档位（1080P / 720P 等）可按需选择，默认最高画质；预览始终播放最高画质，选择只影响下载的文件，文件名会带上清晰度后缀",
+        "修复实况照片保存报错：实况视频的 CDN 地址带时效签名、首选地址可能失效，现在解析时会把 backupUrls 等全部候选地址一起收下，下载时逐个回退；同时下载前校验 HTTP 状态码与内容类型，失败会给出明确原因而不是写入坏文件",
+        "图片/视频下载改用完整浏览器 UA；小红书 CDN 请求补上 Referer，降低 403 概率",
+    )),
     UpdateLogItem("2.3.9", "2026-09-27", listOf(
         "小红书解析改用高星开源项目 JoeanAmier/XHS-Downloader 的方案：它的核心就是用 Chrome 同源的 TLS 指纹发普通 GET 请求读取笔记页（curl_cffi impersonate=chrome*），不签名、不需要 Cookie。Android 上没有 curl_cffi，等价实现是 Cronet（Google 官方的 Chromium 网络栈，TLS 与真实 Chrome 一致），现已接入并作为主通道",
         "小红书解析通道顺序：Cronet（Chrome TLS）→ WebView → 直连 → 旧降级链，全部失败时会展示各通道原因",

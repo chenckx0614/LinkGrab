@@ -12,6 +12,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -92,6 +93,7 @@ import com.linkgrab.app.ui.theme.IOS26HeaderHeight
 import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
+import com.linkgrab.app.ui.theme.IOS26Choice
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
 import com.linkgrab.app.ui.theme.IOSCornerSmall
@@ -121,6 +123,8 @@ fun ResultScreen(
     var selectionMode by remember { mutableStateOf(false) }
     var selectedImages by remember { mutableStateOf(setOf<Int>()) }
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
+    // 保存清晰度选择（视频）：默认最高档，仅影响下载的文件，不影响预览播放
+    var selectedQualityIndex by remember(result?.videoUrl) { mutableIntStateOf(0) }
 
     // 系统返回：先处理弹窗/多选，否则暂停播放器再退出
     BackHandler {
@@ -194,17 +198,23 @@ fun ResultScreen(
                         when (safeResult.type) {
                             MediaType.IMAGE -> indices.forEach { i ->
                                 viewModel.downloadImage(context, safeResult.images[i], "LinkGrab_${timestamp}_$i.jpg")
-                                safeResult.livePhotoUrl(i)?.let { liveUrl ->
-                                    viewModel.downloadVideo(context, liveUrl, "LinkGrab_Live_${timestamp}_$i.mp4")
+                                // 实况视频：带候选地址列表，主地址失败会自动回退
+                                val liveCandidates = safeResult.livePhotoCandidates(i)
+                                if (liveCandidates.isNotEmpty()) {
+                                    viewModel.downloadVideo(context, liveCandidates, "LinkGrab_Live_${timestamp}_$i.mp4")
                                 }
                             }
-                            MediaType.VIDEO -> safeResult.videoUrl?.let { url ->
-                                viewModel.downloadVideo(context, url, "LinkGrab_${timestamp}.mp4")
+                            MediaType.VIDEO -> {
+                                val quality = safeResult.videoQualities.getOrNull(selectedQualityIndex)
+                                val url = quality?.url ?: safeResult.videoUrl
+                                val suffix = quality?.label?.let { "_$it" }.orEmpty()
+                                url?.let { viewModel.downloadVideo(context, it, "LinkGrab_${timestamp}$suffix.mp4") }
                             }
                             else -> {}
                         }
                         if (selectionMode) { selectionMode = false; selectedImages = emptySet() }
                     },
+                    selectedQualityLabel = safeResult.videoQualities.getOrNull(selectedQualityIndex)?.label,
                 )
             }
         },
@@ -239,8 +249,9 @@ fun ResultScreen(
                             }
                         },
                         onDownloadLive = { index ->
-                            result.livePhotoUrl(index)?.let { liveUrl ->
-                                viewModel.downloadVideo(context, liveUrl, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
+                            val liveCandidates = result.livePhotoCandidates(index)
+                            if (liveCandidates.isNotEmpty()) {
+                                viewModel.downloadVideo(context, liveCandidates, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
                             }
                         },
                         onDownloadImage = { index, imageUrl ->
@@ -256,6 +267,8 @@ fun ResultScreen(
                         headerBackdrop = headerBackdrop,
                         onPlayerCreated = { player = it },
                         bottomPadding = paddingValues.calculateBottomPadding(),
+                        selectedQualityIndex = selectedQualityIndex,
+                        onSelectQuality = { selectedQualityIndex = it },
                     )
                     MediaType.UNKNOWN -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("无法识别的内容类型", color = iosSecondaryLabel(), fontSize = 15.sp)
@@ -304,8 +317,9 @@ fun ResultScreen(
                 viewModel.downloadImage(context, result.images[index], "LinkGrab_${System.currentTimeMillis()}_$index.jpg")
             },
             onDownloadLive = { index ->
-                result.livePhotoUrl(index)?.let { liveUrl ->
-                    viewModel.downloadVideo(context, liveUrl, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
+                val liveCandidates = result.livePhotoCandidates(index)
+                if (liveCandidates.isNotEmpty()) {
+                    viewModel.downloadVideo(context, liveCandidates, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
                 }
             },
         )
@@ -410,6 +424,8 @@ private fun VideoResultBody(
     headerBackdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     onPlayerCreated: (ExoPlayer?) -> Unit,
     bottomPadding: androidx.compose.ui.unit.Dp,
+    selectedQualityIndex: Int,
+    onSelectQuality: (Int) -> Unit,
 ) {
     val context = LocalContext.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -492,6 +508,41 @@ private fun VideoResultBody(
                 )
             }
         }
+
+        // 保存清晰度选择（仅抖音这类提供多档画质的来源才展示）
+        if (result.videoQualities.size > 1) {
+            Spacer(modifier = Modifier.height(16.dp))
+            IOS26Panel(Modifier.fillMaxWidth()) {
+                Text(
+                    "保存清晰度",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = iosLabel(),
+                )
+                Text(
+                    "预览始终播放最高画质，这里只影响下载保存的文件",
+                    fontSize = 13.sp,
+                    color = iosSecondaryLabel(),
+                    modifier = Modifier.padding(top = 3.dp),
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    result.videoQualities.forEachIndexed { index, quality ->
+                        IOS26Choice(
+                            label = quality.label,
+                            selected = index == selectedQualityIndex,
+                            onClick = { onSelectQuality(index) },
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(bottomPadding + 16.dp))
     }
 }
@@ -554,6 +605,7 @@ private fun ResultBottomBar(
     onCopy: (String) -> Unit,
     onDownloadAll: (List<Int>) -> Unit,
     backdrop: Backdrop? = null,
+    selectedQualityLabel: String? = null,
 ) {
     val buttonText: String
     val buttonEnabled: Boolean
@@ -578,6 +630,8 @@ private fun ResultBottomBar(
         MediaType.VIDEO -> {
             buttonText = if (downloadState is DownloadState.Downloading) {
                 "下载中 ${(downloadState as DownloadState.Downloading).progress}%"
+            } else if (selectedQualityLabel != null) {
+                "下载视频 · $selectedQualityLabel"
             } else "下载视频"
             buttonEnabled = downloadState !is DownloadState.Downloading && result.videoUrl != null
             onPrimaryClick = { onDownloadAll(emptyList()) }
@@ -690,7 +744,7 @@ private fun PlayOverlay(modifier: Modifier = Modifier) {
 @Composable
 private fun ImagePreviewDialog(
     images: List<String>,
-    livePhotos: Map<Int, String>,
+    livePhotos: Map<Int, List<String>>,
     initialIndex: Int,
     onDismiss: () -> Unit,
     onDownload: (Int) -> Unit,
@@ -703,7 +757,7 @@ private fun ImagePreviewDialog(
     var offsetY by remember { mutableFloatStateOf(0f) }
     var playingLive by remember { mutableStateOf(false) }
 
-    val liveUrl = livePhotos[currentIndex]
+    val liveUrl = livePhotos[currentIndex]?.firstOrNull()
     val exoPlayer = remember(currentIndex, playingLive) {
         if (playingLive && liveUrl != null) {
             ExoPlayer.Builder(context).build().apply {

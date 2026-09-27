@@ -193,17 +193,17 @@ class XhsParser {
 
         // ---- image note (图集 + 实况) ----
         val images = mutableListOf<String>()
-        val livePhotos = mutableMapOf<Int, String>()
+        val livePhotos = mutableMapOf<Int, List<String>>()
 
         data["imageList"]?.jsonArray?.forEachIndexed { index, imgEl ->
             val img = imgEl.jsonObject
             val imageUrl = pickImageUrl(img) ?: return@forEachIndexed
             images.add(imageUrl)
 
-            // 实况照片：多路探测
-            val liveUrl = pickLivePhotoUrl(img)
-            if (!liveUrl.isNullOrEmpty()) {
-                livePhotos[index] = liveUrl
+            // 实况照片：多路探测，保留全部候选地址供下载时回退
+            val liveUrls = pickLivePhotoCandidates(img)
+            if (liveUrls.isNotEmpty()) {
+                livePhotos[index] = liveUrls
             }
         }
 
@@ -556,31 +556,41 @@ class XhsParser {
     }
 
     /**
-     * 实况照片链路很多，逐个试：stream.h264/h265、video.url、livePhotoUrl。
+     * 实况照片的视频地址候选列表，按可靠性排序：
+     * stream.h264 → stream.h265/av1 → video.url → livePhotoUrl / livePhotoMedia。
+     *
+     * 每个 stream 条目还带 `backupUrls`，一并收进来 —— CDN 主地址可能 403
+     * 或签名过期，下载时按顺序回退，避免「实况保存报错」。
      */
-    private fun pickLivePhotoUrl(img: JsonObject): String? {
-        if (!isLivePhotoFlag(img)) return null
+    private fun pickLivePhotoCandidates(img: JsonObject): List<String> {
+        if (!isLivePhotoFlag(img)) return emptyList()
+        val candidates = mutableListOf<String>()
 
-        // 1) imageList[].stream.{h264,h265}
+        fun addStreamEntry(entry: JsonObject?) {
+            val e = entry ?: return
+            e.string("masterUrl")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
+            e["backupUrls"]?.jsonArray
+                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                ?.filter { it.isNotBlank() }
+                ?.let { candidates.addAll(it) }
+        }
+
+        // 1) imageList[].stream.{h264,h265,av1}
         val streamObj = img["stream"]?.jsonObject
         if (streamObj != null) {
             for (codec in listOf("h264", "h265", "av1")) {
-                streamObj[codec]?.jsonArray
-                    ?.firstOrNull()?.jsonObject
-                    ?.string("masterUrl")
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { return it }
+                addStreamEntry(streamObj[codec]?.jsonArray?.firstOrNull()?.jsonObject)
             }
         }
 
         // 2) imageList[].video.url
-        img["video"]?.jsonObject?.string("url")?.takeIf { it.isNotBlank() }?.let { return it }
+        img["video"]?.jsonObject?.string("url")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
 
         // 3) imageList[].livePhotoUrl / livePhotoMedia
-        img.string("livePhotoUrl")?.takeIf { it.isNotBlank() }?.let { return it }
-        img["livePhotoMedia"]?.jsonObject?.string("url")?.takeIf { it.isNotBlank() }?.let { return it }
+        img.string("livePhotoUrl")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
+        img["livePhotoMedia"]?.jsonObject?.string("url")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
 
-        return null
+        return candidates.distinct()
     }
 
     private fun isLivePhotoFlag(img: JsonObject): Boolean {

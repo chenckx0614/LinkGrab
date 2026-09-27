@@ -2,6 +2,7 @@ package com.linkgrab.app.data.api
 
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
+import com.linkgrab.app.data.model.VideoQuality
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -75,20 +76,22 @@ class DouyinParser {
             // ---- images (图集) + LivePhoto ----
             val album = data["images"]?.jsonArray
             val images = mutableListOf<String>()
-            val livePhotos = mutableMapOf<Int, String>()
+            val livePhotos = mutableMapOf<Int, List<String>>()
 
             album?.forEachIndexed { index, imgEl ->
                 val img = imgEl.jsonObject
                 val imageUrl = pickImageUrl(img) ?: return@forEachIndexed
                 images.add(imageUrl)
 
-                // Live Photo: 实况照片的视频流
-                val liveUrl = img["video"]?.jsonObject
+                // Live Photo: 实况照片的视频流。url_list 里的地址全部收下，
+                // 首个作为主地址，其余作为下载失败时的回退。
+                val liveUrls = img["video"]?.jsonObject
                     ?.get("play_addr")?.jsonObject
                     ?.get("url_list")?.jsonArray
-                    ?.let { firstUrl(it) }
-                if (!liveUrl.isNullOrEmpty()) {
-                    livePhotos[index] = liveUrl
+                    ?.let { urlCandidates(it) }
+                    .orEmpty()
+                if (liveUrls.isNotEmpty()) {
+                    livePhotos[index] = liveUrls
                 }
             }
 
@@ -109,7 +112,10 @@ class DouyinParser {
             }
 
             // ---- video (视频) ----
-            val playUrl = bestVideoUrl(data)
+            // 全量画质档位（高→低）：UI 让用户选，默认用最高档。
+            val qualities = videoQualities(data)
+            val playUrl = qualities.firstOrNull()?.url
+                ?: fallbackVideoUrl(data)
                 ?: return@withContext Result.failure(Exception("未找到视频或图片地址"))
 
             // Follow the 302 to the final mp4 (西瓜视频 may have no redirect).
@@ -124,6 +130,7 @@ class DouyinParser {
                     videoUrl = finalUrl,
                     coverUrl = cover,
                     source = "douyin",
+                    videoQualities = qualities,
                 )
             )
         } catch (e: Exception) {
@@ -169,38 +176,81 @@ class DouyinParser {
     }
 
     /**
-     * 挑最高画质的视频地址。
+     * 全部可用画质档位，按「高 → 低」排列，供 UI 让用户选择。
      *
      * 抖音 web 接口里 `video.play_addr` 基本恒定是
-     * `.../aweme/v1/play/?video_id=…&ratio=720p` —— 也就是 720p，拿它下载必然糊。
-     * 真正分档的画质在 `video.bit_rate[]` 里，每档带自己的 `play_addr` 与 `bit_rate`，
-     * 这里按码率从高到低取一档。
+     * `.../aweme/v1/play/?video_id=…&ratio=720p` —— 也就是 720p，直接拿它下载必然糊。
+     * 真正分档的画质在 `video.bit_rate[]` 里，每档带自己的 `play_addr` / `bit_rate`。
      *
      * H.265 档位码率往往更高，但兼容性差（部分机型和系统相册播不出来），
-     * 所以优先在 H.264 档位里选最高码率，只有清一色 H.265 时才退而用之。
+     * 所以优先输出 H.264 档位，只有清一色 H.265 时才退而用之。
      */
-    private fun bestVideoUrl(detail: JsonObject): String? {
-        val video = detail["video"]?.jsonObject ?: return null
+    private fun videoQualities(detail: JsonObject): List<VideoQuality> {
+        val video = detail["video"]?.jsonObject ?: return emptyList()
 
-        val gears: List<Triple<String, Long, Boolean>> = video["bit_rate"]?.jsonArray
+        val gears = video["bit_rate"]?.jsonArray
             ?.mapNotNull { it as? JsonObject }
             ?.mapNotNull { gear ->
+                val addr = gear["play_addr"] as? JsonObject
                 val url = addrUrl(gear["play_addr"]) ?: return@mapNotNull null
-                val rate = (gear["bit_rate"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0L
+                val bitrate = (gear["bit_rate"] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0L
                 val h265 = (gear["is_h265"] as? JsonPrimitive)?.contentOrNull
                     ?.let { it == "1" || it.equals("true", ignoreCase = true) } ?: false
-                Triple(url, rate, h265)
+                val width = (addr?.get("width") as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
+                val height = (addr?.get("height") as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
+                val gearName = (gear["gear_name"] as? JsonPrimitive)?.contentOrNull ?: ""
+                VideoGear(
+                    url = url.replace("playwm", "play"),
+                    bitrate = bitrate,
+                    h265 = h265,
+                    label = qualityLabel(width, height, gearName, bitrate),
+                )
             }
             .orEmpty()
 
-        val best = gears.filter { !it.third }.maxByOrNull { it.second }
-            ?: gears.maxByOrNull { it.second }
-        best?.first?.let { return it.replace("playwm", "play") }
+        val ordered = gears.filter { !it.h265 }
+            .ifEmpty { gears }
+            .sortedByDescending { it.bitrate }
+            .distinctBy { it.url }
 
-        // 没有 bit_rate 档位信息时退回默认地址（至少能拿到 720p，聊胜于无）。
-        val fallback = addrUrl(video["play_addr_h264"]) ?: addrUrl(video["play_addr"])
-        return fallback?.replace("playwm", "play")
+        // 同一分辨率可能有多档码率，标签重复时补码率区分，避免 UI 出现两个「1080P」
+        val usedLabels = mutableSetOf<String>()
+        return ordered.map { gear ->
+            val label = if (usedLabels.add(gear.label)) gear.label
+            else "${gear.label} (${gear.bitrate / 1000}K)"
+            VideoQuality(label = label, url = gear.url, bitrate = gear.bitrate)
+        }
     }
+
+    /** 没有 bit_rate 档位信息时的兜底地址（至少能拿到 720p）。 */
+    private fun fallbackVideoUrl(detail: JsonObject): String? {
+        val video = detail["video"]?.jsonObject ?: return null
+        return (addrUrl(video["play_addr_h264"]) ?: addrUrl(video["play_addr"]))
+            ?.replace("playwm", "play")
+    }
+
+    private fun bestVideoUrl(detail: JsonObject): String? =
+        videoQualities(detail).firstOrNull()?.url ?: fallbackVideoUrl(detail)
+
+    /** 画质标签：优先用真实分辨率，其次 gear_name，最后按码率反推。 */
+    private fun qualityLabel(width: Int, height: Int, gearName: String, bitrate: Long): String {
+        val shortSide = minOf(width, height)
+        if (shortSide > 0) return "${shortSide}P"
+        Regex("""(\d{3,4})\s*[pP]""").find(gearName)?.let { return "${it.groupValues[1]}P" }
+        return when {
+            bitrate >= 2_000_000 -> "1080P"
+            bitrate >= 1_000_000 -> "720P"
+            bitrate >= 500_000 -> "540P"
+            else -> "480P"
+        }
+    }
+
+    /** url_list 的全部候选地址（首个为主，其余用于下载回退），并统一去水印。 */
+    private fun urlCandidates(urlList: JsonArray): List<String> =
+        urlList.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            .filter { it.isNotEmpty() }
+            .map { it.replace("playwm", "play") }
+            .distinct()
 
     /**
      * 封面优先取 `origin_cover`（原图），`cover` / `dynamic_cover` 都是压缩小图，
@@ -401,3 +451,11 @@ class DouyinParser {
     private fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)?.contentOrNull
 }
+
+/** 一档画质的中间表示（仅本文件使用）。 */
+private data class VideoGear(
+    val url: String,
+    val bitrate: Long,
+    val h265: Boolean,
+    val label: String,
+)
