@@ -152,5 +152,9 @@ class CronetFetcher(context: Context) {
          */
         const val DESKTOP_CHROME_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+
+        /** 移动端 Chrome UA：部分笔记只对移动端渲染完整 SSR 数据，作为重试档。 */
+        const val MOBILE_CHROME_UA =
+            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36"
     }
 }

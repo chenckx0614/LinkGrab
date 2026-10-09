@@ -6,8 +6,6 @@ import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -271,92 +269,189 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ==================== Download with Live Updates ====================
 
-    fun downloadImage(context: Context, url: String, filename: String) {
-        val jobId = ++downloadJobCount
-        viewModelScope.launch {
-            _downloadState.value = DownloadState.Downloading(0)
-            if (_liveUpdatesEnabled.value) {
-                liveUpdatesHelper.startProgress(title = "LinkGrab", content = "下载图片中...", indeterminate = true)
-            }
-            try {
-                withContext(Dispatchers.IO) {
-                    val request = Request.Builder().url(url)
-                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7)")
-                        .build()
-                    val response = httpClient.newCall(request).execute()
-                    val body = response.body ?: throw Exception("Empty response")
-                    val bytes = body.byteStream().readBytes()
-                    body.close()
-                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        ?: throw Exception("Failed to decode image")
-                    saveBitmapToGallery(context, bitmap, filename)
-                }
-                if (downloadJobCount == jobId) {
-                    _downloadState.value = DownloadState.Success
-                    showDownloadCompleteNotification(context, "图片保存成功", isVideo = false)
-                }
-            } catch (e: Exception) {
-                if (downloadJobCount == jobId) {
-                    _downloadState.value = DownloadState.Error(e.message ?: "Download failed")
-                    showDownloadCompleteNotification(context, "下载失败: ${e.message}", isVideo = false)
-                }
-            }
-        }
-    }
-
-    fun downloadVideo(context: Context, url: String, filename: String) =
-        downloadVideo(context, listOf(url), filename)
-
     /**
-     * 下载视频，支持**多个候选地址按顺序回退**。
+     * 统一下载入口：图片 + 视频按队列**串行**下载，进度跨文件聚合。
      *
-     * 实况照片的视频 CDN 地址常带时效签名，首选地址可能 403 / 已过期；
-     * 解析阶段已把 backupUrls 一并收下，这里逐个试。
+     * 之前「下载全部」是 N 个协程并发各自往 _downloadState 写进度，互相覆盖
+     * （进度条回跳、并发下载抢占带宽），现在收敛为一个队列顺序执行。
      */
-    fun downloadVideo(context: Context, urls: List<String>, filename: String) {
-        val candidates = urls.filter { it.isNotBlank() }.distinct()
-        if (candidates.isEmpty()) {
-            _downloadState.value = DownloadState.Error("没有可用的视频地址")
-            return
-        }
+    fun downloadBatch(
+        context: Context,
+        images: List<Pair<String, String>> = emptyList(),
+        videos: List<Pair<List<String>, String>> = emptyList(),
+    ) {
+        val imageItems = images.filter { it.first.isNotBlank() }
+        val videoItems = videos.map { (candidates, name) ->
+            candidates.filter { it.isNotBlank() }.distinct() to name
+        }.filter { it.first.isNotEmpty() }
+        if (imageItems.isEmpty() && videoItems.isEmpty()) return
+
+        val total = imageItems.size + videoItems.size
         val jobId = ++downloadJobCount
         viewModelScope.launch {
             _downloadState.value = DownloadState.Downloading(0)
             if (_liveUpdatesEnabled.value) {
-                liveUpdatesHelper.startProgress(title = "LinkGrab", content = "下载视频中...", indeterminate = true)
+                liveUpdatesHelper.startProgress(title = "LinkGrab", content = "准备下载...", indeterminate = true)
             }
-            try {
-                withContext(Dispatchers.IO) {
+            var succeeded = 0
+            var firstError: Exception? = null
+            withContext(Dispatchers.IO) {
+                imageItems.forEachIndexed { i, (url, filename) ->
+                    if (downloadJobCount != jobId) return@withContext
+                    try {
+                        saveImageFromNetwork(context, url, filename, fileIndex = i, fileTotal = total)
+                        succeeded++
+                    } catch (e: Exception) {
+                        if (firstError == null) firstError = e
+                    }
+                }
+                videoItems.forEachIndexed { j, (candidates, filename) ->
+                    if (downloadJobCount != jobId) return@withContext
+                    val fileIndex = imageItems.size + j
                     var lastError: Exception? = null
                     for (candidate in candidates) {
                         try {
-                            fetchAndSaveVideo(context, candidate, filename, jobId)
+                            fetchAndSaveVideo(context, candidate, filename, jobId, fileIndex, total)
                             lastError = null
                             break
                         } catch (e: Exception) {
                             lastError = e
                         }
                     }
-                    lastError?.let { throw it }
+                    if (lastError == null) succeeded++
+                    else if (firstError == null) firstError = lastError
                 }
-                if (downloadJobCount == jobId) {
+            }
+            if (downloadJobCount != jobId) return@launch
+            when {
+                succeeded == total -> {
                     _downloadState.value = DownloadState.Success
-                    showDownloadCompleteNotification(context, "视频保存成功", isVideo = true)
+                    val noun = if (videoItems.isEmpty()) "图片" else "视频"
+                    val msg = if (total > 1) "已保存 $total 个${noun}文件" else "${noun}保存成功"
+                    showDownloadCompleteNotification(context, msg, isVideo = videoItems.isNotEmpty())
                 }
-            } catch (e: Exception) {
-                if (downloadJobCount == jobId) {
-                    _downloadState.value = DownloadState.Error(e.message ?: "Download failed")
-                    showDownloadCompleteNotification(context, "下载失败: ${e.message}", isVideo = true)
+                succeeded > 0 -> {
+                    _downloadState.value = DownloadState.Error(
+                        "已保存 $succeeded/$total 个文件；${firstError?.message ?: "其余下载失败"}"
+                    )
+                }
+                else -> {
+                    _downloadState.value = DownloadState.Error(firstError?.message ?: "Download failed")
+                    showDownloadCompleteNotification(
+                        context, "下载失败: ${firstError?.message}", isVideo = videoItems.isNotEmpty(),
+                    )
                 }
             }
         }
     }
 
+    fun downloadImage(context: Context, url: String, filename: String) =
+        downloadBatch(context, images = listOf(url to filename))
+
+    fun downloadVideo(context: Context, url: String, filename: String) =
+        downloadBatch(context, videos = listOf(listOf(url) to filename))
+
+    fun downloadVideo(context: Context, urls: List<String>, filename: String) =
+        downloadBatch(context, videos = listOf(urls to filename))
+
     /**
-     * 真正下载并写入相册。失败时抛异常（HTTP 状态码会带进 message），
+     * 下载图片并写入相册：**直接落盘原始字节**，不再「读进内存 → 解码 Bitmap
+     * → 重压缩 JPEG」。老流程大图要吃几十 MB 内存、CPU 重压缩一次还会损画质；
+     * 现在保留原始格式（jpg/png/webp），格式与扩展名按响应头自动匹配。
+     */
+    private fun saveImageFromNetwork(
+        context: Context,
+        url: String,
+        filename: String,
+        fileIndex: Int,
+        fileTotal: Int,
+    ) {
+        val requestBuilder = Request.Builder().url(url)
+            .header("User-Agent", BROWSER_UA)
+        // 小红书 CDN 对空 Referer 的请求更容易 403
+        if (url.contains("xhscdn.com") || url.contains("xiaohongshu.com")) {
+            requestBuilder.header("Referer", "https://www.xiaohongshu.com/")
+        }
+        httpClient.newCall(requestBuilder.build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
+            val body = resp.body ?: throw Exception("Empty response")
+
+            val contentType = body.contentType()?.toString()?.substringBefore(';')?.trim().orEmpty()
+            if (contentType.startsWith("text/html")) throw Exception("服务端返回了网页而不是图片")
+            val mime = contentType.ifBlank { "image/jpeg" }
+            val ext = when (mime) {
+                "image/png" -> "png"
+                "image/webp" -> "webp"
+                "image/gif" -> "gif"
+                "image/heic", "image/heif" -> "heic"
+                else -> "jpg"
+            }
+            val displayName = filename.substringBeforeLast('.') + ".$ext"
+
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Images.Media.MIME_TYPE, mime)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/LinkGrab")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            val resolver = context.contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                ?: throw Exception("Failed to create file")
+            try {
+                resolver.openOutputStream(uri)?.use { out ->
+                    val input = body.byteStream()
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalRead = 0L
+                    val contentLength = body.contentLength()
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        out.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        reportOverallProgress(fileIndex, fileTotal, totalRead, contentLength, "下载图片")
+                    }
+                } ?: throw Exception("Failed to open output stream")
+            } catch (e: Exception) {
+                runCatching { resolver.delete(uri, null, null) }
+                throw e
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+            }
+        }
+    }
+
+    /** 跨文件聚合进度：已完成的整文件 + 当前文件的字节占比。 */
+    private fun reportOverallProgress(fileIndex: Int, fileTotal: Int, bytes: Long, contentLength: Long, label: String) {
+        if (fileTotal <= 0) return
+        val fileFraction = if (contentLength > 0) (bytes.toDouble() / contentLength).coerceIn(0.0, 1.0) else 0.0
+        val progress = ((fileIndex + fileFraction) * 100 / fileTotal).toInt().coerceIn(0, 99)
+        _downloadState.value = DownloadState.Downloading(progress)
+        if (_liveUpdatesEnabled.value) {
+            liveUpdatesHelper.updateProgress(
+                title = "LinkGrab",
+                content = "$label: $progress%",
+                progress = progress,
+                maxProgress = 100,
+            )
+        }
+    }
+
+    /**
+     * 下载视频并写入相册。失败时抛异常（HTTP 状态码会带进 message），
      * 交给上层决定是否换下一个候选地址。
      */
-    private fun fetchAndSaveVideo(context: Context, url: String, filename: String, jobId: Int) {
+    private fun fetchAndSaveVideo(
+        context: Context,
+        url: String,
+        filename: String,
+        jobId: Int,
+        fileIndex: Int = 0,
+        fileTotal: Int = 1,
+    ) {
         val requestBuilder = Request.Builder().url(url)
             .header("User-Agent", BROWSER_UA)
         // 小红书 CDN 对空 Referer 的请求更容易 403
@@ -395,19 +490,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         out.write(buffer, 0, bytesRead)
                         totalRead += bytesRead
-                        if (contentLength > 0) {
-                            val progress = ((totalRead * 100) / contentLength).toInt()
-                            if (downloadJobCount == jobId) {
-                                _downloadState.value = DownloadState.Downloading(progress)
-                                if (_liveUpdatesEnabled.value) {
-                                    liveUpdatesHelper.updateProgress(
-                                        title = "LinkGrab",
-                                        content = "下载视频: $progress%",
-                                        progress = progress,
-                                        maxProgress = 100,
-                                    )
-                                }
-                            }
+                        if (downloadJobCount == jobId) {
+                            reportOverallProgress(fileIndex, fileTotal, totalRead, contentLength, "下载视频")
                         }
                     }
                 } ?: throw Exception("Failed to open output stream")
@@ -487,54 +571,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             liveUpdatesHelper.finish(title = "LinkGrab", content = "解析完成！")
             android.util.Log.i("LiveUpdates", "Finished")
-        }
-    }
-
-    // ==================== MediaStore ====================
-
-    private fun saveBitmapToGallery(context: Context, bitmap: Bitmap, filename: String) {
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/LinkGrab")
-                put(MediaStore.Images.Media.IS_PENDING, 1)
-            }
-        }
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-            ?: throw Exception("Failed to create file")
-        resolver.openOutputStream(uri)?.use { it ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)
-        }
-        bitmap.recycle()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            contentValues.clear()
-            contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-            resolver.update(uri, contentValues, null, null)
-        }
-    }
-
-    private fun saveVideoToGallery(context: Context, inputStream: java.io.InputStream, filename: String) {
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Video.Media.DISPLAY_NAME, filename)
-            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/LinkGrab")
-                put(MediaStore.Video.Media.IS_PENDING, 1)
-            }
-        }
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
-            ?: throw Exception("Failed to create file")
-        resolver.openOutputStream(uri)?.use { out ->
-            inputStream.copyTo(out)
-        }
-        inputStream.close()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            contentValues.clear()
-            contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
-            resolver.update(uri, contentValues, null, null)
         }
     }
 }

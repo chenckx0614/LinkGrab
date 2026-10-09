@@ -61,13 +61,21 @@ class ParseRepository(context: Context) {
                 // 直接 GET 笔记页，不签名、不需要 Cookie，从 SSR 取数据。
                 val noteUrl = xhsParser.expandShareLink(cleanUrl)
 
-                // 主通道：Cronet（Chrome TLS）直取笔记页 HTML → 复用同一份 SSR 解析
-                val viaCronet = runCatching {
+                // 主通道：Cronet（Chrome TLS）直取笔记页 HTML → 复用同一份 SSR 解析。
+                // 必须携带 a1/webId 匿名会话 Cookie：小红书对无 Cookie 请求会返回
+                // 验证壳页，之前主通道没带它，是「偶尔解析失败」的主因之一。
+                // 桌面 UA 拿不到内容时再用移动端 Chrome UA 重试一次（部分笔记只对
+                // 移动端渲染完整 SSR 数据）。
+                suspend fun cronetParse(userAgent: String): MediaResult? = runCatching {
                     cronetFetcher.getHtml(
                         noteUrl,
-                        cronetFetcher.browserHeaders(CronetFetcher.DESKTOP_CHROME_UA),
+                        cronetFetcher.browserHeaders(userAgent) +
+                            ("Cookie" to xhsParser.sessionCookieHeader()),
                     )?.let { html -> xhsParser.parseHtml(html) }
                 }.getOrNull()
+
+                val viaCronet = cronetParse(CronetFetcher.DESKTOP_CHROME_UA)
+                    ?: cronetParse(CronetFetcher.MOBILE_CHROME_UA)
                 if (viaCronet != null) return@withContext Result.success(viaCronet)
 
                 // 兜底 1：WebView 直载笔记页（同样走 Chromium 网络栈，但会执行 JS）

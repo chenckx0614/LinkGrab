@@ -11,6 +11,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -60,10 +61,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -196,13 +199,17 @@ fun ResultScreen(
                     onDownloadAll = { indices ->
                         val timestamp = System.currentTimeMillis()
                         when (safeResult.type) {
-                            MediaType.IMAGE -> indices.forEach { i ->
-                                viewModel.downloadImage(context, safeResult.images[i], "LinkGrab_${timestamp}_$i.jpg")
-                                // 实况视频：带候选地址列表，主地址失败会自动回退
-                                val liveCandidates = safeResult.livePhotoCandidates(i)
-                                if (liveCandidates.isNotEmpty()) {
-                                    viewModel.downloadVideo(context, liveCandidates, "LinkGrab_Live_${timestamp}_$i.mp4")
+                            MediaType.IMAGE -> {
+                                // 批量走统一队列：串行下载 + 跨文件聚合进度，
+                                // 不再 N 个协程并发互相覆盖进度条
+                                val imageJobs = indices.map { i ->
+                                    safeResult.images[i] to "LinkGrab_${timestamp}_$i.jpg"
                                 }
+                                val liveJobs = indices.mapNotNull { i ->
+                                    val liveCandidates = safeResult.livePhotoCandidates(i)
+                                    if (liveCandidates.isNotEmpty()) liveCandidates to "LinkGrab_Live_${timestamp}_$i.mp4" else null
+                                }
+                                viewModel.downloadBatch(context, images = imageJobs, videos = liveJobs)
                             }
                             MediaType.VIDEO -> {
                                 val quality = safeResult.videoQualities.getOrNull(selectedQualityIndex)
@@ -751,14 +758,15 @@ private fun ImagePreviewDialog(
     onDownloadLive: (Int) -> Unit,
 ) {
     val context = LocalContext.current
-    var currentIndex by remember { mutableIntStateOf(initialIndex) }
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offsetX by remember { mutableFloatStateOf(0f) }
-    var offsetY by remember { mutableFloatStateOf(0f) }
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(initialPage = initialIndex) { images.size }
     var playingLive by remember { mutableStateOf(false) }
+    var controlsVisible by remember { mutableStateOf(true) }
+    val liveUrl = livePhotos[pagerState.currentPage]?.firstOrNull()
 
-    val liveUrl = livePhotos[currentIndex]?.firstOrNull()
-    val exoPlayer = remember(currentIndex, playingLive) {
+    // 翻页/关闭预览时停掉实况播放
+    LaunchedEffect(pagerState.currentPage) { playingLive = false }
+
+    val exoPlayer = remember(pagerState.currentPage, playingLive) {
         if (playingLive && liveUrl != null) {
             ExoPlayer.Builder(context).build().apply {
                 setMediaItem(MediaItem.fromUri(liveUrl))
@@ -772,24 +780,29 @@ private fun ImagePreviewDialog(
         onDispose { exoPlayer?.pause(); exoPlayer?.release() }
     }
 
-    LaunchedEffect(currentIndex) {
-        scale = 1f; offsetX = 0f; offsetY = 0f; playingLive = false
-    }
-
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
-                .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(0.5f, 5f)
-                        offsetX += pan.x
-                        offsetY += pan.y
-                    }
-                },
-            contentAlignment = Alignment.Center,
+                .background(Color.Black),
         ) {
+            // 翻页：HorizontalPager，左右滑动切换（之前只能点箭头）
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pagerState,
+                key = { images[it] },
+                // 放大状态下禁用翻页，把手势让给图片拖动（观察 snapshot map，状态可响应）
+                userScrollEnabled = (previewScaleRegistry[pagerState.currentPage] ?: 1f) <= 1f,
+            ) { page ->
+                ZoomablePreviewImage(
+                    url = images[page],
+                    contentDescription = "预览 ${page + 1}/${images.size}",
+                    scaleRegistry = previewScaleRegistry,
+                    pageKey = page,
+                    onTap = { controlsVisible = !controlsVisible },
+                )
+            }
+
+            // 实况播放覆盖层：播放时盖住当前页
             if (playingLive && exoPlayer != null) {
                 AndroidView(
                     factory = { ctx ->
@@ -801,74 +814,166 @@ private fun ImagePreviewDialog(
                     },
                     modifier = Modifier.fillMaxSize().padding(16.dp),
                 )
-            } else {
-                AsyncImage(
-                    model = ImageRequest.Builder(context).data(images[currentIndex]).crossfade(true).build(),
-                    contentDescription = "预览 ${currentIndex + 1}/${images.size}",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                        .graphicsLayer(scaleX = scale, scaleY = scale, translationX = offsetX, translationY = offsetY),
-                )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "${currentIndex + 1} / ${images.size}",
-                    color = Color.White,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (liveUrl != null) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(if (playingLive) iosBlue() else Color.White.copy(alpha = 0.18f))
-                                .clickable { playingLive = !playingLive }
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                        ) {
-                            Text(if (playingLive) "停止" else "实况", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        IconButton(onClick = { onDownloadLive(currentIndex) }) {
-                            Text("▶↓", color = Color.White, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                    IconButton(onClick = { onDownload(currentIndex) }) {
-                        Icon(Icons.Default.Download, contentDescription = "下载", tint = Color.White)
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(onClick = onDismiss) {
-                        Text("✕", color = Color.White, fontSize = 18.sp)
-                    }
-                }
-            }
-
-            if (images.size > 1) {
+            if (controlsVisible) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(16.dp),
-                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = { if (currentIndex > 0) { currentIndex--; scale = 1f; offsetX = 0f; offsetY = 0f } }) {
-                        Text("‹", color = Color.White, fontSize = 28.sp)
+                    Text(
+                        text = "${pagerState.currentPage + 1} / ${images.size}",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (liveUrl != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(if (playingLive) iosBlue() else Color.White.copy(alpha = 0.18f))
+                                    .clickable { playingLive = !playingLive }
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                            ) {
+                                Text(if (playingLive) "停止" else "实况", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(onClick = { onDownloadLive(pagerState.currentPage) }) {
+                                Text("▶↓", color = Color.White, fontSize = 14.sp)
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        IconButton(onClick = { onDownload(pagerState.currentPage) }) {
+                            Icon(Icons.Default.Download, contentDescription = "下载", tint = Color.White)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        IconButton(onClick = onDismiss) {
+                            Text("✕", color = Color.White, fontSize = 18.sp)
+                        }
                     }
-                    Spacer(modifier = Modifier.width(24.dp))
-                    Text("${currentIndex + 1}", color = Color.White, fontSize = 16.sp)
-                    Spacer(modifier = Modifier.width(24.dp))
-                    IconButton(onClick = { if (currentIndex < images.size - 1) { currentIndex++; scale = 1f; offsetX = 0f; offsetY = 0f } }) {
-                        Text("›", color = Color.White, fontSize = 28.sp)
+                }
+
+                // 底部页码指示：少图用圆点，多图用数字
+                if (images.size > 1) {
+                    if (images.size <= 6) {
+                        Row(
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            images.indices.forEach { i ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(if (i == pagerState.currentPage) 8.dp else 6.dp)
+                                        .clip(CircleShape)
+                                        .background(if (i == pagerState.currentPage) Color.White else Color.White.copy(alpha = 0.35f)),
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "${pagerState.currentPage + 1}",
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 14.sp,
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp),
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * 每页缩放状态登记表（snapshot 状态 map）：翻页容器据此决定是否允许滑动翻页。
+ * 只在「放大 ⇄ 复位」切换时写入，避免捏合过程中的每帧都触发重组。
+ */
+private val previewScaleRegistry = androidx.compose.runtime.mutableStateMapOf<Int, Float>()
+
+/**
+ * 单张可缩放预览图：
+ * - 双指捏合缩放（1x–5x），放大后可拖动查看细节，拖动范围有边界
+ * - 双击在 1x / 2.5x 之间切换，双击放大时以点击位置为中心
+ * - 单击切换顶部/底部控制栏显隐
+ *
+ * 注意：pointerInput 必须放在 graphicsLayer **之前** —— 手势坐标用未变换的
+ * 屏幕空间，否则放大后拖动速度会被缩放系数放大、双击定位也会漂移。
+ */
+@Composable
+private fun ZoomablePreviewImage(
+    url: String,
+    contentDescription: String,
+    scaleRegistry: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, Float>,
+    pageKey: Int,
+    onTap: () -> Unit,
+) {
+    var scale by remember(url) { mutableFloatStateOf(1f) }
+    var offsetX by remember(url) { mutableFloatStateOf(0f) }
+    var offsetY by remember(url) { mutableFloatStateOf(0f) }
+    var containerSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+
+    // 翻页容器需要知道本页是否处于放大状态；只在状态翻转时写注册表
+    LaunchedEffect(scale) {
+        val zoomed = scale > 1f
+        val registered = scaleRegistry[pageKey] ?: 1f
+        if ((registered > 1f) != zoomed) {
+            scaleRegistry[pageKey] = if (zoomed) scale else 1f
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { containerSize = it },
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(true).build(),
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(url) {
+                    detectTapGestures(
+                        onTap = { onTap() },
+                        onDoubleTap = { tap ->
+                            if (scale > 1.5f) {
+                                scale = 1f; offsetX = 0f; offsetY = 0f
+                            } else {
+                                val newScale = 2.5f
+                                // 以点击点为中心放大：保持点击点下的图像内容原位不动
+                                offsetX = tap.x - (tap.x - offsetX) * (newScale / scale)
+                                offsetY = tap.y - (tap.y - offsetY) * (newScale / scale)
+                                scale = newScale
+                            }
+                        },
+                    )
+                }
+                .pointerInput(url) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        val newScale = (scale * zoom).coerceIn(1f, 5f)
+                        scale = newScale
+                        if (newScale <= 1f) {
+                            offsetX = 0f; offsetY = 0f
+                        } else {
+                            // 拖动边界：放大后最大可拖出 (scale-1) * 半屏（近似值，
+                            // ContentScale.Fit 的实际图幅更小，留边无妨）
+                            val maxX = (newScale - 1f) * containerSize.width / 2f
+                            val maxY = (newScale - 1f) * containerSize.height / 2f
+                            offsetX = (offsetX + pan.x).coerceIn(-maxX, maxX)
+                            offsetY = (offsetY + pan.y).coerceIn(-maxY, maxY)
+                        }
+                    }
+                }
+                .graphicsLayer(
+                    scaleX = scale,
+                    scaleY = scale,
+                    translationX = offsetX,
+                    translationY = offsetY,
+                )
+                .clipToBounds(),
+        )
     }
 }
 

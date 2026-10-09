@@ -399,6 +399,13 @@ class XhsParser {
         return "a1=${session.a1}; webId=${session.webId}"
     }
 
+    /**
+     * 供外部通道（Cronet 等）复用的匿名会话 Cookie。
+     * 小红书 2026 年起对不带 a1/webId 的请求返回验证壳页 —— 之前主通道
+     * Cronet 没带这个 Cookie，偶尔拿到验证壳页导致解析「时好时坏」。
+     */
+    fun sessionCookieHeader(): String = cookieHeader()
+
     // endregion
 
     // region: network

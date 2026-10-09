@@ -13,6 +13,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import okhttp3.Cookie
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -37,7 +39,11 @@ import java.util.concurrent.TimeUnit
  *               直接用它下载必然是 720p 的糊图，只能当兜底。
  *    - cover  → 优先 origin_cover（原图），cover 是压缩小图。
  *
- * No signature (X-Bogus / a_bogus) and no Cookie are required.
+ * No signature (X-Bogus / a_bogus) and no Cookie are required — but a
+ * `ttwid` cookie is strongly recommended: without it douyin's risk control
+ * intermittently answers the web API with empty `aweme_details`, which is
+ * the main cause of "偶尔解析失败". We bootstrap one ttwid by visiting the
+ * share homepage once and reuse it for all API calls.
  */
 class DouyinParser {
 
@@ -60,6 +66,32 @@ class DouyinParser {
 
     private val mobileUa =
         "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+
+    // region: ttwid session
+    //
+    // 抖音 web 接口的风控：不带 ttwid cookie 时，slidesinfo / iteminfo 会**间歇性**
+    // 返回空 aweme_details（这正是「偶尔解析失败」的主因）。浏览器访问任意
+    // iesdouyin 页面都会下发 ttwid，这里引导一次并缓存复用。
+
+    @Volatile
+    private var cachedTtwid: String? = null
+
+    private fun ttwidCookie(): String {
+        cachedTtwid?.let { return "ttwid=$it" }
+        return try {
+            val request = Request.Builder().url("https://www.iesdouyin.com/")
+                .header("User-Agent", mobileUa)
+                .build()
+            client.newCall(request).execute().use { resp ->
+                Cookie.parseAll("https://www.iesdouyin.com/".toHttpUrl(), resp.headers)
+                    .firstOrNull { it.name == "ttwid" }?.value
+            }?.also { cachedTtwid = it }?.let { "ttwid=$it" } ?: ""
+        } catch (_: Exception) {
+            // 引导失败不阻断解析：不带 cookie 直连仍有一定概率成功
+            ""
+        }
+    }
+    // endregion
 
     suspend fun parse(shareUrl: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         try {
@@ -273,19 +305,17 @@ class DouyinParser {
 
     /**
      * 旧的 HTML SSR 解析（iesdouyin 分享页 _ROUTER_DATA），作为接口失败时的兜底。
-     * 注意页面会 302 到 www.douyin.com，必须禁止跟随重定向并使用移动端 UA。
+     * 注意该页行为不稳定：多数情况 200 直出；风控时 302 到 www.douyin.com ——
+     * 只试「禁止跟随重定向」会在 302 直接失败，这也是「偶尔失效」的来源之一，
+     * 所以两种策略都试，先 200 直出、再跟重定向取落地页。
      */
     private fun fetchAwemeDetailFromHtml(videoId: String): JsonObject? {
         return try {
             val pageUrl = "https://www.iesdouyin.com/share/video/$videoId/"
-            val request = Request.Builder().url(pageUrl)
-                .header("User-Agent", mobileUa)
-                .header("Referer", "https://www.douyin.com/")
-                .build()
-            val html = noRedirectClient.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return null
-                resp.body?.string() ?: return null
-            }
+            val html = fetchShareHtml(pageUrl, followRedirects = false)
+                ?: fetchShareHtml(pageUrl, followRedirects = true)
+                ?: return null
+
             val routerJson = Regex(
                 """window\._ROUTER_DATA\s*=\s*(.*?)</script>""",
                 RegexOption.DOT_MATCHES_ALL,
@@ -304,6 +334,22 @@ class DouyinParser {
                 if (hasMedia(item)) return item
             }
             null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** 分享页 HTML 抓取：可选跟随重定向，失败返回 null。 */
+    private fun fetchShareHtml(pageUrl: String, followRedirects: Boolean): String? {
+        return try {
+            val builder = Request.Builder().url(pageUrl)
+                .header("User-Agent", mobileUa)
+                .header("Referer", "https://www.douyin.com/")
+            ttwidCookie().takeIf { it.isNotEmpty() }?.let { builder.header("Cookie", it) }
+            val http = if (followRedirects) client else noRedirectClient
+            http.newCall(builder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) null else resp.body?.string()
+            }
         } catch (e: Exception) {
             null
         }
@@ -419,12 +465,13 @@ class DouyinParser {
      * GET helper with explicit redirect policy control.
      */
     private fun get(url: String, followRedirects: Boolean): String {
-        val request = Request.Builder().url(url)
+        val builder = Request.Builder().url(url)
             .header("User-Agent", defaultUa)
             .header("Referer", "https://www.douyin.com/")
-            .build()
+        // ttwid 显著降低风控返回空数据的概率（见 ttwidCookie 注释）
+        ttwidCookie().takeIf { it.isNotEmpty() }?.let { builder.header("Cookie", it) }
         val http = if (followRedirects) client else noRedirectClient
-        http.newCall(request).execute().use { resp ->
+        http.newCall(builder.build()).execute().use { resp ->
             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
             return resp.body?.string() ?: throw Exception("空响应")
         }

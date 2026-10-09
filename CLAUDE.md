@@ -114,6 +114,7 @@ linkgrab/app/src/main/java/com/linkgrab/app/
 
 | 版本 | 日期 | 内容 |
 |------|------|------|
+| 2.5.0 | 2026-10-09 | 图片预览重做（滑动翻页/双击缩放/捏合拖动/单击隐控）；抖音补 ttwid 会话 Cookie + 分享页双策略兜底；小红书 Cronet 主通道补 a1/webId 会话 + 移动端 UA 重试；图片下载直写原始字节（免解码重压缩）；批量下载改串行队列 + 聚合进度 |
 | 2.4.0 | 2026-09-27 | 抖音新增保存清晰度选择（解析 bit_rate 全档位，UI 可选，默认最高；预览仍为最高画质）；实况照片保存修复（候选地址回退 + HTTP 状态/内容类型校验 + CDN 请求头） |
 | 2.3.9 | 2026-09-27 | 小红书主通道改为 Cronet（Chromium 网络栈 = Chrome 同源 TLS 指纹），照搬高星项目 JoeanAmier/XHS-Downloader 的方案（curl_cffi impersonate=chrome* 的等价实现）；通道顺序 Cronet→WebView→直连→旧链 |
 | 2.3.8 | 2026-09-27 | 紧急修复：v2.3.7 的小红书主通道在主线程协程里调阻塞网络请求（NetworkOnMainThreadException），整条链路从未执行；XHS 分支移到 IO 线程；失败时展示双通道原因 |
