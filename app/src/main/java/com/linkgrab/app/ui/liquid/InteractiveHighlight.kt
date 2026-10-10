@@ -91,6 +91,8 @@ class InteractiveHighlight(
                     }
                 }
             ) { change, _ ->
+                // AwaitPointerEventScope 是 restricted suspension，不能直接 snapTo；
+                // 用已有的 animationScope 派发（主线程顺序执行，开销极小）
                 animationScope.launch { positionAnimation.snapTo(change.position) }
             }
         }

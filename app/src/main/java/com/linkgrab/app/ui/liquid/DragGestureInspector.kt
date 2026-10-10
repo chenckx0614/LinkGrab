@@ -19,6 +19,9 @@ suspend fun PointerInputScope.inspectDragGestures(
     onDragStart: (down: PointerInputChange) -> Unit = {},
     onDragEnd: (change: PointerInputChange) -> Unit = {},
     onDragCancel: () -> Unit = {},
+    // 非 suspend：awaitEachGesture 的 AwaitPointerEventScope 是 restricted
+    // suspension，不能在这里调用任意 suspend lambda；需要挂起的调用方
+    // 在回调里自行用协程 scope 处理
     onDrag: (change: PointerInputChange, dragAmount: Offset) -> Unit
 ) {
     awaitEachGesture {

@@ -1,8 +1,6 @@
 package com.linkgrab.app.ui.liquid
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseOut
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
@@ -12,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +39,6 @@ import com.linkgrab.app.ui.theme.isInDarkTheme
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
@@ -50,8 +46,6 @@ import com.kyant.shapes.Capsule
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
-import kotlin.math.abs
-import kotlin.math.sign
 
 /**
  * Liquid-glass bottom tab bar ported from Kyant0/AndroidLiquidGlass
@@ -94,15 +88,10 @@ fun LiquidBottomTabs(
             (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / tabsCount
         }
 
-        val offsetAnimation = remember { Animatable(0f) }
-        val panelOffset by remember(density) {
-            derivedStateOf {
-                val fraction = (offsetAnimation.value / constraints.maxWidth).fastCoerceIn(-1f, 1f)
-                with(density) {
-                    4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
-                }
-            }
-        }
+        // 这里原先还有一条 offsetAnimation：拖动时每帧读取它会让整个底栏
+        // 重新组合，而实际收益只是几像素的横向弹性。把这条高频状态移除，
+        // 胶囊本身的 Animatable 仍然负责主要的跟手动画。
+        val panelOffset = 0f
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
@@ -132,21 +121,12 @@ fun LiquidBottomTabs(
                     currentIndex = targetIndex
                     // 拖拽收尾的 snap 仍属于拖拽驱动，保留 chromaticAberration。
                     animateToValue(targetIndex.toFloat(), fromDrag = true)
-                    animationScope.launch {
-                        offsetAnimation.animateTo(
-                            0f,
-                            spring(1f, 300f, 0.5f)
-                        )
-                    }
                 },
                 onDrag = { _, dragAmount ->
                     updateValue(
                         (targetValue + dragAmount.x / tabWidth * if (isLtr) 1f else -1f)
                             .fastCoerceIn(0f, (tabsCount - 1).toFloat())
                     )
-                    animationScope.launch {
-                        offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
-                    }
                 }
             )
         }
@@ -204,8 +184,7 @@ fun LiquidBottomTabs(
                         val progress = dampedDragAnimation.pressProgress
                         // 静止时不挂 lens：lens(0,0) 仍会走 AGSL shader 路径，
                         // 每帧白付采样成本。vibrancy/blur 轻量，保持玻璃通透感。
-                        vibrancy()
-                        blur(8f.dp.toPx())
+                        blur(6f.dp.toPx())
                         if (progress > 0.01f) {
                             lens(24f.dp.toPx() * progress, 24f.dp.toPx() * progress)
                         }
@@ -244,8 +223,7 @@ fun LiquidBottomTabs(
                     shape = { Capsule() },
                     effects = {
                         val progress = dampedDragAnimation.pressProgress
-                        vibrancy()
-                        blur(8f.dp.toPx())
+                        blur(6f.dp.toPx())
                         // 静止时不挂 lens：lens(0,0) 仍会走 AGSL shader 路径，
                         // 在转场动画中白付每帧采样成本。
                         if (progress > 0.01f) {

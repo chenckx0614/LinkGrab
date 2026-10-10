@@ -8,6 +8,9 @@ import com.linkgrab.app.data.api.XhsParser
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.Platform
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /**
@@ -20,6 +23,16 @@ import kotlinx.coroutines.withContext
  */
 class ParseRepository(context: Context) {
 
+    private companion object {
+        val DOUYIN_HOST_PATTERN = """(douyin\.com|v\.douyin\.com|iesdouyin\.com)/""".toRegex()
+        val XHS_HOST_PATTERN = """(xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)/""".toRegex()
+        val KNOWN_URL_PATTERNS = listOf(
+            """https?://(?:v\.douyin\.com|(?:\w+\.)?douyin\.com|(?:\w+\.)?iesdouyin\.com)(?:/[^\s\u3000\"'<>()（）【】\[\]{}]*)?""".toRegex(),
+            """https?://(?:(?:www\.)?xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)(?:/[^\s\u3000\"'<>()（）【】\[\]{}]*)?""".toRegex(),
+        )
+        val GENERIC_URL_PATTERN = """https?://[^\s\u3000\"'<>()（）【】\[\]{}]+""".toRegex()
+    }
+
     private val douyinParser = DouyinParser()
     private val xhsParser = XhsParser()
     private val legacyParser = WebViewParser(context)
@@ -31,11 +44,10 @@ class ParseRepository(context: Context) {
     fun detectPlatform(url: String): Platform {
         val cleanUrl = extractUrl(url).lowercase()
         return when {
-            """(douyin\.com|v\.douyin\.com|iesdouyin\.com)/""".toRegex().containsMatchIn(cleanUrl) -> Platform.DOUYIN
+            DOUYIN_HOST_PATTERN.containsMatchIn(cleanUrl) -> Platform.DOUYIN
             // 小红书域名必须覆盖短链变体：xhslink.com / xhslink.cn / xslink.com / xhs.link。
             // 缺少任一变体时，App 内复制的分享文案会被判成"不支持的链接"。
-            """(xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)/""".toRegex()
-                .containsMatchIn(cleanUrl) -> Platform.XIAOHONGSHU
+            XHS_HOST_PATTERN.containsMatchIn(cleanUrl) -> Platform.XIAOHONGSHU
             else -> Platform.UNKNOWN
         }
     }
@@ -74,9 +86,36 @@ class ParseRepository(context: Context) {
                     )?.let { html -> xhsParser.parseHtml(html) }
                 }.getOrNull()
 
-                val viaCronet = cronetParse(CronetFetcher.DESKTOP_CHROME_UA)
-                    ?: cronetParse(CronetFetcher.MOBILE_CHROME_UA)
+                // 两种浏览器 UA 并行竞速：不同网络/笔记命中策略不同，避免移动端重试
+                // 把失败场景的等待时间翻倍；拿到首个有效 SSR 结果后取消另一条请求。
+                val viaCronet = coroutineScope {
+                    listOf(CronetFetcher.DESKTOP_CHROME_UA, CronetFetcher.MOBILE_CHROME_UA)
+                        .map { ua -> async { cronetParse(ua) } }
+                        .awaitAll()
+                        .firstOrNull()
+                }
                 if (viaCronet != null) return@withContext Result.success(viaCronet)
+
+                // 小红书同一笔记有 explore / discovery/item 两套 SSR 页面。
+                // 某些网络环境会只拦其中一套，切换页面入口但保留原始签名参数，
+                // 比直接重试同一个 URL 更有效。
+                val alternateUrl = xhsParser.alternateNoteUrl(noteUrl)
+                if (alternateUrl != null) {
+                    suspend fun alternateCronetParse(userAgent: String): MediaResult? = runCatching {
+                        cronetFetcher.getHtml(
+                            alternateUrl,
+                            cronetFetcher.browserHeaders(userAgent) +
+                                ("Cookie" to xhsParser.sessionCookieHeader()),
+                        )?.let { html -> xhsParser.parseHtml(html) }
+                    }.getOrNull()
+                    val viaAlternate = coroutineScope {
+                        listOf(CronetFetcher.DESKTOP_CHROME_UA, CronetFetcher.MOBILE_CHROME_UA)
+                            .map { ua -> async { alternateCronetParse(ua) } }
+                            .awaitAll()
+                            .firstOrNull()
+                    }
+                    if (viaAlternate != null) return@withContext Result.success(viaAlternate)
+                }
 
                 // 兜底 1：WebView 直载笔记页（同样走 Chromium 网络栈，但会执行 JS）
                 val viaWeb = runCatching { legacyParser.parseXhsNoteInWebView(noteUrl) }.getOrNull()
@@ -126,19 +165,12 @@ class ParseRepository(context: Context) {
         val trimmed = text.trim()
 
         // 优先匹配已知的平台域名。允许 URL 被中文括号、方括号、引号包裹。
-        val knownPatterns = listOf(
-            // 抖音
-            """https?://(?:v\.douyin\.com|(?:\w+\.)?douyin\.com|(?:\w+\.)?iesdouyin\.com)(?:/[^\s\u3000"'<>()（）【】\[\]{}]*)?""",
-            // 小红书（含短链变体）
-            """https?://(?:(?:www\.)?xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)(?:/[^\s\u3000"'<>()（）【】\[\]{}]*)?""",
-        )
-        for (pattern in knownPatterns) {
-            pattern.toRegex().find(trimmed)?.let { return cleanUrl(it.value) }
+        for (pattern in KNOWN_URL_PATTERNS) {
+            pattern.find(trimmed)?.let { return cleanUrl(it.value) }
         }
 
         // Generic URL fallback：更宽松，但只取到常见结束标点/分隔符之前。
-        val genericPattern = """https?://[^\s\u3000"'<>()（）【】\[\]{}]+""".toRegex()
-        genericPattern.find(trimmed)?.let { return cleanUrl(it.value) }
+        GENERIC_URL_PATTERN.find(trimmed)?.let { return cleanUrl(it.value) }
 
         // No URL found, return as-is
         return trimmed

@@ -11,6 +11,8 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
@@ -27,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,8 +65,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -817,49 +824,87 @@ private fun ImagePreviewDialog(
             }
 
             if (controlsVisible) {
+                // 顶部渐变只负责承托控件，不遮住图片主体。
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(132.dp)
+                        .align(Alignment.TopCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Black.copy(alpha = 0.72f), Color.Transparent),
+                            ),
+                        ),
+                )
                 Row(
-                    modifier = Modifier.fillMaxWidth().align(Alignment.TopCenter).padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .padding(
+                            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 8.dp,
+                            start = 14.dp,
+                            end = 14.dp,
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "${pagerState.currentPage + 1} / ${images.size}",
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
+                    val backInteraction = remember { MutableInteractionSource() }
+                    val backPressed by backInteraction.collectIsPressedAsState()
+                    val backScale by animateFloatAsState(
+                        targetValue = if (backPressed) 0.88f else 1f,
+                        animationSpec = spring(dampingRatio = 0.72f, stiffness = 650f),
+                        label = "previewBackScale",
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (liveUrl != null) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(if (playingLive) iosBlue() else Color.White.copy(alpha = 0.18f))
-                                    .clickable { playingLive = !playingLive }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                            ) {
-                                Text(if (playingLive) "停止" else "实况", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.14f))
+                            .graphicsLayer {
+                                scaleX = backScale
+                                scaleY = backScale
                             }
-                            Spacer(modifier = Modifier.width(6.dp))
-                            IconButton(onClick = { onDownloadLive(pagerState.currentPage) }) {
-                                Text("▶↓", color = Color.White, fontSize = 14.sp)
+                            .drawBehind {
+                                if (backPressed) {
+                                    // 按住时在按钮内部移动一层高光，模拟液态玻璃
+                                    // 被手指压住后向四周扩散的折射感。
+                                    drawCircle(
+                                        color = Color.White.copy(alpha = 0.20f),
+                                        radius = size.minDimension * 0.72f,
+                                        center = androidx.compose.ui.geometry.Offset(
+                                            size.width * 0.68f,
+                                            size.height * 0.30f,
+                                        ),
+                                    )
+                                }
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-                        IconButton(onClick = { onDownload(pagerState.currentPage) }) {
-                            Icon(Icons.Default.Download, contentDescription = "下载", tint = Color.White)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(onClick = onDismiss) {
-                            Text("✕", color = Color.White, fontSize = 18.sp)
-                        }
+                            .clickable(
+                                interactionSource = backInteraction,
+                                indication = null,
+                                onClick = onDismiss,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("‹", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Light)
                     }
+                    Column(
+                        modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("图片预览", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "${pagerState.currentPage + 1} / ${images.size}",
+                            color = Color.White.copy(alpha = 0.66f),
+                            fontSize = 12.sp,
+                        )
+                    }
+                    Spacer(modifier = Modifier.size(42.dp))
                 }
 
                 // 底部页码指示：少图用圆点，多图用数字
                 if (images.size > 1) {
                     if (images.size <= 6) {
                         Row(
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp),
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             images.indices.forEach { i ->
@@ -876,12 +921,52 @@ private fun ImagePreviewDialog(
                             text = "${pagerState.currentPage + 1}",
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 14.sp,
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 20.dp),
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp),
                         )
+                    }
+                }
+
+                // 底部浮动操作栏：比散落的 IconButton 更容易发现，也不会和页码重叠。
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 18.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(Color.White.copy(alpha = 0.14f))
+                        .padding(horizontal = 6.dp, vertical = 5.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (liveUrl != null) {
+                            PreviewAction(
+                                label = if (playingLive) "停止" else "实况",
+                                active = playingLive,
+                                onClick = { playingLive = !playingLive },
+                            )
+                            PreviewAction(label = "保存实况", onClick = { onDownloadLive(pagerState.currentPage) })
+                        }
+                        PreviewAction(label = "保存图片", onClick = { onDownload(pagerState.currentPage) })
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PreviewAction(
+    label: String,
+    active: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(19.dp))
+            .background(if (active) iosBlue() else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 

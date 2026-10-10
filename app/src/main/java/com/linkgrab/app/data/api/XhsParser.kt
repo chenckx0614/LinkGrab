@@ -73,6 +73,19 @@ class XhsParser {
     /** 笔记页地址：/explore/{24位id} 或 /discovery/item/{24位id} */
     private val notePathPattern = Regex("""xiaohongshu\.com/(?:explore|discovery/item)/([0-9a-fA-F]{24})""")
 
+    /**
+     * 同一篇笔记在小红书有两套公开页面入口。部分网络/UA 对 explore
+     * 返回信息流或验证页，但 discovery/item 仍会下发完整 SSR 状态树。
+     * 保留原查询参数（尤其 xsec_token/xsec_source）是关键。
+     */
+    fun alternateNoteUrl(url: String): String? {
+        val match = notePathPattern.find(url) ?: return null
+        val id = match.groupValues[1]
+        val replacement = if ("/explore/" in url) "/discovery/item/$id" else "/explore/$id"
+        return url.replace(Regex("/(?:explore|discovery/item)/$id"), replacement)
+            .takeIf { it != url }
+    }
+
     suspend fun parse(shareUrl: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         runCatching {
             // 1) Short links must be expanded first: the canonical page needs xsec_token.

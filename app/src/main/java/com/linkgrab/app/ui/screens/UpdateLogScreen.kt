@@ -17,6 +17,30 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.5.6", "2026-10-10", listOf(
+        "图片预览返回按钮新增 iOS 27 液态按压反馈：按住时跟手压缩、局部高光折射，松手带弹性回弹",
+    )),
+    UpdateLogItem("2.5.5", "2026-10-10", listOf(
+        "重做图片预览界面：增加顶部返回/标题/页码、顶部渐变承托和底部浮动操作栏，图片查看不再像临时黑色弹窗",
+        "保留左右滑动、双击缩放、捏合拖动、实况播放与下载功能，并避开页码与操作栏重叠",
+    )),
+    UpdateLogItem("2.5.4", "2026-10-10", listOf(
+        "小红书解析增强：新增 explore / discovery/item 双页面入口回退，保留 xsec_token 等签名参数，覆盖不同网络环境下单一路径被拦截的情况",
+        "解析策略参考近期仍在维护的 XHS-Downloader、xiaohongshu-cli 与 ucmao/media-parser 的公开页面 SSR 方案",
+    )),
+    UpdateLogItem("2.5.3", "2026-10-10", listOf(
+        "优化 iOS 27 底栏流畅度：移除拖拽过程中会触发整块重组的多余偏移动画，触摸移动改为直接更新绘制状态",
+        "降低静态玻璃模糊半径，并避免每个触摸事件创建协程，减少 Compose 与 GPU 压力",
+    )),
+    UpdateLogItem("2.5.2", "2026-10-10", listOf(
+        "补齐详情页过渡动画：结果页、历史记录、更新日志、音乐和工具页统一加入淡入 + 轻微缩放转场，减少页面硬切",
+        "底部主标签页继续保留方向感滑动，进入详情页使用更柔和的层次动画",
+    )),
+    UpdateLogItem("2.5.1", "2026-10-10", listOf(
+        "动画优化：页面 push/pop 转场缩短并减轻缩放，连续切换更跟手，减少拖沓和掉帧感",
+        "解析提速：小红书 Cronet 桌面/移动浏览器通道并行竞速，避免失败时串行等待；平台链接正则改为预编译复用",
+        "稳定性修复：统一复用链接识别规则，降低分享文案解析时的重复开销",
+    )),
     UpdateLogItem("2.5.0", "2026-10-09", listOf(
         "图片预览全面重做：左右滑动翻页（原来只能点箭头）、双击在 1x/2.5x 之间切换、双指捏合 1x–5x 缩放且放大后可拖动查看细节（带边界）、单击隐藏/显示控制栏，底部圆点页码指示",
         "解析可靠性修复（抖音）：接口请求补上 ttwid 会话 Cookie —— 没有它抖音风控会间歇性返回空数据，这是「偶尔解析失败」的主因；分享页兜底同时尝试「200 直出」与「跟随重定向」两种策略",
