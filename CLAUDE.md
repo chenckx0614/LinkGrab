@@ -114,6 +114,7 @@ linkgrab/app/src/main/java/com/linkgrab/app/
 
 | 版本 | 日期 | 内容 |
 |------|------|------|
+| 2.5.7 | 2026-10-10 | 转场修复：详情页恢复 iOS 视差 push/pop（380/300ms）；预览页返回按钮/操作胶囊升级真·iOS 27 液态按压（高光跟手 + 跟手压缩 + 果冻回弹 + 触感反馈），新增 LiquidPreviewButton |
 | 2.5.6 | 2026-10-10 | 图片预览返回按钮新增 iOS 27 液态按压反馈：跟手压缩、局部高光折射与弹性回弹 |
 | 2.5.5 | 2026-10-10 | 重做图片预览 UI：顶部导航与页码、渐变承托、底部浮动操作栏；保留缩放、翻页、实况播放和下载能力 |
 | 2.5.4 | 2026-10-10 | 小红书新增 explore / discovery/item 双页面入口回退并保留 xsec 签名参数；参考仍在维护的 XHS-Downloader、xiaohongshu-cli、ucmao/media-parser SSR 解析方案 |

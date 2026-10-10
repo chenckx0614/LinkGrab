@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.5.7", "2026-10-10", listOf(
+        "页面转场修复：所有详情页恢复 iOS 视差 push/pop（新页从右侧推入、背后页面 30% 视差退让，返回比进入更快更干脆），替换掉上一版平淡的淡入缩放",
+        "图片预览返回按钮升级为真·iOS 27 液态按压：高光跟随指尖位置、按住整钮跟手压缩、松手欠阻尼弹簧果冻回弹，底部操作胶囊同样生效，按压带轻触震动反馈",
+    )),
     UpdateLogItem("2.5.6", "2026-10-10", listOf(
         "图片预览返回按钮新增 iOS 27 液态按压反馈：按住时跟手压缩、局部高光折射，松手带弹性回弹",
     )),

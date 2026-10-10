@@ -194,8 +194,8 @@ private typealias ExitSpec = AnimatedContentTransitionScope<NavBackStackEntry>.(
  * 注意 push 的 Enter/Exit 必须同时长、pop 的 Enter/Exit 也必须同时长，
  * 否则两个页面位移不同步，视觉上会「撕裂」。
  */
-private const val PushMs = 320
-private const val PopMs = 250
+private const val PushMs = 380
+private const val PopMs = 300
 
 /** iOS system deceleration curve — fast start, long smooth tail. */
 private val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
@@ -213,8 +213,8 @@ private val guideExit: ExitTransition = fadeOut(tween(220, easing = iosEasing))
 
 /** 引导结束进入主界面：淡入 + 轻微放大，避免从右侧硬推进来。 */
 private val guideFinishEnter: EnterTransition =
-    fadeIn(tween(280, easing = iosEasing)) +
-        scaleIn(initialScale = 0.975f, animationSpec = tween(280, easing = iosEasing))
+    fadeIn(tween(340, easing = iosEasing)) +
+        scaleIn(initialScale = 0.96f, animationSpec = tween(340, easing = iosEasing))
 
 private val pushEnter: EnterTransition = slideInHorizontally(
     animationSpec = tween(PushMs, easing = iosEasing),
@@ -235,15 +235,6 @@ private val popExit: ExitTransition = slideOutHorizontally(
     animationSpec = tween(PopMs, easing = iosEasing),
     targetOffsetX = { it },
 )
-
-/** 工具类/结果页使用更轻的淡入缩放，避免内容密集页面横向推入时显得生硬。 */
-private val softEnter: EnterTransition =
-    fadeIn(tween(260, easing = iosEasing)) +
-        scaleIn(initialScale = 0.975f, animationSpec = tween(260, easing = iosEasing))
-
-private val softExit: ExitTransition =
-    fadeOut(tween(180, easing = iosEasing)) +
-        scaleOut(targetScale = 0.985f, animationSpec = tween(180, easing = iosEasing))
 
 /** 底栏标签页的顺序，用来判断切换方向（决定新页从左边还是右边进来）。 */
 private fun tabIndex(route: String?): Int = when (route) {
@@ -332,14 +323,13 @@ private fun IOSPageSurface(content: @Composable () -> Unit) {
  */
 private fun NavGraphBuilder.iosPage(
     route: String,
-    softTransition: Boolean = false,
     content: @Composable () -> Unit,
 ) = composable(
     route = route,
-    enterTransition = iosEnter(if (softTransition) softEnter else pushEnter),
-    exitTransition = iosExit(if (softTransition) softExit else pushExit),
-    popEnterTransition = iosEnter(if (softTransition) softEnter else popEnter),
-    popExitTransition = iosExit(if (softTransition) softExit else popExit),
+    enterTransition = iosEnter(pushEnter),
+    exitTransition = iosExit(pushExit),
+    popEnterTransition = iosEnter(popEnter),
+    popExitTransition = iosExit(popExit),
 ) {
     IOSPageSurface { content() }
 }
@@ -480,27 +470,27 @@ fun AppNavigation(
             }
 
             // Detail pages — transitions come from the shared specs above.
-            iosPage(Screen.Result.route, softTransition = true) {
+            iosPage(Screen.Result.route) {
                 ResultScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
                 )
             }
-            iosPage(Screen.UpdateLog.route, softTransition = true) {
+            iosPage(Screen.UpdateLog.route) {
                 UpdateLogScreen(
                     onBack = { navController.popBackStack() },
                 )
             }
-            iosPage(Screen.VideoToAudio.route, softTransition = true) {
+            iosPage(Screen.VideoToAudio.route) {
                 VideoToAudioScreen(onBack = { navController.popBackStack() })
             }
-            iosPage(Screen.ImageConvert.route, softTransition = true) {
+            iosPage(Screen.ImageConvert.route) {
                 ImageConvertScreen(onBack = { navController.popBackStack() })
             }
-            iosPage(Screen.Music.route, softTransition = true) {
+            iosPage(Screen.Music.route) {
                 MusicScreen(onBack = { navController.popBackStack() })
             }
-            iosPage(Screen.History.route, softTransition = true) {
+            iosPage(Screen.History.route) {
                 HistoryScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },

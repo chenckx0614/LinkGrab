@@ -9,6 +9,8 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -60,11 +62,13 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
@@ -76,6 +80,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -116,6 +121,7 @@ import com.linkgrab.app.ui.theme.iosTertiaryBackground
 import com.linkgrab.app.ui.theme.rememberBackdropLayerActive
 import com.linkgrab.app.viewmodel.DownloadState
 import com.linkgrab.app.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -847,42 +853,11 @@ private fun ImagePreviewDialog(
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val backInteraction = remember { MutableInteractionSource() }
-                    val backPressed by backInteraction.collectIsPressedAsState()
-                    val backScale by animateFloatAsState(
-                        targetValue = if (backPressed) 0.88f else 1f,
-                        animationSpec = spring(dampingRatio = 0.72f, stiffness = 650f),
-                        label = "previewBackScale",
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.14f))
-                            .graphicsLayer {
-                                scaleX = backScale
-                                scaleY = backScale
-                            }
-                            .drawBehind {
-                                if (backPressed) {
-                                    // 按住时在按钮内部移动一层高光，模拟液态玻璃
-                                    // 被手指压住后向四周扩散的折射感。
-                                    drawCircle(
-                                        color = Color.White.copy(alpha = 0.20f),
-                                        radius = size.minDimension * 0.72f,
-                                        center = androidx.compose.ui.geometry.Offset(
-                                            size.width * 0.68f,
-                                            size.height * 0.30f,
-                                        ),
-                                    )
-                                }
-                            }
-                            .clickable(
-                                interactionSource = backInteraction,
-                                indication = null,
-                                onClick = onDismiss,
-                            ),
-                        contentAlignment = Alignment.Center,
+                    LiquidPreviewButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(42.dp),
+                        shape = CircleShape,
+                        contentPadding = PaddingValues(0.dp),
                     ) {
                         Text("‹", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Light)
                     }
@@ -958,15 +933,110 @@ private fun PreviewAction(
     active: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(19.dp))
-            .background(if (active) iosBlue() else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
+    LiquidPreviewButton(
+        onClick = onClick,
+        shape = RoundedCornerShape(19.dp),
+        pressedScale = 0.92f,
+        container = if (active) iosBlue() else Color.White.copy(alpha = 0.14f),
     ) {
         Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+/**
+ * iOS 27 液态按压按钮（预览页专用）：
+ * - 按下整钮跟手压缩，指尖位置浮现径向高光（液态玻璃受压折射的手感来源）
+ * - 松手用欠阻尼弹簧回弹，带一次轻微过冲的「果冻感」
+ * - 压缩与高光都在 draw 阶段读 Animatable，动画全程零重组
+ *
+ * pointerInput 放在 graphicsLayer 之前：手势坐标用未缩放空间，
+ * 不会因为按钮压缩而漂移。
+ */
+@Composable
+private fun LiquidPreviewButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = CircleShape,
+    pressedScale: Float = 0.87f,
+    container: Color = Color.White.copy(alpha = 0.14f),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 13.dp, vertical = 8.dp),
+    content: @Composable () -> Unit,
+) {
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    val press = remember { Animatable(0f) }
+    val touch = remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+
+    Box(
+        modifier = modifier
+            .pointerInput(onClick) {
+                detectTapGestures(
+                    onPress = { pos ->
+                        touch.value = pos
+                        view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                        scope.launch {
+                            press.animateTo(1f, spring(dampingRatio = 1f, stiffness = 900f))
+                        }
+                        var released = true
+                        try {
+                            awaitRelease()
+                        } catch (_: Exception) {
+                            released = false
+                        }
+                        // 欠阻尼弹簧：回弹带过冲
+                        scope.launch {
+                            press.animateTo(0f, spring(dampingRatio = 0.55f, stiffness = 340f))
+                        }
+                        if (released) onClick()
+                    },
+                )
+            }
+            .graphicsLayer {
+                val s = 1f - (1f - pressedScale) * press.value
+                scaleX = s
+                scaleY = s
+            }
+            .clip(shape)
+            .background(container)
+            .drawWithContent {
+                drawContent()
+                val p = press.value
+                if (p > 0.001f) {
+                    val cx = size.width / 2f
+                    val cy = size.height / 2f
+                    // 指尖高光：中心向按压点偏移、半径随压力扩大，像玻璃被压出液坑
+                    val t = touch.value
+                    val hx = cx + (t.x - cx) * 0.45f * p
+                    val hy = cy + (t.y - cy) * 0.45f * p
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 0.30f * p),
+                                Color.White.copy(alpha = 0.08f * p),
+                                Color.Transparent,
+                            ),
+                            center = androidx.compose.ui.geometry.Offset(hx, hy),
+                            radius = size.minDimension * (0.55f + 0.45f * p),
+                        ),
+                    )
+                    // 边缘受压亮环：越压越亮，模拟液体被挤向边缘
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Transparent,
+                                Color.White.copy(alpha = 0.22f * p),
+                            ),
+                            center = androidx.compose.ui.geometry.Offset(cx, cy),
+                            radius = size.minDimension / 2f,
+                        ),
+                    )
+                }
+            }
+            .padding(contentPadding),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
     }
 }
 
