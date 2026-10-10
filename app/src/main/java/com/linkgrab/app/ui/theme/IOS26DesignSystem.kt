@@ -270,9 +270,10 @@ fun IOS26Button(
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    // Liquid Glass 规范：按压时控件轻微「生长」，松手弹性回弹（不是缩小）
     val scale by animateFloatAsState(
-        if (pressed) 0.96f else 1f,
-        spring(dampingRatio = 0.78f, stiffness = 680f),
+        if (pressed) 1.04f else 1f,
+        spring(dampingRatio = 0.55f, stiffness = 380f),
         label = "ios26ButtonScale",
     )
     Surface(
@@ -308,8 +309,8 @@ fun IOS26OutlinedButton(
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        if (pressed) 0.97f else 1f,
-        spring(dampingRatio = 0.78f, stiffness = 680f),
+        if (pressed) 1.04f else 1f,
+        spring(dampingRatio = 0.55f, stiffness = 380f),
         label = "ios26OutlinedScale",
     )
     val glass = iosGlass()
@@ -759,9 +760,9 @@ fun IOS26StickyPage(
 
 /**
  * iOS 26-style back button: circular frosted-glass capsule with a
- * chevron-left glyph. Press feedback is a quick scale-down plus a
- * subtle background darkening, matching UIKit's UIHover / touch-down
- * feel on iOS 26.
+ * chevron-left glyph. Press feedback follows the Liquid Glass interactive
+ * spec: the control slightly *grows* on touch-down and springs back with a
+ * bouncy overshoot on release (grow, not shrink).
  */
 @Composable
 fun IOS26BackButton(
@@ -771,12 +772,12 @@ fun IOS26BackButton(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.88f else 1f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = 700f),
+        targetValue = if (pressed) 1.06f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f, stiffness = 360f),
         label = "ios26BackScale",
     )
     val bgAlpha by animateFloatAsState(
-        targetValue = if (pressed) 0.55f else 1f,
+        targetValue = if (pressed) 1.35f else 1f,
         animationSpec = tween(120),
         label = "ios26BackBg",
     )

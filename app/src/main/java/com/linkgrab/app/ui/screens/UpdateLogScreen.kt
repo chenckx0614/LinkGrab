@@ -17,6 +17,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.5.8", "2026-10-10", listOf(
+        "按钮交互对齐 Apple Liquid Glass 官方规范（.glassEffect(.regular.interactive())）：按压时玻璃轻微「生长」而非缩小，松手欠阻尼弹簧果冻回弹",
+        "图片预览的返回按钮与底部操作栏升级为真·液态玻璃：实时采样背后画面做模糊与边缘折射，按压时折射增强、内阴影加深，指尖位置出现加色光晕（touch-point illumination）",
+        "底部多个操作合并为一整块玻璃胶囊（GlassEffectContainer 规范：相邻玻璃控件合并成同一块玻璃），操作项在其上独立按压反馈",
+        "全局 iOS 风格按钮（返回/主按钮/描边按钮）统一改为按压生长 + 弹性回弹手感",
+    )),
     UpdateLogItem("2.5.7", "2026-10-10", listOf(
         "页面转场修复：所有详情页恢复 iOS 视差 push/pop（新页从右侧推入、背后页面 30% 视差退让，返回比进入更快更干脆），替换掉上一版平淡的淡入缩放",
         "图片预览返回按钮升级为真·iOS 27 液态按压：高光跟随指尖位置、按住整钮跟手压缩、松手欠阻尼弹簧果冻回弹，底部操作胶囊同样生效，按压带轻触震动反馈",

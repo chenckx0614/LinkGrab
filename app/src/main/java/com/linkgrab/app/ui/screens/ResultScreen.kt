@@ -102,6 +102,7 @@ import com.kyant.backdrop.effects.blur
 import com.linkgrab.app.R
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
+import com.linkgrab.app.ui.liquid.LiquidGlassButton
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26HeaderHeight
@@ -771,6 +772,9 @@ private fun ImagePreviewDialog(
     onDownloadLive: (Int) -> Unit,
 ) {
     val context = LocalContext.current
+    // 玻璃按钮的采样源：把翻页图片录成 backdrop 层，按钮才能做出
+    // 真实的背景模糊 + 折射，而不是画在纯色上的假玻璃
+    val previewBackdrop = rememberLayerBackdrop()
     val pagerState = androidx.compose.foundation.pager.rememberPagerState(initialPage = initialIndex) { images.size }
     var playingLive by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
@@ -799,34 +803,43 @@ private fun ImagePreviewDialog(
                 .fillMaxSize()
                 .background(Color.Black),
         ) {
-            // 翻页：HorizontalPager，左右滑动切换（之前只能点箭头）
-            androidx.compose.foundation.pager.HorizontalPager(
-                state = pagerState,
-                key = { images[it] },
-                // 放大状态下禁用翻页，把手势让给图片拖动（观察 snapshot map，状态可响应）
-                userScrollEnabled = (previewScaleRegistry[pagerState.currentPage] ?: 1f) <= 1f,
-            ) { page ->
-                ZoomablePreviewImage(
-                    url = images[page],
-                    contentDescription = "预览 ${page + 1}/${images.size}",
-                    scaleRegistry = previewScaleRegistry,
-                    pageKey = page,
-                    onTap = { controlsVisible = !controlsVisible },
-                )
-            }
+            // 被录进 backdrop 的内容层：只有图片/视频本体。
+            // 玻璃控件本身不放进录制层，避免「玻璃采样玻璃」。
+            // 控件隐藏时不录，省一次全屏离屏合成。
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (controlsVisible) Modifier.layerBackdrop(previewBackdrop) else Modifier),
+            ) {
+                // 翻页：HorizontalPager，左右滑动切换（之前只能点箭头）
+                androidx.compose.foundation.pager.HorizontalPager(
+                    state = pagerState,
+                    key = { images[it] },
+                    // 放大状态下禁用翻页，把手势让给图片拖动（观察 snapshot map，状态可响应）
+                    userScrollEnabled = (previewScaleRegistry[pagerState.currentPage] ?: 1f) <= 1f,
+                ) { page ->
+                    ZoomablePreviewImage(
+                        url = images[page],
+                        contentDescription = "预览 ${page + 1}/${images.size}",
+                        scaleRegistry = previewScaleRegistry,
+                        pageKey = page,
+                        onTap = { controlsVisible = !controlsVisible },
+                    )
+                }
 
-            // 实况播放覆盖层：播放时盖住当前页
-            if (playingLive && exoPlayer != null) {
-                AndroidView(
-                    factory = { ctx ->
-                        (android.view.LayoutInflater.from(ctx)
-                            .inflate(R.layout.player_view_texture, null) as PlayerView).apply {
-                            this.player = exoPlayer
-                            this.useController = false
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize().padding(16.dp),
-                )
+                // 实况播放覆盖层：播放时盖住当前页
+                if (playingLive && exoPlayer != null) {
+                    AndroidView(
+                        factory = { ctx ->
+                            (android.view.LayoutInflater.from(ctx)
+                                .inflate(R.layout.player_view_texture, null) as PlayerView).apply {
+                                this.player = exoPlayer
+                                this.useController = false
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                    )
+                }
             }
 
             if (controlsVisible) {
@@ -853,11 +866,10 @@ private fun ImagePreviewDialog(
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    LiquidPreviewButton(
+                    LiquidGlassButton(
+                        backdrop = previewBackdrop,
                         onClick = onDismiss,
                         modifier = Modifier.size(42.dp),
-                        shape = CircleShape,
-                        contentPadding = PaddingValues(0.dp),
                     ) {
                         Text("‹", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Light)
                     }
@@ -901,13 +913,19 @@ private fun ImagePreviewDialog(
                     }
                 }
 
-                // 底部浮动操作栏：比散落的 IconButton 更容易发现，也不会和页码重叠。
+                // 底部浮动操作栏：一整块 Liquid Glass 胶囊（真背景模糊），
+                // 操作项在其上做按压「生长」+ 触摸点照亮 —— 对齐 Apple
+                // GlassEffectContainer 内多个 glass 按钮合并成一块玻璃的规范。
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 18.dp)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color.White.copy(alpha = 0.14f))
+                        .drawBackdrop(
+                            backdrop = previewBackdrop,
+                            shape = { RoundedCornerShape(26.dp) },
+                            effects = { blur(10f.dp.toPx()) },
+                            onDrawSurface = { drawRect(Color.White.copy(alpha = 0.10f)) },
+                        )
                         .padding(horizontal = 6.dp, vertical = 5.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -933,110 +951,60 @@ private fun PreviewAction(
     active: Boolean = false,
     onClick: () -> Unit,
 ) {
-    LiquidPreviewButton(
-        onClick = onClick,
-        shape = RoundedCornerShape(19.dp),
-        pressedScale = 0.92f,
-        container = if (active) iosBlue() else Color.White.copy(alpha = 0.14f),
-    ) {
-        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-/**
- * iOS 27 液态按压按钮（预览页专用）：
- * - 按下整钮跟手压缩，指尖位置浮现径向高光（液态玻璃受压折射的手感来源）
- * - 松手用欠阻尼弹簧回弹，带一次轻微过冲的「果冻感」
- * - 压缩与高光都在 draw 阶段读 Animatable，动画全程零重组
- *
- * pointerInput 放在 graphicsLayer 之前：手势坐标用未缩放空间，
- * 不会因为按钮压缩而漂移。
- */
-@Composable
-private fun LiquidPreviewButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    shape: androidx.compose.ui.graphics.Shape = CircleShape,
-    pressedScale: Float = 0.87f,
-    container: Color = Color.White.copy(alpha = 0.14f),
-    contentPadding: PaddingValues = PaddingValues(horizontal = 13.dp, vertical = 8.dp),
-    content: @Composable () -> Unit,
-) {
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     val press = remember { Animatable(0f) }
     val touch = remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
 
     Box(
-        modifier = modifier
+        modifier = Modifier
             .pointerInput(onClick) {
                 detectTapGestures(
                     onPress = { pos ->
                         touch.value = pos
                         view.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
-                        scope.launch {
-                            press.animateTo(1f, spring(dampingRatio = 1f, stiffness = 900f))
-                        }
-                        var released = true
-                        try {
+                        scope.launch { press.animateTo(1f, spring(1f, 1200f, 0.001f)) }
+                        val released = try {
                             awaitRelease()
+                            true
                         } catch (_: Exception) {
-                            released = false
+                            false
                         }
-                        // 欠阻尼弹簧：回弹带过冲
-                        scope.launch {
-                            press.animateTo(0f, spring(dampingRatio = 0.55f, stiffness = 340f))
-                        }
+                        scope.launch { press.animateTo(0f, spring(0.5f, 320f, 0.001f)) }
                         if (released) onClick()
                     },
                 )
             }
             .graphicsLayer {
-                val s = 1f - (1f - pressedScale) * press.value
+                // Apple 规范：按压时轻微生长，松手果冻回弹
+                val s = 1f + 0.08f * press.value
                 scaleX = s
                 scaleY = s
             }
-            .clip(shape)
-            .background(container)
+            .clip(RoundedCornerShape(19.dp))
+            .background(if (active) iosBlue() else Color.Transparent)
             .drawWithContent {
                 drawContent()
                 val p = press.value
-                if (p > 0.001f) {
-                    val cx = size.width / 2f
-                    val cy = size.height / 2f
-                    // 指尖高光：中心向按压点偏移、半径随压力扩大，像玻璃被压出液坑
-                    val t = touch.value
-                    val hx = cx + (t.x - cx) * 0.45f * p
-                    val hy = cy + (t.y - cy) * 0.45f * p
+                if (p > 0.01f) {
+                    // 触摸点照亮（illumination from touch point），clip 限制在胶囊内
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.30f * p),
-                                Color.White.copy(alpha = 0.08f * p),
+                                Color.White.copy(alpha = 0.32f * p),
                                 Color.Transparent,
                             ),
-                            center = androidx.compose.ui.geometry.Offset(hx, hy),
-                            radius = size.minDimension * (0.55f + 0.45f * p),
+                            center = touch.value,
+                            radius = size.minDimension * 1.2f,
                         ),
-                    )
-                    // 边缘受压亮环：越压越亮，模拟液体被挤向边缘
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                Color.Transparent,
-                                Color.White.copy(alpha = 0.22f * p),
-                            ),
-                            center = androidx.compose.ui.geometry.Offset(cx, cy),
-                            radius = size.minDimension / 2f,
-                        ),
+                        blendMode = androidx.compose.ui.graphics.BlendMode.Plus,
                     )
                 }
             }
-            .padding(contentPadding),
+            .padding(horizontal = 13.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        content()
+        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
     }
 }
 
