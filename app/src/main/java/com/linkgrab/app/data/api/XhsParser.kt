@@ -525,6 +525,184 @@ class XhsParser {
      */
     fun parseHtml(html: String): MediaResult? = parseFromHtml(html)
 
+    // region: web feed API（WebView 签名通道专用）
+    //
+    // 官方 /api/sns/web/v1/feed 需要 X-S/X-T 签名，纯 HTTP 客户端无法伪造；
+    // 但 WebView 加载笔记页后页面 JS 环境自带签名器 window._webmsxyw，
+    // 注入 JS 在站内 origin 直接调 feed 接口即可拿到完整 JSON —— 这是
+    // SSR __INITIAL_STATE__ 之外的另一条官方数据通道（image_list 更全，
+    // 部分 SSR 缺图的笔记在 feed 接口里有原图地址）。
+
+    /**
+     * WebView 注入脚本：提取 noteId/xsec_token → 页面签名器签名 →
+     * fetch feed 接口 → 把响应 JSON 文本存进 window.__lgFeedResult。
+     * evaluateJavascript 不 await Promise，所以用全局变量 + Kotlin 侧轮询。
+     */
+    fun feedApiInjectedJs(): String = """
+        (function(){
+          try {
+            if (window.__lgFeedStarted) return;
+            window.__lgFeedStarted = true;
+            window.__lgFeedResult = null;
+            var m = location.href.match(/(?:explore|discovery\/item|red_video)\/([0-9a-fA-F]{24})/);
+            if (!m) { window.__lgFeedResult = 'ERR:no_note_id'; return; }
+            if (typeof window._webmsxyw !== 'function') { window.__lgFeedResult = 'ERR:no_signer'; return; }
+            var q = new URLSearchParams(location.search);
+            var body = {
+              source_note_id: m[1],
+              image_formats: ['jpg', 'webp', 'avif'],
+              extra: { need_body_topic: '1' },
+              xsec_source: q.get('xsec_source') || 'pc_feed',
+              xsec_token: q.get('xsec_token') || ''
+            };
+            var sign = window._webmsxyw('/api/sns/web/v1/feed', body);
+            var xs = sign['X-S'] || sign['x-s'] || '';
+            var xt = sign['X-T'] || sign['x-t'] || '';
+            fetch('https://edith.xiaohongshu.com/api/sns/web/v1/feed', {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json', 'x-s': xs, 'x-t': String(xt) },
+              body: JSON.stringify(body)
+            }).then(function(r){ return r.text(); }).then(function(t){
+              window.__lgFeedResult = t;
+            }).catch(function(e){ window.__lgFeedResult = 'ERR:fetch:' + e; });
+          } catch (e) { window.__lgFeedResult = 'ERR:exc:' + e; }
+        })()
+    """.trimIndent()
+
+    /** 轮询读取脚本结果用。 */
+    fun feedApiResultJs(): String = """window.__lgFeedResult || null"""
+
+    /**
+     * 解析 feed 接口（/api/sns/web/v1/feed）的响应 JSON。
+     * 字段是 snake_case（image_list / master_url），与 SSR 的 camelCase 不同。
+     */
+    fun parseFeedApiJson(raw: String): MediaResult? {
+        if (raw.isBlank() || raw.startsWith("ERR")) return null
+        val root = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return null
+        if (root.string("success") == "false") return null
+        val card = root["data"]?.jsonObject?.get("items")?.jsonArray
+            ?.firstOrNull()?.jsonObject?.get("note_card")?.jsonObject ?: return null
+
+        val title = card.string("title")?.takeIf { it.isNotBlank() }
+            ?: card.string("desc")?.takeIf { it.isNotBlank() }
+            ?: "小红书笔记"
+        val author = card["user"]?.jsonObject?.string("nickname") ?: ""
+
+        val imageList = card.anyKey("image_list", "imageList")?.jsonArray
+
+        // ---- video note ----
+        val stream = card["video"]?.jsonObject
+            ?.get("media")?.jsonObject
+            ?.get("stream")?.jsonObject
+        val videoUrl = pickFeedVideoUrl(stream)
+        if (!videoUrl.isNullOrEmpty()) {
+            val cover = imageList?.firstOrNull()?.jsonObject?.let { pickFeedImageUrl(it) }
+            return MediaResult(
+                type = MediaType.VIDEO,
+                title = title,
+                videoUrl = videoUrl,
+                coverUrl = cover,
+                author = author,
+                source = "xiaohongshu",
+            )
+        }
+
+        // ---- image note ----
+        val images = mutableListOf<String>()
+        val livePhotos = mutableMapOf<Int, List<String>>()
+        imageList?.forEachIndexed { index, el ->
+            val img = el.jsonObject
+            pickFeedImageUrl(img)?.let { images.add(it) }
+            val liveUrls = pickFeedLiveCandidates(img)
+            if (liveUrls.isNotEmpty()) livePhotos[index] = liveUrls
+        }
+        if (images.isEmpty()) return null
+        return MediaResult(
+            type = MediaType.IMAGE,
+            title = title,
+            images = images,
+            coverUrl = images.first(),
+            livePhotos = livePhotos,
+            author = author,
+            source = "xiaohongshu",
+        )
+    }
+
+    /** feed 接口图片地址清洗：/sns-webp 是压缩格式，/sns-img 是原图存储；`!` 后缀是处理参数。 */
+    private fun cleanFeedImageUrl(url: String): String {
+        var u = url.replace("/sns-webp/", "/sns-img/")
+        val bang = u.indexOf('!')
+        // 只截文件名之后的 ! 后缀（如 xxx.jpg!webp），别误伤路径里合法的字符
+        if (bang > u.lastIndexOf('/')) u = u.substring(0, bang)
+        return u
+    }
+
+    private fun pickFeedImageUrl(img: JsonObject): String? {
+        // info_list 按场景挑：WB_ORIGIN 原图 → WB_DFT 默认 → 任意一个
+        val infoList = img["info_list"]?.jsonArray
+        if (infoList != null && infoList.isNotEmpty()) {
+            val scenes = infoList.mapNotNull { it as? JsonObject }
+            val preferred = scenes.firstOrNull { it.string("image_scene")?.contains("WB_ORIGIN") == true }
+                ?: scenes.firstOrNull { it.string("image_scene")?.contains("WB_DFT") == true }
+                ?: scenes.first()
+            preferred.string("url")?.takeIf { it.isNotBlank() }?.let { return cleanFeedImageUrl(it) }
+        }
+        val direct = img.string("url")
+            ?: img.string("url_default") ?: img.string("urlDefault")
+            ?: img.string("url_pre") ?: img.string("urlPre")
+        return direct?.takeIf { it.isNotBlank() }?.let { cleanFeedImageUrl(it) }
+    }
+
+    private fun pickFeedVideoUrl(stream: JsonObject?): String? {
+        if (stream == null) return null
+        for (codec in listOf("h264", "h265", "av1", "h266")) {
+            val entry = stream[codec]?.jsonArray?.firstOrNull()?.jsonObject ?: continue
+            val url = entry.string("master_url") ?: entry.string("masterUrl")
+            if (!url.isNullOrEmpty()) return url
+        }
+        return null
+    }
+
+    private fun pickFeedLiveCandidates(img: JsonObject): List<String> {
+        val flag = img.anyKey("live_photo", "livePhoto")
+        val flagged = when (flag) {
+            is JsonPrimitive -> flag.contentOrNull?.toBooleanStrictOrNull() ?: false
+            null -> false
+            else -> true
+        }
+        val hasStream = img["stream"] != null || img["video"] != null ||
+            img.string("live_photo_url") != null || img.string("livePhotoUrl") != null
+        if (!flagged && !hasStream) return emptyList()
+
+        val candidates = mutableListOf<String>()
+        fun addEntry(entry: JsonObject?) {
+            entry?.string("master_url")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
+            entry?.string("masterUrl")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
+            entry?.anyKey("backup_urls", "backupUrls")?.jsonArray
+                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                ?.filter { it.isNotBlank() }
+                ?.let { candidates.addAll(it) }
+        }
+        val streamObj = img["stream"]?.jsonObject
+        if (streamObj != null) {
+            for (codec in listOf("h264", "h265", "av1")) {
+                addEntry(streamObj[codec]?.jsonArray?.firstOrNull()?.jsonObject)
+            }
+        }
+        img["video"]?.jsonObject?.string("url")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
+        img.string("live_photo_url")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
+        img.string("livePhotoUrl")?.takeIf { it.isNotBlank() }?.let { candidates.add(it) }
+        return candidates.distinct()
+    }
+
+    private fun JsonObject.anyKey(vararg keys: String): JsonElement? {
+        for (key in keys) this[key]?.let { return it }
+        return null
+    }
+
+    // endregion
+
     /**
      * 从 `window.__INITIAL_STATE__` 的原始字面量解析（供 WebView 通道复用：
      * 浏览器端把 script 文本抠出来传回来，会带 undefined 字面量）。

@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.5.9", "2026-10-11", listOf(
+        "小红书新增官方 feed 接口通道：WebView 抠不到页面数据时，注入 JS 借页面自带签名器调用 /api/sns/web/v1/feed，拿到完整 image_list（部分 SSR 缺图的笔记在此接口有原图地址）",
+        "feed 接口图片清洗：/sns-webp 压缩路径还原为 /sns-img 原图路径，并截掉 !webp 等处理参数后缀",
+        "实况照片/视频笔记同样支持从 feed 接口提取（master_url + backup_urls 候选回退）",
+    )),
     UpdateLogItem("2.5.8", "2026-10-10", listOf(
         "按钮交互对齐 Apple Liquid Glass 官方规范（.glassEffect(.regular.interactive())）：按压时玻璃轻微「生长」而非缩小，松手欠阻尼弹簧果冻回弹",
         "图片预览的返回按钮与底部操作栏升级为真·液态玻璃：实时采样背后画面做模糊与边缘折射，按压时折射增强、内阴影加深，指尖位置出现加色光晕（touch-point illumination）",

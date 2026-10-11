@@ -207,7 +207,7 @@ class WebViewParser(private val context: Context) {
                     cont.resume(null)
                 }
             }
-            handler.postDelayed(timeout, 15_000)
+            handler.postDelayed(timeout, 22_000)
 
             fun finish(result: MediaResult?) {
                 if (resumed || !cont.isActive) return
@@ -215,6 +215,38 @@ class WebViewParser(private val context: Context) {
                 handler.removeCallbacks(timeout)
                 handler.post { webView?.destroy() }
                 cont.resume(result)
+            }
+
+            /**
+             * 兜底：页面里抠不到 __INITIAL_STATE__（或 state 里没媒体）时，
+             * 注入 JS 借页面自带的签名器 window._webmsxyw 调官方 feed 接口。
+             * evaluateJavascript 不 await Promise，脚本把结果写进
+             * window.__lgFeedResult，这里轮询读取。
+             */
+            fun tryFeedApi(view: WebView?, attempt: Int) {
+                if (resumed || view == null) return
+                if (attempt == 0) {
+                    view.evaluateJavascript(xhsNativeParser.feedApiInjectedJs()) { }
+                    handler.postDelayed({ tryFeedApi(view, 1) }, 1_200)
+                    return
+                }
+                view.evaluateJavascript(xhsNativeParser.feedApiResultJs()) { encoded ->
+                    val raw = encoded?.takeIf { it != "null" }?.let {
+                        runCatching { json.decodeFromString<String>(it) }.getOrNull()
+                    }
+                    val parsed = raw?.let { xhsNativeParser.parseFeedApiJson(it) }
+                    val usable = parsed != null && (parsed.images.isNotEmpty() || !parsed.videoUrl.isNullOrEmpty())
+                    // 页面根本不在笔记路径（被重定向到登录页等）或页面没有签名器
+                    // ——这种重试也不会变，直接结束
+                    val fatal = raw != null &&
+                        (raw.startsWith("ERR:no_note_id") || raw.startsWith("ERR:no_signer"))
+                    when {
+                        usable -> finish(parsed)
+                        fatal -> finish(null)
+                        attempt < 6 -> handler.postDelayed({ tryFeedApi(view, attempt + 1) }, 1_200)
+                        else -> finish(null)
+                    }
+                }
             }
 
             fun tryExtract(view: WebView?, attempt: Int) {
@@ -230,7 +262,8 @@ class WebViewParser(private val context: Context) {
                     } else if (attempt < 5) {
                         handler.postDelayed({ tryExtract(view, attempt + 1) }, 700)
                     } else {
-                        finish(null)
+                        // SSR 这条路到头了，换官方 feed 接口（页面内签名）
+                        tryFeedApi(view, 0)
                     }
                 }
             }
