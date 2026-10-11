@@ -28,8 +28,8 @@ import java.util.concurrent.TimeUnit
  *    - www.douyin.com / iesdouyin.com links → take the last path segment
  *      (or the `modal_id` query param)
  * 2. GET the `slidesinfo` web API (works for both videos and image albums;
- *    albums additionally need `request_source=200`). The legacy HTML SSR
- *    page is kept as a fallback.
+ *    albums additionally need `request_source=200`). 空结果时强制刷新 ttwid
+ *    重试一轮。The legacy HTML SSR page is kept as a fallback.
  * 3. Read the first `aweme_details` entry:
  *    - images → images[] (album). `download_url_list` is preferred because it
  *      is the watermark-free original, otherwise `url_list` is used.
@@ -172,33 +172,44 @@ class DouyinParser {
 
     /**
      * Web API: /web/api/v2/aweme/slidesinfo/ — supports both videos and
-     * image albums (albums need `request_source=200`). `iteminfo` is kept as a
-     * legacy fallback. A response is only accepted when it actually carries
-     * playable media, otherwise the next endpoint is tried.
+     * image albums (albums need `request_source=200`).
+     *
+     * 2026-10 实测：`iteminfo` 已下线（恒定返回 encrypt_data_miss），不再浪费一趟；
+     * slidesinfo 本体健康（干净请求连 ttwid 都不需要），但风控可能间歇性过滤
+     * （aweme_details 为 null + filter_list）。此时强制刷新 ttwid 换新会话重试一次。
      */
     private fun fetchAwemeDetail(videoId: String): JsonObject? {
         // `request_source=200` is required for image albums but returns an
         // empty list for videos, so both variants are tried and the first
         // response that actually carries media wins.
-        val apiUrls = listOf(
-            "https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/?aweme_ids=%5B$videoId%5D",
-            "https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/?aweme_ids=%5B$videoId%5D&request_source=200",
-            "https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/?aweme_ids=%5B$videoId%5D",
-        )
-        var partial: JsonObject? = null
-        for (apiUrl in apiUrls) {
-            val detail = try {
-                val body = get(apiUrl, followRedirects = true)
-                json.parseToJsonElement(body).jsonObject["aweme_details"]?.jsonArray
-                    ?.firstOrNull()?.jsonObject
-            } catch (e: Exception) {
-                null
-            } ?: continue
+        fun trySlidesinfo(): JsonObject? {
+            var partial: JsonObject? = null
+            for (rsParam in listOf("", "&request_source=200")) {
+                val detail = try {
+                    val body = get(
+                        "https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/?aweme_ids=%5B$videoId%5D$rsParam",
+                        followRedirects = true,
+                    )
+                    json.parseToJsonElement(body).jsonObject["aweme_details"]?.jsonArray
+                        ?.firstOrNull()?.jsonObject
+                } catch (e: Exception) {
+                    null
+                } ?: continue
 
-            if (hasMedia(detail)) return detail
-            if (partial == null) partial = detail
+                if (hasMedia(detail)) return detail
+                if (partial == null) partial = detail
+            }
+            return partial
         }
-        return partial
+
+        trySlidesinfo()?.let { return it }
+
+        // 空结果 → 缓存的 ttwid 可能已被风控标记，丢弃强制重新引导后再试一轮
+        if (cachedTtwid != null) {
+            cachedTtwid = null
+            return trySlidesinfo()
+        }
+        return null
     }
 
     private fun hasMedia(detail: JsonObject): Boolean {
@@ -305,38 +316,57 @@ class DouyinParser {
 
     /**
      * 旧的 HTML SSR 解析（iesdouyin 分享页 _ROUTER_DATA），作为接口失败时的兜底。
-     * 注意该页行为不稳定：多数情况 200 直出；风控时 302 到 www.douyin.com ——
-     * 只试「禁止跟随重定向」会在 302 直接失败，这也是「偶尔失效」的来源之一，
-     * 所以两种策略都试，先 200 直出、再跟重定向取落地页。
+     *
+     * 2026-10 实测：SSR 页**只在带 ttwid cookie 时**才内嵌完整媒体数据
+     * （无 cookie 的页面是纯客户端渲染壳，_ROUTER_DATA 里没有 item_list）；
+     * 搜索引擎蜘蛛 UA 会被 302 封锁，不能走假 UA 的路。
+     * 图文作品的分享路径是 /share/note/，视频是 /share/video/，两条都试。
+     * 页面行为不稳定：多数情况 200 直出；风控时 302 —— 两种策略都试。
      */
     private fun fetchAwemeDetailFromHtml(videoId: String): JsonObject? {
         return try {
-            val pageUrl = "https://www.iesdouyin.com/share/video/$videoId/"
-            val html = fetchShareHtml(pageUrl, followRedirects = false)
-                ?: fetchShareHtml(pageUrl, followRedirects = true)
-                ?: return null
-
-            val routerJson = Regex(
-                """window\._ROUTER_DATA\s*=\s*(.*?)</script>""",
-                RegexOption.DOT_MATCHES_ALL,
-            ).find(html)?.groupValues?.get(1)?.trim() ?: return null
-
-            val loaderData = json.parseToJsonElement(routerJson).jsonObject["loaderData"]?.jsonObject
-                ?: return null
-
-            // Newer pages drop `videoInfoRes`: scan every loader entry for an
-            // `item_list` instead of relying on a fixed key.
-            for ((_, value) in loaderData) {
-                val itemList = value.jsonObject["videoInfoRes"]?.jsonObject
-                    ?.get("item_list")?.jsonArray
-                    ?: continue
-                val item = itemList.firstOrNull()?.jsonObject ?: continue
-                if (hasMedia(item)) return item
+            for (path in listOf("share/video", "share/note")) {
+                val pageUrl = "https://www.iesdouyin.com/$path/$videoId/"
+                for (followRedirects in listOf(false, true)) {
+                    val html = fetchShareHtml(pageUrl, followRedirects) ?: continue
+                    parseShareHtmlRouterData(html)?.let { return it }
+                }
+            }
+            // 全部落空 → ttwid 可能已被风控标记，刷新后再试一轮
+            if (cachedTtwid != null) {
+                cachedTtwid = null
+                for (path in listOf("share/video", "share/note")) {
+                    val pageUrl = "https://www.iesdouyin.com/$path/$videoId/"
+                    val html = fetchShareHtml(pageUrl, followRedirects = false) ?: continue
+                    parseShareHtmlRouterData(html)?.let { return it }
+                }
             }
             null
         } catch (e: Exception) {
             null
         }
+    }
+
+    /** 从分享页 HTML 里抠 _ROUTER_DATA 并找出带媒体的 item_list。 */
+    private fun parseShareHtmlRouterData(html: String): JsonObject? {
+        val routerJson = Regex(
+            """window\._ROUTER_DATA\s*=\s*(.*?)</script>""",
+            RegexOption.DOT_MATCHES_ALL,
+        ).find(html)?.groupValues?.get(1)?.trim() ?: return null
+
+        val loaderData = json.parseToJsonElement(routerJson).jsonObject["loaderData"]?.jsonObject
+            ?: return null
+
+        // Newer pages drop `videoInfoRes`: scan every loader entry for an
+        // `item_list` instead of relying on a fixed key.
+        for ((_, value) in loaderData) {
+            val itemList = value.jsonObject["videoInfoRes"]?.jsonObject
+                ?.get("item_list")?.jsonArray
+                ?: continue
+            val item = itemList.firstOrNull()?.jsonObject ?: continue
+            if (hasMedia(item)) return item
+        }
+        return null
     }
 
     /** 分享页 HTML 抓取：可选跟随重定向，失败返回 null。 */

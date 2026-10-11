@@ -17,6 +17,11 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.5.10", "2026-10-11", listOf(
+        "抖音解析可靠性修复：实测确认旧 iteminfo 接口已下线（恒定 encrypt_data_miss），从通道链移除，失败时少跑两趟死接口",
+        "分享页 SSR 兜底增强：实测该页只在携带 ttwid 会话时才内嵌媒体数据；风控过滤时强制刷新 ttwid 换新会话重试",
+        "SSR 兜底新增 /share/note/ 路径，覆盖图文作品；解析出的 item_list/aweme_details 结构完全复用现有提取逻辑",
+    )),
     UpdateLogItem("2.5.9", "2026-10-11", listOf(
         "小红书新增官方 feed 接口通道：WebView 抠不到页面数据时，注入 JS 借页面自带签名器调用 /api/sns/web/v1/feed，拿到完整 image_list（部分 SSR 缺图的笔记在此接口有原图地址）",
         "feed 接口图片清洗：/sns-webp 压缩路径还原为 /sns-img 原图路径，并截掉 !webp 等处理参数后缀",
