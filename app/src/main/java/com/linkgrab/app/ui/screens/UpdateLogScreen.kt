@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.5.11", "2026-10-12", listOf(
+        "底栏新增 Material Design 3（M3 Expressive）风格：按 Google 官方规范还原——80dp 贴边通栏实底容器（surface-container）、64×32dp 药丸选中指示器（secondary-container）弹性滑动、label-medium 12sp 标签、MD 标准 ripple 按压反馈，深浅色模式全适配",
+        "设置页「底栏风格」新增第四档：Material 3",
+    )),
     UpdateLogItem("2.5.10", "2026-10-11", listOf(
         "抖音解析可靠性修复：实测确认旧 iteminfo 接口已下线（恒定 encrypt_data_miss），从通道链移除，失败时少跑两趟死接口",
         "分享页 SSR 兜底增强：实测该页只在携带 ttwid 会话时才内嵌媒体数据；风控过滤时强制刷新 ttwid 换新会话重试",

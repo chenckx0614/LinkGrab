@@ -112,6 +112,8 @@ import com.linkgrab.app.ui.liquid.HarmonyOS7TabItem
 import com.linkgrab.app.ui.liquid.HyperOS4BottomTabs
 import com.linkgrab.app.ui.liquid.HyperOS4TabItem
 import com.linkgrab.app.ui.liquid.LiquidBottomTabs
+import com.linkgrab.app.ui.liquid.Md3BottomTabs
+import com.linkgrab.app.ui.liquid.Md3TabItem
 import com.linkgrab.app.ui.screens.VideoToAudioScreen
 import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
@@ -625,6 +627,33 @@ fun AppNavigation(
                             "设置",
                             selected = selectedIndex == 2,
                             onPress = { reportPress(2, it) },
+                            modifier = Modifier.weight(1f),
+                        ) { selectIndex(2) }
+                    }
+                    3 -> Md3BottomTabs(
+                        selectedTabIndex = { selectedIndex },
+                        onTabSelected = onTabSelected,
+                        backdrop = liquidBackdrop,
+                        tabsCount = 3,
+                        // MD3 规范：贴边通栏实底，不走悬浮胶囊的外边距
+                        modifier = Modifier.navigationBarsPadding(),
+                    ) { selectIndex ->
+                        Md3TabItem(
+                            Icons.Default.Home,
+                            "首页",
+                            selected = selectedIndex == 0,
+                            modifier = Modifier.weight(1f),
+                        ) { selectIndex(0) }
+                        Md3TabItem(
+                            Icons.Default.Build,
+                            "工具箱",
+                            selected = selectedIndex == 1,
+                            modifier = Modifier.weight(1f),
+                        ) { selectIndex(1) }
+                        Md3TabItem(
+                            Icons.Default.Settings,
+                            "设置",
+                            selected = selectedIndex == 2,
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(2) }
                     }

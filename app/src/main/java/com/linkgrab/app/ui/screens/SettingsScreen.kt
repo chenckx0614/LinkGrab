@@ -127,6 +127,7 @@ fun SettingsScreen(viewModel: MainViewModel, onNavigateToUpdateLog: () -> Unit =
                         IOS26Choice("iOS27", bottomBarStyle == 0, { viewModel.setBottomBarStyle(0) }, Modifier.weight(1f))
                         IOS26Choice("HyperOS4", bottomBarStyle == 1, { viewModel.setBottomBarStyle(1) }, Modifier.weight(1f))
                         IOS26Choice("HarmonyOS 7", bottomBarStyle == 2, { viewModel.setBottomBarStyle(2) }, Modifier.weight(1f))
+                        IOS26Choice("Material 3", bottomBarStyle == 3, { viewModel.setBottomBarStyle(3) }, Modifier.weight(1f))
                     }
                 }
             }
