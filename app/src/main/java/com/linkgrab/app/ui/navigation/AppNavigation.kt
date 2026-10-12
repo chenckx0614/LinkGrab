@@ -114,6 +114,8 @@ import com.linkgrab.app.ui.liquid.HyperOS4TabItem
 import com.linkgrab.app.ui.liquid.LiquidBottomTabs
 import com.linkgrab.app.ui.liquid.Md3BottomTabs
 import com.linkgrab.app.ui.liquid.Md3TabItem
+import com.linkgrab.app.ui.liquid.NexioBottomTabs
+import com.linkgrab.app.ui.liquid.NexioBottomTab
 import com.linkgrab.app.ui.screens.VideoToAudioScreen
 import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
@@ -629,6 +631,18 @@ fun AppNavigation(
                             onPress = { reportPress(2, it) },
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(2) }
+                    }
+                    4 -> NexioBottomTabs(
+                        selectedTabIndex = { selectedIndex },
+                        onTabSelected = onTabSelected,
+                        backdrop = liquidBackdrop,
+                        tabsCount = 3,
+                        // Nexio 风格：较窄的悬浮胶囊（参照其 0.63f 宽度）
+                        modifier = bottomModifier.fillMaxWidth(0.66f),
+                    ) {
+                        NexioBottomTab(Icons.Default.Home, "首页", Modifier.weight(1f))
+                        NexioBottomTab(Icons.Default.Build, "工具箱", Modifier.weight(1f))
+                        NexioBottomTab(Icons.Default.Settings, "设置", Modifier.weight(1f))
                     }
                     3 -> Md3BottomTabs(
                         selectedTabIndex = { selectedIndex },

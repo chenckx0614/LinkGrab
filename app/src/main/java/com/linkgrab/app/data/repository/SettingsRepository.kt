@@ -38,7 +38,8 @@ class SettingsRepository(private val context: Context) {
     }
 
     val bottomBarStyle: Flow<Int> = context.dataStore.data.map { preferences ->
-        preferences[BOTTOM_BAR_STYLE_KEY] ?: 0
+        // 默认 Nexio 液态玻璃（4）；0-3 为历史风格（iOS27/HyperOS4/HarmonyOS7/Material3）
+        preferences[BOTTOM_BAR_STYLE_KEY] ?: 4
     }
 
     suspend fun setColorMode(mode: Int) {

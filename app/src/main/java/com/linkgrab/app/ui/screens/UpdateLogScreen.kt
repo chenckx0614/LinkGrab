@@ -17,6 +17,10 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
 private val updateLogs = listOf(
+    UpdateLogItem("2.5.12", "2026-10-12", listOf(
+        "底栏新增 Nexio 液态玻璃风格（学习自开源项目 Nexio 课程表）：三层玻璃结构——可见层 vibrancy+blur、透明捕获层按压放大透出、玻璃滑块带色散折射；统一手势层支持按下标签胶囊飞入保持按压、按住拖动 1:1 跟手、松手吸附选中",
+        "该风格设为默认底栏；原有 iOS27 / HyperOS4 / HarmonyOS 7 / Material 3 仍可在设置中切换",
+    )),
     UpdateLogItem("2.5.11", "2026-10-12", listOf(
         "底栏新增 Material Design 3（M3 Expressive）风格：按 Google 官方规范还原——80dp 贴边通栏实底容器（surface-container）、64×32dp 药丸选中指示器（secondary-container）弹性滑动、label-medium 12sp 标签、MD 标准 ripple 按压反馈，深浅色模式全适配",
         "设置页「底栏风格」新增第四档：Material 3",

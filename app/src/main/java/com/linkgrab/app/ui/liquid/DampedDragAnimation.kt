@@ -149,6 +149,24 @@ class DampedDragAnimation(
         }
     }
 
+    /**
+     * 只移动并保持按压态，不自动 release。
+     * 供 tab 按下跟手用（Nexio 风格底栏）：飞行动画结束仍保持玻璃高光，
+     * 等松手再由外层 gesture 层 release。
+     */
+    fun animateToValueKeepingPress(value: Float) {
+        animationScope.launch {
+            mutatorMutex.mutate {
+                press()
+                val targetValue = value.coerceIn(valueRange)
+                launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
+                if (velocity != 0f) {
+                    launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
+                }
+            }
+        }
+    }
+
     private fun updateVelocity() {
         velocityTracker.addPosition(
             System.currentTimeMillis(),

@@ -67,7 +67,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _predictiveBack = MutableStateFlow(0)
     val predictiveBack: StateFlow<Int> = _predictiveBack.asStateFlow()
 
-    private val _bottomBarStyle = MutableStateFlow(0)
+    private val _bottomBarStyle = MutableStateFlow(4)
     val bottomBarStyle: StateFlow<Int> = _bottomBarStyle.asStateFlow()
 
     private val _updateResult = MutableStateFlow<UpdateResult?>(null)
