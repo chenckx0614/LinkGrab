@@ -61,7 +61,10 @@ fun SettingsScreen(
         IOS26StickyPage(title = "我的") {
             item { IOS26PageHeader("我的", "让 LinkGrab 更符合你的使用习惯。", topPadding = 0.dp) }
 
+            // 分组标题语言与二级页（更新设置/关于应用）统一：
+            // panel 外 14sp 中性色小标题，panel 内不再放 20sp 大标题。
             item {
+                SectionLabel("通知")
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     IOS26ListRow(
                         "跟随系统外观",
@@ -92,22 +95,16 @@ fun SettingsScreen(
             }
 
             item {
+                SectionLabel("外观")
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     Text(
-                        "外观",
-                        fontSize = 20.sp,
+                        "颜色模式",
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = iosLabel(),
-                        letterSpacing = (-0.3).sp,
-                    )
-                    Text(
-                        "选择 LinkGrab 的颜色模式",
-                        fontSize = 14.sp,
-                        color = iosSecondaryLabel(),
-                        modifier = Modifier.padding(top = 4.dp),
                     )
                     Row(
-                        Modifier.fillMaxWidth().padding(top = 14.dp),
+                        Modifier.fillMaxWidth().padding(top = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         IOS26Choice("跟随系统", colorMode == 0, { viewModel.setColorMode(0) }, Modifier.weight(1f))
@@ -117,20 +114,13 @@ fun SettingsScreen(
 
                     Text(
                         "底栏样式",
-                        fontSize = 18.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = iosLabel(),
-                        letterSpacing = (-0.3).sp,
-                        modifier = Modifier.padding(top = 22.dp),
-                    )
-                    Text(
-                        "选择 LinkGrab 的底部导航风格",
-                        fontSize = 14.sp,
-                        color = iosSecondaryLabel(),
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = 18.dp),
                     )
                     Row(
-                        Modifier.fillMaxWidth().padding(top = 14.dp),
+                        Modifier.fillMaxWidth().padding(top = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         IOS26Choice("iOS27", bottomBarStyle == 0, { viewModel.setBottomBarStyle(0) }, Modifier.weight(1f))
@@ -142,6 +132,7 @@ fun SettingsScreen(
             }
 
             item {
+                SectionLabel("通用")
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     // 检查更新挪进「更新设置」二级页，这里只留一行入口带版本号
                     IOS26ListRow(
@@ -156,15 +147,11 @@ fun SettingsScreen(
                             modifier = Modifier.size(IOS26IconSize.Disclosure),
                         )
                     }
-                }
-            }
-
-            item {
-                IOS26Panel(Modifier.fillMaxWidth()) {
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
                     // 「关于应用」二级页：软件名 / 图标 / 版本 / 更新日志 / 交流与反馈都在里面
                     IOS26ListRow(
                         "关于应用",
-                        "版本 v${BuildConfig.VERSION_NAME}",
+                        "版本信息、更新日志与捐赠支持",
                         onClick = onNavigateToAbout,
                     ) {
                         Icon(
@@ -178,4 +165,16 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+/** 分组小标题：与更新设置/关于应用二级页同一语言（panel 外、14sp、中性色）。 */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium,
+        color = iosSecondaryLabel(),
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+    )
 }

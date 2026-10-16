@@ -4,6 +4,10 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.draw.blur
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
@@ -43,6 +47,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -72,7 +77,9 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.DisposableEffect
@@ -165,14 +172,29 @@ private typealias ExitSpec = AnimatedContentTransitionScope<NavBackStackEntry>.(
  * 转场窗口时长标记：v2.5.23 引入——转场期间摘掉全屏 layerBackdrop 录制，
  * 结束后恢复。
  */
-private const val PushMs = 320
-private const val PopMs = 260
+private const val PushMs = 440
+private const val PopMs = 400
 
 /** iOS system deceleration curve — fast start, long smooth tail. */
 private val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
-/** 30% parallax offset for the page that stays behind. */
-private const val Parallax = 0.30f
+/**
+ * 页面自身路由：页面据此与「当前目的地」比对，判断自己是否被上层页面覆盖。
+ * 被覆盖的页面套上模糊遮罩——iOS push 的核心语言：新页滑入，旧页原地
+ * 渐糊渐暗，等新页盖上来。
+ */
+private val LocalMyRoute = staticCompositionLocalOf<String?> { null }
+
+/**
+ * 当前目的地路由（全局快照状态）。由 AppNavigation 里的
+ * OnDestinationChangedListener 在导航提交的瞬间写入——与转场开始同步，
+ * 被覆盖页由此立刻拿到 target=1 开始套模糊。
+ */
+private val currentRouteState = mutableStateOf<String?>(null)
+
+/** 被覆盖页的模糊半径上限与暗化强度。 */
+private val CoverBlurRadius = 18.dp
+private const val CoverDimAlpha = 0.28f
 
 /**
  * 引导页离场：淡出收尾，不做横向推移——引导页更像"一层"而不是"栈里的一页"。
@@ -185,34 +207,41 @@ private val guideFinishEnter: EnterTransition =
         scaleIn(initialScale = 0.96f, animationSpec = tween(340, easing = iosEasing))
 
 /**
- * push / pop 用不同时长：进入新页稍慢、更从容，返回更快、更干脆。
- * 这是库里 HyperOS Activity 转场的观感——新页从右滑入、旧页带视差让位，
- * 返回时反向；pop 永远比 push 短一截。
+ * push / pop 转场（iOS 覆盖式，v2.5.36 重构、v2.5.37 加推进感）：
+ * - push：新页从右滑入盖住旧页；旧页被推着左移约 1/3 屏宽，同时由
+ *   [IOSPageSurface] 套上模糊遮罩（blur + 暗化随滑入同步加深）——
+ *   位移给「推进」的层次感，模糊给「退后」的纵深感。
+ * - pop：上层页带着模糊滑出右侧，下层页从让位处滑回原位、模糊同步恢复清晰。
  *
- * 注意 push 的 Enter/Exit 必须同时长、pop 的 Enter/Exit 也必须同时长，
- * 否则两个页面位移不同步，视觉上会「撕裂」。
- *
- * 纯渐变（系统默认 fade）观感太差，v2.5.29 曾短暂改用、v2.5.30 恢复滑动转场；
- * 掉帧问题已在 v2.5.23 由「转场窗口摘采样层」根治，不再是回退理由。
+ * 模糊走 GPU RenderEffect（Modifier.blur，minSdk 31），半径动画只更新
+ * 参数，代价可控；位移是布局层转场，转场窗口内采样层已摘除（见
+ * transitioning），WebView 已延迟挂载（GameScreen），掉帧源已隔离。
  */
 private val pushEnter: EnterTransition = slideInHorizontally(
     animationSpec = tween(PushMs, easing = iosEasing),
     initialOffsetX = { it },
 )
 
+private val popExit: ExitTransition = slideOutHorizontally(
+    animationSpec = tween(PopMs, easing = iosEasing),
+    targetOffsetX = { it },
+)
+
+/**
+ * 底层页的「推进感」：push 时旧页被推着左移约 1/3 屏宽（iOS 系统转场的
+ * 层次语言——上层盖上来、下层让位退后），pop 时再从让位处滑回原位。
+ * 位移与 [IOSPageSurface] 的模糊遮罩叠加：边推边糊，层次感才成立。
+ */
+private const val ParallaxFraction = 0.3f
+
 private val pushExit: ExitTransition = slideOutHorizontally(
     animationSpec = tween(PushMs, easing = iosEasing),
-    targetOffsetX = { (-it * Parallax).toInt() },
+    targetOffsetX = { -(it * 3 / 10) },
 )
 
 private val popEnter: EnterTransition = slideInHorizontally(
     animationSpec = tween(PopMs, easing = iosEasing),
-    initialOffsetX = { (-it * Parallax).toInt() },
-)
-
-private val popExit: ExitTransition = slideOutHorizontally(
-    animationSpec = tween(PopMs, easing = iosEasing),
-    targetOffsetX = { it },
+    initialOffsetX = { -(it * 3 / 10) },
 )
 
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.isFromGuide(): Boolean =
@@ -236,21 +265,36 @@ private fun iosExit(transition: ExitTransition): ExitSpec =
     }
 
 /**
- * 每个普通页面的外壳：只负责一层「左边缘投影」。
+ * 每个普通页面的外壳：左边缘投影 + **覆盖式模糊遮罩**。
  *
- * 页面全屏时左边缘正好压在屏幕 x=0 上，投影落在屏幕外、看不见；
- * 一旦开始 push/pop，页面横向移动、左边缘进入屏幕，投影自然显现——
- * 于是两层页面之间有明确的上下层关系，而不是两张图在同一平面上硬切。
+ * 页面通过 [LocalMyRoute] 与 [currentRouteState] 判断自己是不是当前页：
+ * - 是当前页 → 清晰（cover=0）；
+ * - 不是（被上层页面盖住）→ 目标 cover=1，blur + 暗化随转场同步加深。
+ *   位移（30% 视差）由转场参数负责，模糊由本外壳负责，两者叠加成
+ *   iOS 式的「退后一层」观感。
  *
- * 阴影是常驻的（不做动画），开销只是一层 elevation 绘制，比在转场里
- * 逐帧驱动要便宜得多。
+ * 用 rememberSaveable 记住上一次的覆盖状态：pop 回到本页时，页面重新
+ * 进组合的初值是「曾被覆盖(1)」，随后目标变为 0 —— 于是它从模糊平滑
+ * 恢复清晰，而不是瞬间硬切。push 时旧页的模糊动画在页面被移除前就已
+ * 把 lastTarget 写成 1，下次回到它时初值正确。
  *
- * 注意：这里**不能**改用 drawBehind 画一条左缘渐变来替代。shadow(clip = false)
- * 的投影落在盒子**外侧**，页面停稳（x=0）时它在屏幕外所以看不见；而 drawBehind
- * 画在盒子**内侧**，页面停稳时那条渐变就在屏幕左边缘露出一条深色竖带。
+ * 阴影是常驻的（不做动画），开销只是一层 elevation 绘制。
  */
 @Composable
 private fun IOSPageSurface(content: @Composable () -> Unit) {
+    val myRoute = LocalMyRoute.current
+    val currentRoute = currentRouteState.value
+    val target = if (currentRoute == null || myRoute == currentRoute) 0f else 1f
+    var lastTarget by rememberSaveable { mutableFloatStateOf(target) }
+    val cover = remember { Animatable(lastTarget) }
+    LaunchedEffect(target) {
+        lastTarget = target
+        if (cover.value != target) {
+            cover.animateTo(target, tween(PushMs, easing = iosEasing))
+        }
+    }
+    val coverValue = cover.value
+
     Box(
         Modifier
             .fillMaxSize()
@@ -259,6 +303,12 @@ private fun IOSPageSurface(content: @Composable () -> Unit) {
                 shape = RectangleShape,
                 clip = false,
             )
+            .blur(CoverBlurRadius * coverValue)
+            .drawBehind {
+                if (coverValue > 0.001f) {
+                    drawRect(Color.Black.copy(alpha = CoverDimAlpha * coverValue))
+                }
+            }
     ) {
         content()
     }
@@ -273,13 +323,16 @@ private fun NavGraphBuilder.iosPage(
     content: @Composable () -> Unit,
 ) = composable(
     route = route,
-    // 迁移自库（Nexio/HyperOS）的 Activity 转场观感：新页从右滑入、旧页视差让位。
+    // iOS 覆盖式：新页从右滑入（push）/ 旧页带模糊滑出（pop），
+    // 底层页被推着左移让位（30% 视差）+ 渐糊，层次感由位移与模糊叠加。
     enterTransition = iosEnter(pushEnter),
     exitTransition = iosExit(pushExit),
     popEnterTransition = iosEnter(popEnter),
     popExitTransition = iosExit(popExit),
 ) {
-    IOSPageSurface { content() }
+    CompositionLocalProvider(LocalMyRoute provides route) {
+        IOSPageSurface { content() }
+    }
 }
 
 // MARK: - 主标签页 HorizontalPager（页面切换动画学习自 Nexio 课程表）
@@ -367,7 +420,25 @@ fun AppNavigation(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val showBottomBar = currentDestination?.route == Screen.MainTabs.route
+    val onMainTabs = currentDestination?.route == Screen.MainTabs.route
+
+    // 底栏退场/回归（v2.5.38）：barCover 0(就位)→1(退场)。与页面转场同一
+    // 时点（导航提交）开始、同曲线同时长——push 时跟着底层页被推走渐隐，
+    // pop 时从让位处滑回。退场动画完成后才摘除组合，告别"突然消失"。
+    var barMounted by remember { mutableStateOf(onMainTabs) }
+    val barCover = remember { Animatable(0f) }
+    LaunchedEffect(onMainTabs) {
+        if (onMainTabs) {
+            barMounted = true
+            barCover.animateTo(0f, tween(PopMs, easing = iosEasing))
+        } else if (barMounted) {
+            barCover.animateTo(1f, tween(PushMs, easing = iosEasing))
+            barMounted = false
+        }
+    }
+    val screenWpx = with(LocalDensity.current) {
+        LocalConfiguration.current.screenWidthDp.dp.toPx()
+    }
     val bottomBarStyle by viewModel.bottomBarStyle.collectAsState()
     val context = LocalContext.current
     // 主 tab pager：提升到这里是为了让底栏（AppNavigation 层）也能驱动翻页。
@@ -413,7 +484,8 @@ fun AppNavigation(
     // （略微滞后于滑动的页面，但那本来就是一团模糊），转场结束再恢复录制。
     var transitioning by remember { mutableStateOf(false) }
     DisposableEffect(navController) {
-        val listener = NavController.OnDestinationChangedListener { _, _, _ ->
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+            currentRouteState.value = destination.route // 覆盖式模糊遮罩依赖这个时点
             transitioning = true
         }
         navController.addOnDestinationChangedListener(listener)
@@ -422,7 +494,7 @@ fun AppNavigation(
     LaunchedEffect(transitioning) {
         if (transitioning) {
             // 取最长的转场时长兜底，宁可多录一帧也别在动画中途反复开关
-            delay(PushMs.toLong())
+            delay(PushMs.toLong() + 40)
             transitioning = false
         }
     }
@@ -564,7 +636,11 @@ fun AppNavigation(
                 )
             }
         }
-        if (showBottomBar) {
+        if (barMounted) {
+            // 底栏退场/回归动画（v2.5.38）：push 时底栏不再瞬间消失，而是
+            // 跟底层页一起被推走（左移 30% 屏宽）并渐隐——与页面转场同一
+            // 时点、同一曲线；pop 回主界面时从让位处滑回原位。退场动画
+            // 完成后才真正移除组合（此时新页已盖满全屏，移除无感）。
             // 底栏"落位"动画：从引导页里那根预览条的位置，缓降到屏幕底部。
             // 外层 Box 不做任何位移，用来测它就位后的真实位置。
             var barHomeRect by remember { mutableStateOf<Rect?>(null) }
@@ -609,9 +685,10 @@ fun AppNavigation(
                             )
                         }
                         .graphicsLayer {
+                            translationX = -barCover.value * 0.3f * screenWpx
                             scaleX = barScale.value
                             scaleY = barScale.value
-                            alpha = barAlpha.value
+                            alpha = barAlpha.value * (1f - barCover.value)
                         }
                 ) {
                 // 选中项由 pager 当前页决定（手指拖 pager 时也会同步到这一帧）。
@@ -630,7 +707,8 @@ fun AppNavigation(
                         onTabSelected = onTabSelected,
                         backdrop = liquidBackdrop,
                         tabsCount = 3,
-                        modifier = bottomModifier,
+                        // 参考图（HyperOS 文件管理器）：胶囊比通栏窄一截，更小巧
+                        modifier = bottomModifier.fillMaxWidth(0.86f),
                     ) { selectIndex, reportPress ->
                         HyperOS4TabItem(
                             Icons.Default.Home,

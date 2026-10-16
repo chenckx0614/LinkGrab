@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -112,7 +113,8 @@ fun HyperOS4BottomTabs(
         val density = LocalDensity.current
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val tabWidthPx = constraints.maxWidth.toFloat() / tabsCount
-        val maskInset = 5.dp
+        // 参考图（HyperOS 文件管理器）：遮罩与胶囊边缘贴合更紧
+        val maskInset = 4.dp
         val maskInsetPx = with(density) { maskInset.toPx() }
         val maskWidth = with(density) { (tabWidthPx - maskInsetPx * 2).toDp() }
 
@@ -141,15 +143,19 @@ fun HyperOS4BottomTabs(
                 )
             }
         }
+        // 动画用外部 scope 启动：collectLatest 收到新值会取消 block（含子协程），
+        // 在它里面 launch 的动画会被中途掐死——快速按压/松开交替时遮罩的
+        // 缩放/加深停在中间态弹不回来。scope.launch 不受取消影响。
+        val animationScope = rememberCoroutineScope()
         LaunchedEffect(Unit) {
             snapshotFlow { pressedIndex != null }.collectLatest { pressed ->
-                launch {
+                animationScope.launch {
                     maskScale.animateTo(
                         if (pressed) 0.88f else 1f,
                         spring(dampingRatio = 0.68f, stiffness = 520f),
                     )
                 }
-                launch { maskPress.animateTo(if (pressed) 1f else 0f, tween(140)) }
+                animationScope.launch { maskPress.animateTo(if (pressed) 1f else 0f, tween(140)) }
             }
         }
 
@@ -162,7 +168,7 @@ fun HyperOS4BottomTabs(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(56.dp)
                 .drawBackdrop(
                     backdrop = backdrop,
                     shape = { Capsule() },
@@ -173,7 +179,7 @@ fun HyperOS4BottomTabs(
                     shadow = { null },
                     onDrawSurface = { drawRect(containerColor) },
                 )
-                .border(1.dp, strokeColor, RoundedCornerShape(32.dp)),
+                .border(1.dp, strokeColor, RoundedCornerShape(28.dp)),
         ) {
             // ---- 椭圆遮罩：跟随选中项，按压时跟到按压项并缩小加深 ----
             // 位置/缩放/颜色都在 draw 或 layout 阶段读 Animatable.value，
@@ -193,7 +199,7 @@ fun HyperOS4BottomTabs(
                         scaleX = maskScale.value
                         scaleY = maskScale.value
                     }
-                    .clip(RoundedCornerShape(27.dp))
+                    .clip(RoundedCornerShape(24.dp))
                     .drawBehind {
                         // 常态色打底，按压色以 alpha 叠加，避免每帧 lerp 分配。
                         drawRect(maskNormalColor)
@@ -250,7 +256,7 @@ fun HyperOS4TabItem(
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .clip(RoundedCornerShape(27.dp))
+            .clip(RoundedCornerShape(24.dp))
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -267,7 +273,7 @@ fun HyperOS4TabItem(
                 imageVector = icon,
                 contentDescription = label,
                 tint = contentColor,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(22.dp),
             )
             Spacer(Modifier.height(2.dp))
             Text(

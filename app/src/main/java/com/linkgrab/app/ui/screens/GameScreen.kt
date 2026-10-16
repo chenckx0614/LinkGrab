@@ -1,10 +1,13 @@
 package com.linkgrab.app.ui.screens
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.linkgrab.app.ui.liquid.LiquidGlassBackButton
@@ -45,6 +50,8 @@ fun GameScreen(onBack: () -> Unit) {
     var ready by remember { mutableStateOf(false) }
     // 网页首帧渲染完成后才显示 WebView，避免白底闪一下
     var pageLoaded by remember { mutableStateOf(false) }
+    // 退出时的 WebView 截图：转场期间用它替代真 WebView 参与渲染
+    var leavingSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     val webViewAlpha by animateFloatAsState(
         targetValue = if (pageLoaded) 1f else 0f,
         animationSpec = tween(200),
@@ -52,17 +59,31 @@ fun GameScreen(onBack: () -> Unit) {
     )
 
     LaunchedEffect(Unit) {
-        delay(360) // 覆盖 push 转场窗口（320ms），转场画完才让 WebView 上场
+        delay(500) // 覆盖 push 转场窗口（440ms），转场画完才让 WebView 上场
         ready = true
     }
 
     /**
-     * 退出页面前先冻结 WebView：onPause() 停掉它的自绘/动画/定时器，
-     * 画面保留为静态纹理跟着页面滑走——否则 pop 转场期间 WebView 还在
-     * 每帧全屏自绘（掉帧），退出组合瞬间游戏画面又会突然跳变成纯背景（闪）。
+     * 退出页面前把 WebView 画成一张静态截图，然后**从组合里移除 WebView 本体**。
+     *
+     * 根因：pop 转场是布局层位移（每帧重新 measure 两个页面），WebView 哪怕
+     * onPause 了也还在布局树里每帧参与 measure/layout——比不移除更糟（2.5.33
+     * 实测反而更卡）。截图方案下转场期间只剩一张 GPU 纹理 Image：不掉帧，
+     * 游戏画面也原地保留（不闪）。
      */
     fun exitPage() {
-        webView?.onPause()
+        val wv = webView
+        if (wv != null && wv.width > 0 && wv.height > 0) {
+            try {
+                val bitmap = Bitmap.createBitmap(wv.width, wv.height, Bitmap.Config.ARGB_8888)
+                wv.draw(Canvas(bitmap))
+                leavingSnapshot = bitmap.asImageBitmap()
+            } catch (_: Exception) {
+                // 截图失败就走纯背景退出，不阻塞返回
+            }
+        }
+        wv?.onPause()
+        ready = false // 立刻摘掉 AndroidView，WebView 彻底退出转场布局
         onBack()
     }
 
@@ -77,8 +98,16 @@ fun GameScreen(onBack: () -> Unit) {
             .fillMaxSize()
             .background(iosBackground())
     ) {
-        if (ready) {
-            AndroidView(
+        val snapshot = leavingSnapshot
+        when {
+            // 退出转场中：静态截图替身，轻量渲染
+            snapshot != null -> Image(
+                bitmap = snapshot,
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier.fillMaxSize(),
+            )
+            ready -> AndroidView(
                 modifier = Modifier
                     .fillMaxSize()
                     .alpha(webViewAlpha),
@@ -105,12 +134,14 @@ fun GameScreen(onBack: () -> Unit) {
                     wv.destroy()
                 },
             )
-        } else {
-            // 转场空窗期的视觉锚点：一个安静的加载点，避免纯色一闪而过
-            androidx.compose.material3.CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center).size(28.dp),
-                strokeWidth = 3.dp,
-            )
+            else ->
+                // 转场空窗期的视觉锚点：一个安静的加载点，避免纯色一闪而过
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(28.dp),
+                    strokeWidth = 3.dp,
+                )
         }
 
         LiquidGlassBackButton(

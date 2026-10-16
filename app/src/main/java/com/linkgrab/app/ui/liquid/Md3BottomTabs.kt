@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -106,6 +107,10 @@ fun Md3BottomTabs(
         }
         val indicatorPosition = remember { Animatable(initialPosition) }
         val indicatorScale = remember { Animatable(1f) }
+        // 动画用外部 scope 启动：collectLatest 收到新值会取消 block（含子协程），
+        // 在它里面 launch 的缩放动画会被中途掐死——快速连点时指示器停在
+        // 中间缩放值不恢复（缩不小的药丸 bug）。scope.launch 不受影响。
+        val animationScope = rememberCoroutineScope()
 
         LaunchedEffect(Unit) {
             snapshotFlow {
@@ -113,8 +118,8 @@ fun Md3BottomTabs(
                 if (isLtr) i.toFloat() else (tabsCount - 1 - i).toFloat()
             }.collectLatest { target ->
                 // M3 Expressive spatial spring：指示器轻微收拢后弹性滑到新位置
-                indicatorScale.snapTo(0.85f)
-                launch {
+                animationScope.launch {
+                    indicatorScale.snapTo(0.85f)
                     indicatorScale.animateTo(1f, spring(dampingRatio = 0.7f, stiffness = 600f))
                 }
                 indicatorPosition.animateTo(target, spring(dampingRatio = 0.85f, stiffness = 500f))
