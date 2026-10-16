@@ -29,11 +29,19 @@ class UpdateChecker {
 
     /**
      * Check for updates. Returns UpdateInfo if new version available, null if up-to-date.
+     *
+     * @param source 更新下载源："gitee"（默认）/ "github"。
+     *   gitee 源不可达时仍回退 GitHub 兜底（国内网络对 GitHub 不稳，反之亦然）；
+     *   用户明确选了 github 则只查 GitHub。
      */
-    suspend fun checkForUpdate(): UpdateResult = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdate(source: String = "gitee"): UpdateResult = withContext(Dispatchers.IO) {
         try {
             val currentVersion = BuildConfig.VERSION_NAME
-            Log.d(TAG, "Current version: $currentVersion")
+            Log.d(TAG, "Current version: $currentVersion (source=$source)")
+
+            if (source == "github") {
+                return@withContext tryGithubApi(currentVersion)
+            }
 
             // Try Gitee API first, fallback to GitHub
             val result = tryGiteeApi(currentVersion)

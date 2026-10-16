@@ -111,7 +111,10 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import com.linkgrab.app.ui.screens.AboutScreen
+import com.linkgrab.app.ui.screens.BatchResultScreen
+import com.linkgrab.app.ui.screens.BottomBarStyleScreen
 import com.linkgrab.app.ui.screens.DonateScreen
+import com.linkgrab.app.ui.screens.DownloadsScreen
 import com.linkgrab.app.ui.screens.GameScreen
 import com.linkgrab.app.ui.screens.GuideScreen
 import com.linkgrab.app.ui.screens.HistoryScreen
@@ -154,6 +157,9 @@ sealed class Screen(val route: String, val title: String) {
     data object Result : Screen("result", "解析结果")
     data object UpdateLog : Screen("update_log", "更新日志")
     data object UpdateSettings : Screen("update_settings", "更新设置")
+    data object BottomBarStyle : Screen("bottom_bar_style", "底栏样式")
+    data object Downloads : Screen("downloads", "下载管理")
+    data object BatchResult : Screen("batch_result", "批量解析")
     data object About : Screen("about", "关于应用")
     data object Donate : Screen("donate", "捐赠支持")
     data object Game : Screen("game", "奶蛙消消乐")
@@ -377,8 +383,10 @@ private fun MainTabs(
     onNavigateToImageConvert: () -> Unit,
     onNavigateToMusic: () -> Unit,
     onNavigateToUpdateSettings: () -> Unit,
+    onNavigateToDownloads: () -> Unit,
     onNavigateToAbout: () -> Unit,
     onNavigateToGame: () -> Unit,
+    onNavigateToBottomBarStyle: () -> Unit,
 ) {
     HorizontalPager(
         state = pagerState,
@@ -399,6 +407,7 @@ private fun MainTabs(
         1 -> SettingsScreen(
             viewModel = viewModel,
             onNavigateToUpdateSettings = onNavigateToUpdateSettings,
+            onNavigateToDownloads = onNavigateToDownloads,
             onNavigateToAbout = onNavigateToAbout,
         )
         else -> ToolboxScreen(
@@ -452,6 +461,14 @@ fun AppNavigation(
             navController.navigate(Screen.Result.route) {
                 launchSingleTop = true
                 restoreState = false
+            }
+        }
+    }
+    // 批量解析（多条链接）→ 批量结果页
+    LaunchedEffect(Unit) {
+        viewModel.navigateToBatch.collect {
+            navController.navigate(Screen.BatchResult.route) {
+                launchSingleTop = true
             }
         }
     }
@@ -575,8 +592,14 @@ fun AppNavigation(
                     onNavigateToUpdateSettings = {
                         navController.navigate(Screen.UpdateSettings.route)
                     },
+                    onNavigateToDownloads = {
+                        navController.navigate(Screen.Downloads.route)
+                    },
                     onNavigateToAbout = {
                         navController.navigate(Screen.About.route)
+                    },
+                    onNavigateToBottomBarStyle = {
+                        navController.navigate(Screen.BottomBarStyle.route)
                     },
                 )
             }
@@ -595,6 +618,24 @@ fun AppNavigation(
             }
             iosPage(Screen.UpdateSettings.route) {
                 UpdateSettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.BottomBarStyle.route) {
+                BottomBarStyleScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.Downloads.route) {
+                DownloadsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.BatchResult.route) {
+                BatchResultScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
                 )

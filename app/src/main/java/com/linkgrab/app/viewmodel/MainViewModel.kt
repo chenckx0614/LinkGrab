@@ -30,7 +30,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -76,6 +79,46 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _updateReminder = MutableStateFlow(true)
     val updateReminder: StateFlow<Boolean> = _updateReminder.asStateFlow()
 
+    /** 更新下载源："gitee"（默认）/ "github"。 */
+    private val _downloadSource = MutableStateFlow("gitee")
+    val downloadSource: StateFlow<String> = _downloadSource.asStateFlow()
+
+    // ==================== 3.0 下载队列 ====================
+
+    /** 下载任务列表（会话内持久，下载管理页展示）。 */
+    private val _downloadTasks = MutableStateFlow<List<DownloadTaskItem>>(emptyList())
+    val downloadTasks: StateFlow<List<DownloadTaskItem>> = _downloadTasks.asStateFlow()
+
+    /** 队列并发数（1-4，默认 2），每批下载开始时生效。 */
+    private val _downloadConcurrency = MutableStateFlow(2)
+    val downloadConcurrency: StateFlow<Int> = _downloadConcurrency.asStateFlow()
+
+    /** 下载完成按 平台/日期 自动归档子目录，默认开。 */
+    private val _autoOrganize = MutableStateFlow(true)
+    val autoOrganize: StateFlow<Boolean> = _autoOrganize.asStateFlow()
+
+    /** 批量解析结果（3.0）。 */
+    private val _batchResults = MutableStateFlow<List<BatchParseItem>>(emptyList())
+    val batchResults: StateFlow<List<BatchParseItem>> = _batchResults.asStateFlow()
+
+    private val _isBatchParsing = MutableStateFlow(false)
+    val isBatchParsing: StateFlow<Boolean> = _isBatchParsing.asStateFlow()
+
+    private val _navigateToBatch = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val navigateToBatch: SharedFlow<Unit> = _navigateToBatch.asSharedFlow()
+
+    /** 运行时控制旗标：worker 在写入循环里轮询这两个集合实现暂停/取消。 */
+    private val pauseFlags: MutableSet<Long> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    private val cancelFlags: MutableSet<Long> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    /** 任务列表改动锁 + id 发放器。 */
+    private val taskMutex = kotlinx.coroutines.sync.Mutex()
+    private var taskIdSeed = 0L
+
+    /** 最近一次成功解析的平台显示名（抖音/小红书），下载归档用。 */
+    var currentPlatformLabel: String? = null
+        private set
+
     // 最近一次检查是否为手动触发：手动检查发现新版本始终弹窗；
     // 自动检查弹不弹由「更新提醒」开关决定。
     private val _manualUpdateCheck = MutableStateFlow(false)
@@ -108,8 +151,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
     }
 
-    private var downloadJobCount = 0
-
     init {
         viewModelScope.launch {
             settingsRepository.colorMode.collect { _colorMode.value = it }
@@ -130,8 +171,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.updateReminder.collect { _updateReminder.value = it }
         }
         viewModelScope.launch {
-            settingsRepository.guideShown.collect {
-                _guideShown.value = it
+            settingsRepository.downloadSource.collect { _downloadSource.value = it }
+        }
+        viewModelScope.launch {
+            settingsRepository.downloadConcurrency.collect { _downloadConcurrency.value = it }
+        }
+        viewModelScope.launch {
+            settingsRepository.autoOrganize.collect { _autoOrganize.value = it }
+        }
+        viewModelScope.launch {
+            settingsRepository.guideVersion.collect {
+                // 版本化引导：小于 3.0 正式版门槛（302）就要展示新欢迎页——
+                // 老用户升级也看一次；3.0.0/3.0.1 测试包写过的 300 同样小于 302
+                _guideShown.value = it < SettingsRepository.GUIDE_VERSION_3_0
                 _dataLoaded.value = true
             }
         }
@@ -141,7 +193,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (!_autoCheckUpdate.value) return@launch
             try {
                 _manualUpdateCheck.value = false // 自动检查：弹窗与否看「更新提醒」
-                _updateResult.value = updateChecker.checkForUpdate()
+                _updateResult.value = updateChecker.checkForUpdate(_downloadSource.value)
             } catch (e: Exception) {
                 // 静默失败，不崩溃
             }
@@ -174,6 +226,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setLiveUpdatesEnabled(enabled) }
     }
 
+    fun setDownloadConcurrency(n: Int) {
+        viewModelScope.launch { settingsRepository.setDownloadConcurrency(n) }
+    }
+
+    fun setAutoOrganize(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoOrganize(enabled) }
+    }
+
     fun markGuideShown() {
         viewModelScope.launch { settingsRepository.setGuideShown() }
     }
@@ -186,15 +246,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        // Batch parsing: extract all URLs from text
-        val urls = extractUrls(url)
+        // 批量解析：抽取出文本里的全部链接，只留支持的平台
+        val urls = extractUrls(url).filter { parseRepository.detectPlatform(it) != Platform.UNKNOWN }
         if (urls.isEmpty()) {
-            _uiState.value = _uiState.value.copy(error = "未找到有效链接")
+            _uiState.value = _uiState.value.copy(error = "不支持的链接，请输入抖音或小红书链接")
             return
         }
 
-        // Parse first URL (primary)
-        parseSingleUrl(urls.first())
+        when {
+            urls.size == 1 -> parseSingleUrl(urls.first())
+            else -> parseMultipleUrls(urls.take(5)) // 上限 5 条，避免刷屏式粘贴拖垮解析
+        }
+    }
+
+    /** 批量解析（3.0）：多条链接逐条解析，进批量结果页挑选下载。 */
+    private fun parseMultipleUrls(urls: List<String>) {
+        viewModelScope.launch {
+            _isBatchParsing.value = true
+            _batchResults.value = urls.map { BatchParseItem(it, parseRepository.detectPlatform(it)) }
+            _navigateToBatch.tryEmit(Unit)
+
+            urls.forEachIndexed { index, url ->
+                val platform = parseRepository.detectPlatform(url)
+                val parsed = parseRepository.parse(url).getOrNull()
+                val item = if (parsed != null) {
+                    historyRepository.add(
+                        HistoryItem(
+                            platform = platform.name.lowercase(),
+                            title = parsed.title.ifEmpty { "未命名" },
+                            cover = parsed.coverUrl ?: parsed.images.firstOrNull() ?: "",
+                            url = url,
+                            type = if (parsed.type == com.linkgrab.app.data.model.MediaType.VIDEO) "video" else "image",
+                        )
+                    )
+                    BatchParseItem(url, platform, parsed)
+                } else {
+                    BatchParseItem(url, platform, error = "解析失败")
+                }
+                _batchResults.value = _batchResults.value.mapIndexed { i, old -> if (i == index) item else old }
+            }
+            // 记住首个成功项的平台，批量下载归档用
+            currentPlatformLabel = _batchResults.value.firstOrNull { it.isSuccess }
+                ?.platform?.displayName ?: currentPlatformLabel
+            _isBatchParsing.value = false
+        }
     }
 
     private fun extractUrls(text: String): List<String> {
@@ -227,6 +322,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             parseRepository.parse(url)
                 .onSuccess { result ->
                     _uiState.value = _uiState.value.copy(isLoading = false, result = result)
+                    currentPlatformLabel = platform.displayName // 下载归档用
                     // 用一次性事件驱动跳转：首页和历史页发起的解析都能到达
                     _navigateToResult.tryEmit(Unit)
                     historyRepository.add(
@@ -267,9 +363,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isCheckingUpdate.value = true
             _manualUpdateCheck.value = true // 手动检查：发现新版本始终弹窗
-            _updateResult.value = updateChecker.checkForUpdate()
+            _updateResult.value = updateChecker.checkForUpdate(_downloadSource.value)
             _isCheckingUpdate.value = false
         }
+    }
+
+    fun setDownloadSource(source: String) {
+        viewModelScope.launch { settingsRepository.setDownloadSource(source) }
     }
 
     fun dismissUpdate() { _updateResult.value = null }
@@ -298,15 +398,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ==================== Download with Live Updates ====================
 
     /**
-     * 统一下载入口：图片 + 视频按队列**串行**下载，进度跨文件聚合。
+     * 统一下载入口（3.0 队列引擎）：任务入队，按 [downloadConcurrency] 并发
+     * 调度，支持暂停/续传/取消；可在「下载管理」页实时查看与干预。
      *
-     * 之前「下载全部」是 N 个协程并发各自往 _downloadState 写进度，互相覆盖
-     * （进度条回跳、并发下载抢占带宽），现在收敛为一个队列顺序执行。
+     * [platformLabel] 用于自动归档子目录（如「抖音/20261016」），默认取最近
+     * 一次成功解析的平台。
      */
     fun downloadBatch(
         context: Context,
         images: List<Pair<String, String>> = emptyList(),
         videos: List<Pair<List<String>, String>> = emptyList(),
+        platformLabel: String? = currentPlatformLabel,
     ) {
         val imageItems = images.filter { it.first.isNotBlank() }
         val videoItems = videos.map { (candidates, name) ->
@@ -315,59 +417,71 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (imageItems.isEmpty() && videoItems.isEmpty()) return
 
         val total = imageItems.size + videoItems.size
-        val jobId = ++downloadJobCount
+        val platform = platformLabel
+
         viewModelScope.launch {
+            val batchIds = mutableListOf<Long>()
+            taskMutex.withLock {
+                // 列表上限 100：超出时先丢最老的已完结任务
+                val finished = _downloadTasks.value.filter { it.status.isFinished }
+                var kept = _downloadTasks.value
+                while (kept.size + total > 100 && finished.isNotEmpty()) {
+                    kept = kept - finished.first()
+                }
+                _downloadTasks.value = kept
+                imageItems.forEach { (url, filename) ->
+                    val id = ++taskIdSeed
+                    batchIds.add(id)
+                    _downloadTasks.value = _downloadTasks.value + DownloadTaskItem(
+                        id = id, isVideo = false, urls = listOf(url), filename = filename, platform = platform,
+                    )
+                }
+                videoItems.forEach { (candidates, filename) ->
+                    val id = ++taskIdSeed
+                    batchIds.add(id)
+                    _downloadTasks.value = _downloadTasks.value + DownloadTaskItem(
+                        id = id, isVideo = true, urls = candidates, filename = filename, platform = platform,
+                    )
+                }
+            }
+
             _downloadState.value = DownloadState.Downloading(0)
             if (_liveUpdatesEnabled.value) {
                 liveUpdatesHelper.startProgress(title = "LinkGrab", content = "准备下载...", indeterminate = true)
             }
-            var succeeded = 0
-            var firstError: Exception? = null
-            withContext(Dispatchers.IO) {
-                imageItems.forEachIndexed { i, (url, filename) ->
-                    if (downloadJobCount != jobId) return@withContext
-                    try {
-                        saveImageFromNetwork(context, url, filename, fileIndex = i, fileTotal = total)
-                        succeeded++
-                    } catch (e: Exception) {
-                        if (firstError == null) firstError = e
-                    }
-                }
-                videoItems.forEachIndexed { j, (candidates, filename) ->
-                    if (downloadJobCount != jobId) return@withContext
-                    val fileIndex = imageItems.size + j
-                    var lastError: Exception? = null
-                    for (candidate in candidates) {
-                        try {
-                            fetchAndSaveVideo(context, candidate, filename, jobId, fileIndex, total)
-                            lastError = null
-                            break
-                        } catch (e: Exception) {
-                            lastError = e
-                        }
-                    }
-                    if (lastError == null) succeeded++
-                    else if (firstError == null) firstError = lastError
-                }
+
+            val semaphore = kotlinx.coroutines.sync.Semaphore(_downloadConcurrency.value)
+            val ids = batchIds.toList()
+            val jobs = ids.mapIndexed { index, id ->
+                launch { semaphore.withPermit { runDownloadTask(context, id, fileIndex = index, fileTotal = total) } }
             }
-            if (downloadJobCount != jobId) return@launch
+            jobs.joinAll()
+
+            // 聚合批次结果（保留原有 _downloadState 语义供结果页展示）
+            val snapshot = taskMutex.withLock { _downloadTasks.value.filter { it.id in ids } }
+            val succeeded = snapshot.count { it.status == DownloadStatus.Success }
+            val pausedCount = snapshot.count { it.status == DownloadStatus.Paused }
+            val firstError = snapshot.firstOrNull { it.status == DownloadStatus.Failed }?.error
+            val isVideoBatch = videoItems.isNotEmpty()
+            val noun = if (videoItems.isEmpty()) "图片" else "视频"
             when {
                 succeeded == total -> {
                     _downloadState.value = DownloadState.Success
-                    val noun = if (videoItems.isEmpty()) "图片" else "视频"
                     val msg = if (total > 1) "已保存 $total 个${noun}文件" else "${noun}保存成功"
-                    showDownloadCompleteNotification(context, msg, isVideo = videoItems.isNotEmpty())
+                    showDownloadCompleteNotification(context, msg, isVideo = isVideoBatch)
                 }
                 succeeded > 0 -> {
+                    val pauseHint = if (pausedCount > 0) "；$pausedCount 个已暂停，可在下载管理继续" else ""
                     _downloadState.value = DownloadState.Error(
-                        "已保存 $succeeded/$total 个文件；${firstError?.message ?: "其余下载失败"}"
+                        "已保存 $succeeded/$total 个文件${pauseHint}；${firstError ?: "其余下载失败"}"
                     )
                 }
+                pausedCount > 0 && succeeded == 0 -> {
+                    _downloadState.value = DownloadState.Error("$pausedCount 个任务已暂停，可在下载管理继续")
+                }
                 else -> {
-                    _downloadState.value = DownloadState.Error(firstError?.message ?: "Download failed")
-                    showDownloadCompleteNotification(
-                        context, "下载失败: ${firstError?.message}", isVideo = videoItems.isNotEmpty(),
-                    )
+                    _downloadState.value = DownloadState.Error(firstError ?: "Download failed")
+                    showDownloadCompleteNotification(context, "下载失败: $firstError", isVideo = isVideoBatch)
                 }
             }
         }
@@ -382,25 +496,111 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun downloadVideo(context: Context, urls: List<String>, filename: String) =
         downloadBatch(context, videos = listOf(urls to filename))
 
+    // ---- 下载管理页操作 ----
+
+    fun pauseTask(id: Long) {
+        pauseFlags.add(id)
+        // 尚未开跑的任务直接置为 Paused（worker 起跑时会再校验旗标）
+        viewModelScope.launch {
+            updateTask(id) { if (it.status == DownloadStatus.Queued) it.copy(status = DownloadStatus.Paused) else it }
+        }
+    }
+
+    fun resumeTask(context: Context, id: Long) {
+        pauseFlags.remove(id) // 清掉可能残留的旗标（暂停瞬间任务恰好完结等边界）
+        cancelFlags.remove(id)
+        viewModelScope.launch {
+            updateTask(id) { if (it.status == DownloadStatus.Paused || it.status == DownloadStatus.Failed) it.copy(status = DownloadStatus.Queued, error = null) else it }
+        }
+        viewModelScope.launch { runDownloadTask(context, id, fileIndex = 0, fileTotal = 1) }
+    }
+
+    fun cancelTask(context: Context, id: Long) {
+        viewModelScope.launch {
+            val task = taskMutex.withLock { _downloadTasks.value.firstOrNull { it.id == id } } ?: return@launch
+            when (task.status) {
+                DownloadStatus.Queued, DownloadStatus.Downloading -> cancelFlags.add(id)
+                else -> {
+                    task.partialUri?.let { uri ->
+                        runCatching { context.contentResolver.delete(android.net.Uri.parse(uri), null, null) }
+                    }
+                    updateTask(id) { it.copy(status = DownloadStatus.Canceled, partialUri = null) }
+                }
+            }
+        }
+    }
+
+    /** 清掉已完结（成功/失败/取消）的任务记录。 */
+    fun clearFinishedTasks() {
+        viewModelScope.launch {
+            taskMutex.withLock {
+                _downloadTasks.value = _downloadTasks.value.filter { !it.status.isFinished }
+            }
+        }
+    }
+
+    private suspend fun updateTask(id: Long, transform: (DownloadTaskItem) -> DownloadTaskItem) {
+        taskMutex.withLock {
+            _downloadTasks.value = _downloadTasks.value.map { if (it.id == id) transform(it) else it }
+        }
+    }
+
     /**
-     * 下载图片并写入相册：**直接落盘原始字节**，不再「读进内存 → 解码 Bitmap
-     * → 重压缩 JPEG」。老流程大图要吃几十 MB 内存、CPU 重压缩一次还会损画质；
-     * 现在保留原始格式（jpg/png/webp），格式与扩展名按响应头自动匹配。
+     * 队列 worker：执行单个任务，直到 Success/Failed/Paused/Canceled。
+     * [fileIndex]/[fileTotal] 用于跨文件聚合进度；单独恢复的任务传 0/1。
      */
-    private fun saveImageFromNetwork(
+    private suspend fun runDownloadTask(context: Context, taskId: Long, fileIndex: Int, fileTotal: Int) {
+        val task = taskMutex.withLock { _downloadTasks.value.firstOrNull { it.id == taskId } } ?: return
+        if (task.status == DownloadStatus.Success || task.status == DownloadStatus.Canceled) return
+        if (pauseFlags.remove(taskId)) {
+            updateTask(taskId) { it.copy(status = DownloadStatus.Paused) }
+            return
+        }
+        if (cancelFlags.remove(taskId)) {
+            task.partialUri?.let { uri ->
+                runCatching { context.contentResolver.delete(android.net.Uri.parse(uri), null, null) }
+            }
+            updateTask(taskId) { it.copy(status = DownloadStatus.Canceled, partialUri = null) }
+            return
+        }
+        updateTask(taskId) { it.copy(status = DownloadStatus.Downloading, error = null) }
+        try {
+            if (task.isVideo) runVideoTask(context, task, fileIndex, fileTotal)
+            else runImageTask(context, task, fileIndex, fileTotal)
+        } catch (e: TaskPausedSignal) {
+            // 半成品保留（IS_PENDING=1 不会出现在相册），续传从这里开始
+            updateTask(taskId) { it.copy(status = DownloadStatus.Paused) }
+        } catch (e: TaskCanceledSignal) {
+            updateTask(taskId) { it.copy(partialUri = null, status = DownloadStatus.Canceled) }
+        } catch (e: Exception) {
+            // 失败时丢弃半成品（与旧版行为一致），Failed 可手动重试
+            task.partialUri?.let { uri ->
+                runCatching { context.contentResolver.delete(android.net.Uri.parse(uri), null, null) }
+            }
+            updateTask(taskId) {
+                it.copy(status = DownloadStatus.Failed, partialUri = null, error = e.message ?: "下载失败")
+            }
+        }
+    }
+
+    /**
+     * 下载图片任务（3.0）：**直接落盘原始字节**，保留原始格式（jpg/png/webp），
+     * 格式与扩展名按响应头自动匹配。支持暂停/续传：暂停时半成品保留在
+     * MediaStore（IS_PENDING=1 不进相册），恢复时带 Range 头追加写入。
+     */
+    private suspend fun runImageTask(
         context: Context,
-        url: String,
-        filename: String,
+        task: DownloadTaskItem,
         fileIndex: Int,
         fileTotal: Int,
-    ) {
-        val requestBuilder = Request.Builder().url(url)
-            .header("User-Agent", BROWSER_UA)
-        // 小红书 CDN 对空 Referer 的请求更容易 403
-        if (url.contains("xhscdn.com") || url.contains("xiaohongshu.com")) {
-            requestBuilder.header("Referer", "https://www.xiaohongshu.com/")
-        }
-        httpClient.newCall(requestBuilder.build()).execute().use { resp ->
+    ) = withContext(Dispatchers.IO) {
+        val url = task.urls.first()
+        val resolver = context.contentResolver
+        var uriString: String? = task.partialUri
+        var written = task.downloadedBytes
+
+        val resumeFrom = if (uriString != null) written else 0L
+        httpClient.newCall(buildMediaRequest(url, if (resumeFrom > 0) "bytes=$resumeFrom-" else null)).execute().use { resp ->
             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
             val body = resp.body ?: throw Exception("Empty response")
 
@@ -414,40 +614,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 "image/heic", "image/heif" -> "heic"
                 else -> "jpg"
             }
-            val displayName = filename.substringBeforeLast('.') + ".$ext"
+            val displayName = task.filename.substringBeforeLast('.') + ".$ext"
 
-            val contentValues = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
-                put(MediaStore.Images.Media.MIME_TYPE, mime)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/LinkGrab")
-                    put(MediaStore.Images.Media.IS_PENDING, 1)
+            var uri = uriString?.let { android.net.Uri.parse(it) }
+            var appendMode = false
+            if (uri != null && resp.code == 206) {
+                appendMode = true // 服务器支持 Range，从半成品继续
+            } else {
+                if (uri != null) runCatching { resolver.delete(uri, null, null) } // 不支持 Range，推倒重来
+                written = 0
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                    put(MediaStore.Images.Media.MIME_TYPE, mime)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.Images.Media.RELATIVE_PATH, organizeRelativePath(isVideo = false, platform = task.platform))
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    }
+                }
+                uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    ?: throw Exception("Failed to create file")
+                uriString = uri.toString()
+                updateTask(task.id) { it.copy(partialUri = uriString, downloadedBytes = 0) }
+            }
+            val totalBytes = if (appendMode) written + body.contentLength() else body.contentLength()
+
+            val out = resolver.openOutputStream(uri!!, if (appendMode) "wa" else "w")
+                ?: throw Exception("Failed to open output stream")
+            out.use { stream ->
+                val input = body.byteStream()
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var lastEmit = 0L // 进度写节流：120ms 一次，别让每 8KB 的写入打爆重组
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    checkPauseCancel(task.id)
+                    stream.write(buffer, 0, bytesRead)
+                    written += bytesRead
+                    val now = System.currentTimeMillis()
+                    if (now - lastEmit > 120) {
+                        lastEmit = now
+                        updateTask(task.id) {
+                            it.copy(downloadedBytes = written, totalBytes = totalBytes, progress = bytesPercent(written, totalBytes))
+                        }
+                        reportOverallProgress(fileIndex, fileTotal, written, totalBytes, "下载图片")
+                    }
                 }
             }
-            val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                ?: throw Exception("Failed to create file")
-            try {
-                resolver.openOutputStream(uri)?.use { out ->
-                    val input = body.byteStream()
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    var totalRead = 0L
-                    val contentLength = body.contentLength()
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        out.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-                        reportOverallProgress(fileIndex, fileTotal, totalRead, contentLength, "下载图片")
-                    }
-                } ?: throw Exception("Failed to open output stream")
-            } catch (e: Exception) {
-                runCatching { resolver.delete(uri, null, null) }
-                throw e
-            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                contentValues.clear()
-                contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                resolver.update(uri, contentValues, null, null)
+                val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
+                resolver.update(uri!!, done, null, null)
+            }
+            updateTask(task.id) {
+                it.copy(status = DownloadStatus.Success, partialUri = null, progress = 100, downloadedBytes = written, totalBytes = totalBytes)
             }
         }
     }
@@ -469,25 +687,69 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 下载视频并写入相册。失败时抛异常（HTTP 状态码会带进 message），
-     * 交给上层决定是否换下一个候选地址。
+     * 下载视频任务（3.0）：候选地址按序回退；暂停/续传只对当前候选生效
+     * （[DownloadTaskItem.candidateIndex] 记录进度落在哪个候选上）。
      */
-    private fun fetchAndSaveVideo(
+    private suspend fun runVideoTask(
         context: Context,
-        url: String,
-        filename: String,
-        jobId: Int,
-        fileIndex: Int = 0,
-        fileTotal: Int = 1,
-    ) {
-        val requestBuilder = Request.Builder().url(url)
-            .header("User-Agent", BROWSER_UA)
-        // 小红书 CDN 对空 Referer 的请求更容易 403
-        if (url.contains("xhscdn.com") || url.contains("xiaohongshu.com")) {
-            requestBuilder.header("Referer", "https://www.xiaohongshu.com/")
+        task: DownloadTaskItem,
+        fileIndex: Int,
+        fileTotal: Int,
+    ) = withContext(Dispatchers.IO) {
+        var lastError: Exception? = null
+        for (index in task.candidateIndex until task.urls.size) {
+            val url = task.urls[index]
+            val isNewAttempt = (index != task.candidateIndex) || (task.partialUri == null)
+            try {
+                downloadVideoCandidate(
+                    context, task, url, fileIndex, fileTotal,
+                    resumeUri = if (isNewAttempt) null else task.partialUri,
+                    resumeBytes = if (isNewAttempt) 0L else task.downloadedBytes,
+                )
+                return@withContext
+            } catch (e: TaskPausedSignal) {
+                updateTask(task.id) { it.copy(candidateIndex = index) }
+                throw e
+            } catch (e: TaskCanceledSignal) {
+                throw e
+            } catch (e: Exception) {
+                // 该候选失败：丢弃半成品，从下一个候选重来
+                task.partialUri?.let { uri ->
+                    runCatching { context.contentResolver.delete(android.net.Uri.parse(uri), null, null) }
+                }
+                updateTask(task.id) { it.copy(partialUri = null, candidateIndex = 0, downloadedBytes = 0) }
+                lastError = e
+            }
         }
-        val response = httpClient.newCall(requestBuilder.build()).execute()
-        response.use { resp ->
+        throw lastError ?: Exception("下载失败")
+    }
+
+    private suspend fun downloadVideoCandidate(
+        context: Context,
+        task: DownloadTaskItem,
+        url: String,
+        fileIndex: Int,
+        fileTotal: Int,
+        resumeUri: String?,
+        resumeBytes: Long,
+    ) {
+        val resolver = context.contentResolver
+        var uriString: String? = resumeUri
+        var written = resumeBytes
+
+        httpClient.newCall(buildMediaRequest(url, if (resumeBytes > 0) "bytes=$resumeBytes-" else null)).execute().use { resp ->
+            // 416 = 半成品其实已经写满（暂停时机踩在结尾），直接收尾成功
+            if (resp.code == 416 && uriString != null) {
+                val uri = android.net.Uri.parse(uriString!!)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
+                    resolver.update(uri, done, null, null)
+                }
+                updateTask(task.id) {
+                    it.copy(status = DownloadStatus.Success, partialUri = null, candidateIndex = 0, progress = 100)
+                }
+                return
+            }
             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
             val body = resp.body ?: throw Exception("Empty response")
 
@@ -495,48 +757,89 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val contentType = body.contentType()?.toString().orEmpty()
             if (contentType.contains("text/html")) throw Exception("服务端返回了网页而不是视频")
 
-            val contentLength = body.contentLength()
-            val inputStream = body.byteStream()
-
-            val contentValues = ContentValues().apply {
-                put(MediaStore.Video.Media.DISPLAY_NAME, filename)
-                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/LinkGrab")
-                    put(MediaStore.Video.Media.IS_PENDING, 1)
-                }
-            }
-            val resolver = context.contentResolver
-            val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
-                ?: throw Exception("Failed to create file")
-
-            try {
-                resolver.openOutputStream(uri)?.use { out ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    var totalRead = 0L
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        out.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-                        if (downloadJobCount == jobId) {
-                            reportOverallProgress(fileIndex, fileTotal, totalRead, contentLength, "下载视频")
-                        }
+            var uri = uriString?.let { android.net.Uri.parse(it) }
+            var appendMode = false
+            if (uri != null && resp.code == 206) {
+                appendMode = true
+            } else {
+                if (uri != null) runCatching { resolver.delete(uri, null, null) }
+                written = 0
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Video.Media.DISPLAY_NAME, task.filename)
+                    put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.Video.Media.RELATIVE_PATH, organizeRelativePath(isVideo = true, platform = task.platform))
+                        put(MediaStore.Video.Media.IS_PENDING, 1)
                     }
-                } ?: throw Exception("Failed to open output stream")
-            } catch (e: Exception) {
-                runCatching { resolver.delete(uri, null, null) }
-                throw e
-            } finally {
-                runCatching { inputStream.close() }
+                }
+                uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    ?: throw Exception("Failed to create file")
+                uriString = uri.toString()
+                updateTask(task.id) { it.copy(partialUri = uriString, downloadedBytes = 0) }
+            }
+            val totalBytes = if (appendMode) written + body.contentLength() else body.contentLength()
+
+            val out = resolver.openOutputStream(uri!!, if (appendMode) "wa" else "w")
+                ?: throw Exception("Failed to open output stream")
+            out.use { stream ->
+                val input = body.byteStream()
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var lastEmit = 0L // 进度写节流：120ms 一次（与图片任务同策略）
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    checkPauseCancel(task.id)
+                    stream.write(buffer, 0, bytesRead)
+                    written += bytesRead
+                    val now = System.currentTimeMillis()
+                    if (now - lastEmit > 120) {
+                        lastEmit = now
+                        updateTask(task.id) {
+                            it.copy(downloadedBytes = written, totalBytes = totalBytes, progress = bytesPercent(written, totalBytes))
+                        }
+                        reportOverallProgress(fileIndex, fileTotal, written, totalBytes, "下载视频")
+                    }
+                }
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                contentValues.clear()
-                contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
-                resolver.update(uri, contentValues, null, null)
+                val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
+                resolver.update(uri!!, done, null, null)
+            }
+            updateTask(task.id) {
+                it.copy(status = DownloadStatus.Success, partialUri = null, candidateIndex = 0, progress = 100, downloadedBytes = written, totalBytes = totalBytes)
             }
         }
     }
+
+    /** 3.0 自动归档：开且知道平台 → `LinkGrab/平台/yyyyMMdd`，否则 `LinkGrab`。 */
+    private fun organizeRelativePath(isVideo: Boolean, platform: String?): String {
+        val base = if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
+        return if (_autoOrganize.value && platform != null) {
+            val day = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.CHINA).format(java.util.Date())
+            "$base/LinkGrab/$platform/$day"
+        } else {
+            "$base/LinkGrab"
+        }
+    }
+
+    private fun buildMediaRequest(url: String, range: String?): Request {
+        val builder = Request.Builder().url(url).header("User-Agent", BROWSER_UA)
+        // 小红书 CDN 对空 Referer 的请求更容易 403
+        if (url.contains("xhscdn.com") || url.contains("xiaohongshu.com")) {
+            builder.header("Referer", "https://www.xiaohongshu.com/")
+        }
+        if (range != null) builder.header("Range", range)
+        return builder.build()
+    }
+
+    /** 写入循环中的暂停/取消检查点：每 8KB 一次，开销可忽略。 */
+    private fun checkPauseCancel(taskId: Long) {
+        if (cancelFlags.remove(taskId)) throw TaskCanceledSignal()
+        if (pauseFlags.remove(taskId)) throw TaskPausedSignal()
+    }
+
+    private fun bytesPercent(bytes: Long, total: Long): Int =
+        if (total > 0) ((bytes * 100) / total).toInt().coerceIn(0, 99) else 0
 
     fun resetDownloadState() { _downloadState.value = DownloadState.Idle }
 
@@ -615,4 +918,46 @@ sealed class DownloadState {
     data class Downloading(val progress: Int = 0) : DownloadState()
     data object Success : DownloadState()
     data class Error(val message: String) : DownloadState()
+}
+
+/** 下载队列的单个任务（3.0）。 */
+enum class DownloadStatus {
+    Queued, Downloading, Paused, Success, Failed, Canceled;
+
+    /** 已到终态：可从任务列表清除。 */
+    val isFinished: Boolean get() = this == Success || this == Failed || this == Canceled
+}
+
+data class DownloadTaskItem(
+    val id: Long,
+    val isVideo: Boolean,
+    /** 视频 = 候选地址列表（按序回退）；图片 = 单条。 */
+    val urls: List<String>,
+    val filename: String,
+    /** 平台显示名（抖音/小红书），自动归档子目录用；null = 不归档。 */
+    val platform: String? = null,
+    val status: DownloadStatus = DownloadStatus.Queued,
+    /** 单文件进度 0-100（成功时 100）。 */
+    val progress: Int = 0,
+    val downloadedBytes: Long = 0L,
+    val totalBytes: Long = 0L,
+    /** 暂停时的半成品文件 uri（IS_PENDING=1，不进相册），续传起点。 */
+    val partialUri: String? = null,
+    /** 视频多候选时当前进行到的候选下标。 */
+    val candidateIndex: Int = 0,
+    val error: String? = null,
+)
+
+/** worker 内部控制流信号：不是错误，上层据此转成 Paused/Canceled 状态。 */
+private class TaskPausedSignal : Exception()
+private class TaskCanceledSignal : Exception()
+
+/** 批量解析的单条结果（3.0）。 */
+data class BatchParseItem(
+    val url: String,
+    val platform: Platform,
+    val result: MediaResult? = null,
+    val error: String? = null,
+) {
+    val isSuccess: Boolean get() = result != null
 }

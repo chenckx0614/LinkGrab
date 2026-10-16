@@ -489,7 +489,7 @@ private fun ImageResultBody(
             modifier = Modifier
                 .weight(1f),
         ) {
-            itemsIndexed(result.images, key = { index, _ -> index }) { index, imageUrl ->
+            itemsIndexed(result.images, key = { _, imageUrl -> imageUrl }) { index, imageUrl ->
                 val isLive = result.isLivePhoto(index)
                 Box(
                     modifier = Modifier

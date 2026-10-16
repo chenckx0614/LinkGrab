@@ -13,14 +13,17 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 282
-        versionName = "2.5.38"
+        versionCode = 302
+        versionName = "3.0"
     }
 
     buildTypes {
         release {
+            // 3.0 交付链路切换：release + debug keystore 签名 = R8 混淆 + 可直接安装。
+            // debug 包（93MB 未混淆）仅保留作开发用。
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
