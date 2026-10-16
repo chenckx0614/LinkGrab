@@ -5,6 +5,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -30,7 +31,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
@@ -39,18 +39,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -59,8 +61,10 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Alignment
+import kotlin.math.abs
 import kotlin.math.roundToInt
-import androidx.compose.ui.graphics.vector.ImageVector
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
@@ -71,6 +75,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.DisposableEffect
+import androidx.navigation.NavController
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -91,13 +97,15 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Person
+import com.linkgrab.app.ui.screens.AboutScreen
+import com.linkgrab.app.ui.screens.DonateScreen
+import com.linkgrab.app.ui.screens.GameScreen
 import com.linkgrab.app.ui.screens.GuideScreen
 import com.linkgrab.app.ui.screens.HistoryScreen
 import com.linkgrab.app.ui.screens.HomeScreen
@@ -107,11 +115,12 @@ import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
+import com.linkgrab.app.ui.screens.UpdateSettingsScreen
 import com.linkgrab.app.ui.liquid.HarmonyOS7BottomTabs
 import com.linkgrab.app.ui.liquid.HarmonyOS7TabItem
+import com.linkgrab.app.ui.liquid.IOS26UpdateDialog
 import com.linkgrab.app.ui.liquid.HyperOS4BottomTabs
 import com.linkgrab.app.ui.liquid.HyperOS4TabItem
-import com.linkgrab.app.ui.liquid.LiquidBottomTabs
 import com.linkgrab.app.ui.liquid.Md3BottomTabs
 import com.linkgrab.app.ui.liquid.Md3TabItem
 import com.linkgrab.app.ui.liquid.NexioBottomTabs
@@ -132,59 +141,20 @@ import com.linkgrab.app.viewmodel.MainViewModel
 
 sealed class Screen(val route: String, val title: String) {
     data object Guide : Screen("guide", "引导")
-    data object Home : Screen("home", "首页")
-    data object Toolbox : Screen("toolbox", "工具箱")
+    // 三个主标签页共用一个宿主：HorizontalPager 1:1 跟手滑动 + 弹簧吸附
+    //（学习自 Nexio 课程表的主 tab 切换），不再各占一个导航目的地。
+    data object MainTabs : Screen("main_tabs", "主页")
     data object Result : Screen("result", "解析结果")
-    data object Settings : Screen("settings", "设置")
     data object UpdateLog : Screen("update_log", "更新日志")
+    data object UpdateSettings : Screen("update_settings", "更新设置")
+    data object About : Screen("about", "关于应用")
+    data object Donate : Screen("donate", "捐赠支持")
+    data object Game : Screen("game", "奶蛙消消乐")
     data object History : Screen("history", "历史记录")
     data object VideoToAudio : Screen("video_to_audio", "视频转音频")
     data object ImageConvert : Screen("image_convert", "图片转格式")
     data object Music : Screen("music", "音乐解析下载")
 }
-
-/**
- * A single tab inside [LiquidBottomTabs]. The tint is uniform here — the
- * selected state is rendered by the bar itself: an invisible accent-tinted
- * duplicate of this content is recorded into a backdrop layer and revealed
- * through the selection capsule's refraction.
- */
-@Composable
-private fun LiquidTabItem(
-    icon: ImageVector,
-    label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(18.dp))
-            // 长按也当作点击：iOS 27 的拖拽手势只在胶囊上，长按未选中区域时
-            // 不会收到 onClick，走 long click 兜底切换。
-            .combinedClickable(onClick = onClick, onLongClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            tint = iosLabel(),
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            label,
-            color = iosLabel(),
-            fontSize = 10.sp,
-            lineHeight = 10.sp,
-            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-            letterSpacing = (-0.1).sp,
-        )
-    }
-}
-
-private val bottomNavRoutes = setOf(Screen.Home.route, Screen.Toolbox.route, Screen.Settings.route)
 
 // MARK: - Page transitions (iOS 26 push / pop)
 
@@ -192,23 +162,17 @@ private typealias EnterSpec = AnimatedContentTransitionScope<NavBackStackEntry>.
 private typealias ExitSpec = AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition
 
 /**
- * push / pop 用不同时长：进入新页稍慢、更从容，返回更快、更干脆。
- * 这是 iOS 手感的一部分——pop 永远比 push 短一截。
- *
- * 注意 push 的 Enter/Exit 必须同时长、pop 的 Enter/Exit 也必须同时长，
- * 否则两个页面位移不同步，视觉上会「撕裂」。
+ * 转场窗口时长标记：v2.5.23 引入——转场期间摘掉全屏 layerBackdrop 录制，
+ * 结束后恢复。
  */
-private const val PushMs = 380
-private const val PopMs = 300
+private const val PushMs = 320
+private const val PopMs = 260
 
 /** iOS system deceleration curve — fast start, long smooth tail. */
 private val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
 /** 30% parallax offset for the page that stays behind. */
 private const val Parallax = 0.30f
-
-/** 相邻标签页切换时的横向位移比例（很小，只做方向暗示）。 */
-private const val TabSlide = 0.05f
 
 /**
  * 引导页离场：淡出收尾，不做横向推移——引导页更像"一层"而不是"栈里的一页"。
@@ -220,6 +184,17 @@ private val guideFinishEnter: EnterTransition =
     fadeIn(tween(340, easing = iosEasing)) +
         scaleIn(initialScale = 0.96f, animationSpec = tween(340, easing = iosEasing))
 
+/**
+ * push / pop 用不同时长：进入新页稍慢、更从容，返回更快、更干脆。
+ * 这是库里 HyperOS Activity 转场的观感——新页从右滑入、旧页带视差让位，
+ * 返回时反向；pop 永远比 push 短一截。
+ *
+ * 注意 push 的 Enter/Exit 必须同时长、pop 的 Enter/Exit 也必须同时长，
+ * 否则两个页面位移不同步，视觉上会「撕裂」。
+ *
+ * 纯渐变（系统默认 fade）观感太差，v2.5.29 曾短暂改用、v2.5.30 恢复滑动转场；
+ * 掉帧问题已在 v2.5.23 由「转场窗口摘采样层」根治，不再是回退理由。
+ */
 private val pushEnter: EnterTransition = slideInHorizontally(
     animationSpec = tween(PushMs, easing = iosEasing),
     initialOffsetX = { it },
@@ -240,47 +215,12 @@ private val popExit: ExitTransition = slideOutHorizontally(
     targetOffsetX = { it },
 )
 
-/** 底栏标签页的顺序，用来判断切换方向（决定新页从左边还是右边进来）。 */
-private fun tabIndex(route: String?): Int = when (route) {
-    Screen.Home.route -> 0
-    Screen.Toolbox.route -> 1
-    Screen.Settings.route -> 2
-    else -> 0
-}
-
-/**
- * 标签页切换：不是单纯的淡入淡出，而是「顺着方向轻微推一下」。
- * 向右切（Home→工具箱→设置）新页从右侧小幅进来，向左切反过来；
- * 同时带一点缩放，让「换了一页」有实感，但幅度都很小以免头重脚轻。
- */
-private val tabExit: ExitTransition = fadeOut(tween(160, easing = iosEasing))
-
-private fun tabEnter(dir: Int): EnterTransition =
-    fadeIn(tween(200, easing = iosEasing)) +
-        slideInHorizontally(
-            animationSpec = tween(300, easing = iosEasing),
-            initialOffsetX = { (it * TabSlide * dir).toInt() },
-        ) +
-        scaleIn(initialScale = 0.98f, animationSpec = tween(300, easing = iosEasing))
-
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.isTabSwitch(): Boolean =
-    initialState.destination.route in bottomNavRoutes &&
-        targetState.destination.route in bottomNavRoutes
-
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.isFromGuide(): Boolean =
     initialState.destination.route == Screen.Guide.route
 
 private fun iosEnter(transition: EnterTransition): EnterSpec =
     {
         when {
-            isTabSwitch() -> {
-                // 方向由两个标签在底栏里的先后顺序决定，新页从该方向进来。
-                val dir =
-                    if (tabIndex(targetState.destination.route) >=
-                        tabIndex(initialState.destination.route)
-                    ) 1 else -1
-                tabEnter(dir)
-            }
             isFromGuide() -> guideFinishEnter
             else -> transition
         }
@@ -289,7 +229,6 @@ private fun iosEnter(transition: EnterTransition): EnterSpec =
 private fun iosExit(transition: ExitTransition): ExitSpec =
     {
         when {
-            isTabSwitch() -> tabExit
             // 去引导页时首页直接让位，不要在后面横向滑走。
             targetState.destination.route == Screen.Guide.route -> ExitTransition.None
             else -> transition
@@ -305,6 +244,10 @@ private fun iosExit(transition: ExitTransition): ExitSpec =
  *
  * 阴影是常驻的（不做动画），开销只是一层 elevation 绘制，比在转场里
  * 逐帧驱动要便宜得多。
+ *
+ * 注意：这里**不能**改用 drawBehind 画一条左缘渐变来替代。shadow(clip = false)
+ * 的投影落在盒子**外侧**，页面停稳（x=0）时它在屏幕外所以看不见；而 drawBehind
+ * 画在盒子**内侧**，页面停稳时那条渐变就在屏幕左边缘露出一条深色竖带。
  */
 @Composable
 private fun IOSPageSurface(content: @Composable () -> Unit) {
@@ -330,12 +273,89 @@ private fun NavGraphBuilder.iosPage(
     content: @Composable () -> Unit,
 ) = composable(
     route = route,
+    // 迁移自库（Nexio/HyperOS）的 Activity 转场观感：新页从右滑入、旧页视差让位。
     enterTransition = iosEnter(pushEnter),
     exitTransition = iosExit(pushExit),
     popEnterTransition = iosEnter(popEnter),
     popExitTransition = iosExit(popExit),
 ) {
     IOSPageSurface { content() }
+}
+
+// MARK: - 主标签页 HorizontalPager（页面切换动画学习自 Nexio 课程表）
+
+/** 点底栏 tab 时的翻页弹簧（相邻页，略偏软）。 */
+private val MainTabPagerAnimSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = 320f,
+)
+
+/** 跨页（首页↔设置，距离 2 页）更缓，避免长距离仍按同刚度显得急。 */
+private val MainTabPagerCrossPageAnimSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = 240f,
+)
+
+/** 动画切到目标主 tab；正常结束后若未精确落页则强制吸附。 */
+private suspend fun PagerState.animateMainTabTo(target: Int) {
+    val distance = abs(target - currentPage)
+    val spec = if (distance > 1) MainTabPagerCrossPageAnimSpec else MainTabPagerAnimSpec
+    try {
+        animateScrollToPage(target, animationSpec = spec)
+    } catch (e: CancellationException) {
+        throw e
+    }
+    if (currentPage != target || abs(currentPageOffsetFraction) > 0.001f) {
+        scrollToPage(target)
+    }
+}
+
+/**
+ * 三个主标签页的 pager 宿主：页面随手势 1:1 横移，松手按弹簧 settle；
+ * 点底栏 tab 走 [animateMainTabTo]。替换了旧的「fade + 小幅位移」导航转场。
+ */
+@Composable
+private fun MainTabs(
+    viewModel: MainViewModel,
+    pagerState: PagerState,
+    initialShareText: String?,
+    onNavigateToHistory: () -> Unit,
+    onNavigateToVideoToAudio: () -> Unit,
+    onNavigateToImageConvert: () -> Unit,
+    onNavigateToMusic: () -> Unit,
+    onNavigateToUpdateSettings: () -> Unit,
+    onNavigateToAbout: () -> Unit,
+    onNavigateToGame: () -> Unit,
+) {
+    HorizontalPager(
+        state = pagerState,
+        modifier = Modifier.fillMaxSize(),
+        beyondViewportPageCount = 1,
+    ) { page ->
+    // 注意：这里不要再套 IOSPageSurface。它的 16dp 投影是用来表达「层叠页面」
+    // 上下关系的，而 pager 内三个页面是左右并排的兄弟关系——套上之后，
+    // 后面那页的左边缘投影会在横滑时糊到前一页上。
+    // 层级阴影由 NavGraphBuilder.iosPage 在整个 MainTabs 目的地上统一施加。
+    // 页序与底栏一致：首页 / 我的 / 工具箱
+    when (page) {
+        0 -> HomeScreen(
+            viewModel = viewModel,
+            onNavigateToHistory = onNavigateToHistory,
+            initialShareText = initialShareText,
+        )
+        1 -> SettingsScreen(
+            viewModel = viewModel,
+            onNavigateToUpdateSettings = onNavigateToUpdateSettings,
+            onNavigateToAbout = onNavigateToAbout,
+        )
+        else -> ToolboxScreen(
+            onNavigateToVideoToAudio = onNavigateToVideoToAudio,
+            onNavigateToImageConvert = onNavigateToImageConvert,
+            onNavigateToMusic = onNavigateToMusic,
+            onNavigateToGame = onNavigateToGame,
+        )
+    }
+    }
 }
 
 @Composable
@@ -347,9 +367,12 @@ fun AppNavigation(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    val showBottomBar = currentDestination?.route in bottomNavRoutes
+    val showBottomBar = currentDestination?.route == Screen.MainTabs.route
     val bottomBarStyle by viewModel.bottomBarStyle.collectAsState()
     val context = LocalContext.current
+    // 主 tab pager：提升到这里是为了让底栏（AppNavigation 层）也能驱动翻页。
+    val mainPagerState = rememberPagerState(initialPage = 0) { 3 }
+    val pagerScope = rememberCoroutineScope()
 
     // 「解析成功跳结果页」是一次性事件，不能由持久状态推导。
     // 统一在这里监听，首页和历史页发起的解析都会走到这里。
@@ -364,10 +387,10 @@ fun AppNavigation(
 
     // 预测式返回已关闭，系统返回手势会走 onBackPressed。这里接管它，
     // 让手势返回执行应用内的 pop 转场（而不是直接退出应用）。
-    // 只有非底部标签页才拦截，首页上仍然保留"返回退出"的系统行为。
+    // 只有详情页才拦截；主标签页上保留"返回退出"的系统行为。
     BackHandler(
         enabled = currentDestination?.route != null &&
-            currentDestination?.route !in bottomNavRoutes &&
+            currentDestination?.route != Screen.MainTabs.route &&
             currentDestination?.route != Screen.Guide.route,
     ) {
         navController.popBackStack()
@@ -380,6 +403,28 @@ fun AppNavigation(
     val liquidBackdrop = rememberLayerBackdrop {
         drawRect(Color.White.copy(alpha = 0.08f))
         drawContent()
+    }
+
+    // 转场期间暂停录制底栏的采样层。
+    // 整个 NavHost 都被录进 liquidBackdrop（底栏玻璃要采样它做模糊），而转场时
+    // 页面每帧都在位移 —— 于是这块**全屏**采样层每帧重录一次，底栏还要再对它做
+    // 一次模糊采样，两笔全屏开销叠在一帧里，转场必掉帧。
+    // 这里在页面切换期间摘掉录制：层里保留上一帧稳定态的画面，底栏玻璃继续显示
+    // （略微滞后于滑动的页面，但那本来就是一团模糊），转场结束再恢复录制。
+    var transitioning by remember { mutableStateOf(false) }
+    DisposableEffect(navController) {
+        val listener = NavController.OnDestinationChangedListener { _, _, _ ->
+            transitioning = true
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
+    LaunchedEffect(transitioning) {
+        if (transitioning) {
+            // 取最长的转场时长兜底，宁可多录一帧也别在动画中途反复开关
+            delay(PushMs.toLong())
+            transitioning = false
+        }
     }
 
     LaunchedEffect(dataLoaded) {
@@ -396,20 +441,6 @@ fun AppNavigation(
     val coveringSplash = !dataLoaded ||
         (pendingGuide && currentDestination?.route != Screen.Guide.route)
 
-    // Bottom-tab navigation: keep a single instance per tab and restore its
-    // state. Without popUpTo/saveState, repeated tab taps keep pushing new
-    // destinations onto the back stack, which interrupted transitions and
-    // could leave a stale half-faded (white) page on the screen.
-    val navigateToTab: (String) -> Unit = remember(navController) {
-        { route ->
-            navController.navigate(route) {
-                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                launchSingleTop = true
-                restoreState = true
-            }
-        }
-    }
-
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {},
@@ -420,8 +451,10 @@ fun AppNavigation(
         Box(Modifier.fillMaxSize().background(iosBackground())) {
             NavHost(
                 navController = navController,
-                startDestination = Screen.Home.route,
-                modifier = Modifier.fillMaxSize().layerBackdrop(liquidBackdrop),
+                startDestination = Screen.MainTabs.route,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (transitioning) Modifier else Modifier.layerBackdrop(liquidBackdrop)),
             ) {
 
             composable(
@@ -438,37 +471,40 @@ fun AppNavigation(
                         pendingGuide = false
                         // 记下预览条的位置，底栏会从那里"落"到屏幕底部。
                         barEntryFrom = previewRect
-                        navController.navigate(Screen.Home.route) {
+                        navController.navigate(Screen.MainTabs.route) {
                             popUpTo(Screen.Guide.route) { inclusive = true }
                         }
                     }
                 )
             }
 
-            // Bottom nav tabs — 切换带方向感的小幅位移 + 缩放；
-            // 打开 / 离开详情页走 iOS 视差 push/pop（见 iosPage）。
-            iosPage(Screen.Home.route) {
-                HomeScreen(
+            // 三个主标签页共用一个 pager 宿主：随手势 1:1 滑动 + 弹簧吸附；
+            // 打开 / 离开详情页仍走 iOS 视差 push/pop（见 iosPage）。
+            iosPage(Screen.MainTabs.route) {
+                MainTabs(
                     viewModel = viewModel,
+                    pagerState = mainPagerState,
+                    initialShareText = initialShareText,
                     onNavigateToHistory = {
                         navController.navigate(Screen.History.route)
                     },
-                    initialShareText = initialShareText,
-                )
-            }
-            iosPage(Screen.Toolbox.route) {
-                ToolboxScreen(
-                    onNavigateToVideoToAudio = { navController.navigate(Screen.VideoToAudio.route) },
-                    onNavigateToImageConvert = { navController.navigate(Screen.ImageConvert.route) },
-                    onNavigateToMusic = { navController.navigate(Screen.Music.route) },
-                )
-            }
-
-            iosPage(Screen.Settings.route) {
-                SettingsScreen(
-                    viewModel = viewModel,
-                    onNavigateToUpdateLog = {
-                        navController.navigate(Screen.UpdateLog.route)
+                    onNavigateToVideoToAudio = {
+                        navController.navigate(Screen.VideoToAudio.route)
+                    },
+                    onNavigateToImageConvert = {
+                        navController.navigate(Screen.ImageConvert.route)
+                    },
+                    onNavigateToMusic = {
+                        navController.navigate(Screen.Music.route)
+                    },
+                    onNavigateToGame = {
+                        navController.navigate(Screen.Game.route)
+                    },
+                    onNavigateToUpdateSettings = {
+                        navController.navigate(Screen.UpdateSettings.route)
+                    },
+                    onNavigateToAbout = {
+                        navController.navigate(Screen.About.route)
                     },
                 )
             }
@@ -482,6 +518,29 @@ fun AppNavigation(
             }
             iosPage(Screen.UpdateLog.route) {
                 UpdateLogScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.UpdateSettings.route) {
+                UpdateSettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.About.route) {
+                AboutScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigateToUpdateLog = { navController.navigate(Screen.UpdateLog.route) },
+                    onNavigateToDonate = { navController.navigate(Screen.Donate.route) },
+                )
+            }
+            iosPage(Screen.Donate.route) {
+                DonateScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.Game.route) {
+                GameScreen(
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -555,18 +614,10 @@ fun AppNavigation(
                             alpha = barAlpha.value
                         }
                 ) {
-                val selectedIndex = when (currentDestination?.route) {
-                    Screen.Toolbox.route -> 1
-                    Screen.Settings.route -> 2
-                    else -> 0
-                }
+                // 选中项由 pager 当前页决定（手指拖 pager 时也会同步到这一帧）。
+                val selectedIndex = mainPagerState.currentPage
                 val onTabSelected: (Int) -> Unit = { index ->
-                    val route = when (index) {
-                        1 -> Screen.Toolbox.route
-                        2 -> Screen.Settings.route
-                        else -> Screen.Home.route
-                    }
-                    navigateToTab(route)
+                    pagerScope.launch { mainPagerState.animateMainTabTo(index) }
                 }
                 val bottomModifier = Modifier
                     .padding(horizontal = 16.dp)
@@ -589,15 +640,15 @@ fun AppNavigation(
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(0) }
                         HyperOS4TabItem(
-                            Icons.Default.Build,
-                            "工具箱",
+                            Icons.Default.Person,
+                            "我的",
                             selected = selectedIndex == 1,
                             onPress = { reportPress(1, it) },
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(1) }
                         HyperOS4TabItem(
-                            Icons.Default.Settings,
-                            "设置",
+                            Icons.Default.Build,
+                            "工具箱",
                             selected = selectedIndex == 2,
                             onPress = { reportPress(2, it) },
                             modifier = Modifier.weight(1f),
@@ -618,31 +669,19 @@ fun AppNavigation(
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(0) }
                         HarmonyOS7TabItem(
-                            Icons.Default.Build,
-                            "工具箱",
+                            Icons.Default.Person,
+                            "我的",
                             selected = selectedIndex == 1,
                             onPress = { reportPress(1, it) },
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(1) }
                         HarmonyOS7TabItem(
-                            Icons.Default.Settings,
-                            "设置",
+                            Icons.Default.Build,
+                            "工具箱",
                             selected = selectedIndex == 2,
                             onPress = { reportPress(2, it) },
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(2) }
-                    }
-                    4 -> NexioBottomTabs(
-                        selectedTabIndex = { selectedIndex },
-                        onTabSelected = onTabSelected,
-                        backdrop = liquidBackdrop,
-                        tabsCount = 3,
-                        // Nexio 风格：较窄的悬浮胶囊（参照其 0.63f 宽度）
-                        modifier = bottomModifier.fillMaxWidth(0.66f),
-                    ) {
-                        NexioBottomTab(Icons.Default.Home, "首页", Modifier.weight(1f))
-                        NexioBottomTab(Icons.Default.Build, "工具箱", Modifier.weight(1f))
-                        NexioBottomTab(Icons.Default.Settings, "设置", Modifier.weight(1f))
                     }
                     3 -> Md3BottomTabs(
                         selectedTabIndex = { selectedIndex },
@@ -659,29 +698,31 @@ fun AppNavigation(
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(0) }
                         Md3TabItem(
-                            Icons.Default.Build,
-                            "工具箱",
+                            Icons.Default.Person,
+                            "我的",
                             selected = selectedIndex == 1,
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(1) }
                         Md3TabItem(
-                            Icons.Default.Settings,
-                            "设置",
+                            Icons.Default.Build,
+                            "工具箱",
                             selected = selectedIndex == 2,
                             modifier = Modifier.weight(1f),
                         ) { selectIndex(2) }
                     }
                     else -> {
-                        LiquidBottomTabs(
+                        // 默认（原 iOS27 的位置）：Nexio 液态玻璃胶囊。
+                        NexioBottomTabs(
                             selectedTabIndex = { selectedIndex },
                             onTabSelected = onTabSelected,
                             backdrop = liquidBackdrop,
                             tabsCount = 3,
-                            modifier = bottomModifier,
-                        ) { selectIndex ->
-                            LiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { selectIndex(0) }
-                            LiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { selectIndex(1) }
-                            LiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { selectIndex(2) }
+                            // Nexio 风格：较窄的悬浮胶囊（参照其 0.63f 宽度）
+                            modifier = bottomModifier.fillMaxWidth(0.66f),
+                        ) {
+                            NexioBottomTab(Icons.Default.Home, "首页", Modifier.weight(1f))
+                            NexioBottomTab(Icons.Default.Person, "我的", Modifier.weight(1f))
+                            NexioBottomTab(Icons.Default.Build, "工具箱", Modifier.weight(1f))
                         }
                     }
                 }
@@ -697,106 +738,51 @@ fun AppNavigation(
 
     val updateResult by viewModel.updateResult.collectAsState()
     val updateDownloadStatus by viewModel.updateDownloadStatus.collectAsState()
+    val manualUpdateCheck by viewModel.manualUpdateCheck.collectAsState()
+    val updateReminderEnabled by viewModel.updateReminder.collectAsState()
     updateResult?.let { result ->
-        if (result is UpdateResult.UpdateAvailable) {
-            var showDialog by remember { mutableStateOf(true) }
-            if (showDialog) {
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = {
-                        showDialog = false
-                        viewModel.dismissUpdate()
-                        viewModel.resetUpdateDownload()
-                    },
-                    title = { Text("发现新版本") },
-                    text = {
-                        Column {
-                            Text("v${result.currentVersion} → v${result.latestVersion}")
-                            if (result.releaseNotes.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(result.releaseNotes)
-                            }
-                            when (val status = updateDownloadStatus) {
-                                is UpdateDownloadStatus.Downloading -> {
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    LinearProgressIndicator(
-                                        progress = { status.progress / 100f },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                    Text(
-                                        "${status.progress}%",
-                                        fontSize = 13.sp,
-                                        color = iosSecondaryLabel(),
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
-                                }
-                                is UpdateDownloadStatus.Error -> {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        status.message,
-                                        color = iosError(),
-                                        fontSize = 13.sp,
-                                    )
-                                }
-                                is UpdateDownloadStatus.Downloaded -> {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        "下载完成，点击安装",
-                                        color = IOSGreen,
-                                        fontSize = 13.sp,
-                                    )
-                                }
-                                else -> Unit
+        // 弹窗时机：手动检查始终弹；自动检查发现新版本时只在「更新提醒」开着时弹。
+        // 关掉提醒后结果仍会写进更新设置页的面板里，只是不主动打扰。
+        if (result is UpdateResult.UpdateAvailable && (manualUpdateCheck || updateReminderEnabled)) {
+            // 更新弹窗：样式与信息架构移植自 Nexio 课程表的 UpdateDialog，
+            // 用本项目的 iOS 26 玻璃外壳渲染，取代原来的 Material AlertDialog。
+            IOS26UpdateDialog(
+                currentVersion = result.currentVersion,
+                latestVersion = result.latestVersion,
+                releaseNotes = result.releaseNotes,
+                downloadStatus = updateDownloadStatus,
+                hasDirectDownload = result.apkDownloadUrl.isNotBlank(),
+                onPrimaryAction = {
+                    when (updateDownloadStatus) {
+                        is UpdateDownloadStatus.Idle -> {
+                            if (result.apkDownloadUrl.isNotBlank()) {
+                                viewModel.downloadUpdate(result.apkDownloadUrl, result.latestVersion)
+                            } else {
+                                // 没有直链时退回浏览器：这属于「离开弹窗」，顺带收起
+                                viewModel.openUpdateInBrowser(result.htmlUrl)
+                                viewModel.dismissUpdate()
                             }
                         }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                when (updateDownloadStatus) {
-                                    is UpdateDownloadStatus.Idle -> {
-                                        if (result.apkDownloadUrl.isNotBlank()) {
-                                            viewModel.downloadUpdate(result.apkDownloadUrl, result.latestVersion)
-                                        } else {
-                                            viewModel.openUpdateInBrowser(result.htmlUrl)
-                                            showDialog = false
-                                            viewModel.dismissUpdate()
-                                        }
-                                    }
-                                    is UpdateDownloadStatus.Downloaded -> {
-                                        val uri = (updateDownloadStatus as UpdateDownloadStatus.Downloaded).uri
-                                        viewModel.installUpdate(uri)
-                                    }
-                                    is UpdateDownloadStatus.Error -> {
-                                        viewModel.resetUpdateDownload()
-                                        viewModel.downloadUpdate(result.apkDownloadUrl, result.latestVersion)
-                                    }
-                                    else -> Unit
-                                }
-                            },
-                            enabled = updateDownloadStatus !is UpdateDownloadStatus.Downloading
-                                && updateDownloadStatus !is UpdateDownloadStatus.Installed,
-                        ) {
-                            Text(
-                                when (updateDownloadStatus) {
-                                    is UpdateDownloadStatus.Idle ->
-                                        if (result.apkDownloadUrl.isNotBlank()) "下载并安装" else "去浏览器下载"
-                                    is UpdateDownloadStatus.Downloading -> "下载中…"
-                                    is UpdateDownloadStatus.Downloaded -> "立即安装"
-                                    is UpdateDownloadStatus.Installed -> "已调起安装"
-                                    is UpdateDownloadStatus.Error -> "重试"
-                                }
-                            )
+                        is UpdateDownloadStatus.Downloaded -> {
+                            val uri = (updateDownloadStatus as UpdateDownloadStatus.Downloaded).uri
+                            viewModel.installUpdate(uri)
                         }
-                    },
-                    dismissButton = {
-                        Button(onClick = {
-                            showDialog = false
-                            viewModel.dismissUpdate()
+                        is UpdateDownloadStatus.Error -> {
                             viewModel.resetUpdateDownload()
-                        }) { Text("稍后") }
-                    },
-                )
-            }
+                            viewModel.downloadUpdate(result.apkDownloadUrl, result.latestVersion)
+                        }
+                        else -> Unit
+                    }
+                },
+                onDismiss = {
+                    // 与 Nexio 一致：下载中关闭只是收起弹窗，下载继续（后台下载）。
+                    // 其余状态关闭时顺带清掉下载进度，避免下次打开残留中间态。
+                    viewModel.dismissUpdate()
+                    if (updateDownloadStatus !is UpdateDownloadStatus.Downloading) {
+                        viewModel.resetUpdateDownload()
+                    }
+                },
+            )
         }
     }
 }

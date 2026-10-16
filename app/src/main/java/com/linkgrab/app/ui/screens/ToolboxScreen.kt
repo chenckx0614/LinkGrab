@@ -24,11 +24,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26Divider
+import com.linkgrab.app.ui.theme.IOS26IconSize
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.IOSCornerXSmall
 import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosDisclosureColor
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import androidx.compose.material.icons.Icons
@@ -39,6 +41,7 @@ fun ToolboxScreen(
     onNavigateToVideoToAudio: () -> Unit = {},
     onNavigateToImageConvert: () -> Unit = {},
     onNavigateToMusic: () -> Unit = {},
+    onNavigateToGame: () -> Unit = {},
 ) {
     IOS26Canvas {
         IOS26StickyPage(title = "工具") {
@@ -52,6 +55,8 @@ fun ToolboxScreen(
                     ToolRow("视频转音频", "提取音频并保存到音乐资料库", onNavigateToVideoToAudio)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
                     ToolRow("图片转换", "转换 JPG、PNG、WebP 或 BMP", onNavigateToImageConvert)
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
+                    ToolRow("奶蛙消消乐", "顺便玩一局，摸鱼必备", onNavigateToGame)
                 }
             }
             item {
@@ -102,8 +107,8 @@ private fun ToolRow(title: String, subtitle: String, onClick: () -> Unit) {
         Icon(
             Icons.Default.ChevronRight,
             contentDescription = null,
-            tint = iosSecondaryLabel(),
-            modifier = Modifier.size(20.dp),
+            tint = iosDisclosureColor(),
+            modifier = Modifier.size(IOS26IconSize.Disclosure),
         )
     }
 }

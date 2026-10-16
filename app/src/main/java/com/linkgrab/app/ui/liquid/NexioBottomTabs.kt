@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +54,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastCoerceIn
@@ -71,6 +74,7 @@ import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.Capsule
 import com.linkgrab.app.ui.theme.isInDarkTheme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -115,6 +119,9 @@ fun RowScope.NexioBottomTab(
     val contentColor =
         if (isLightTheme) Color(0xFF1A1A1A).copy(alpha = 0.75f)
         else Color.White.copy(alpha = 0.75f)
+    // 排版：图标走固定 24dp 方盒居中，文字固定行高并去掉字体自带的上下留白，
+    // 两者再整体垂直居中 —— 之前直接 Icon+Text 叠放时，字体的 ascent/descent
+    // 留白会把文字往下顶，图标相对文字看起来就不在一条中轴上（"有点斜"）。
     Column(
         modifier
             .clip(Capsule())
@@ -126,16 +133,29 @@ fun RowScope.NexioBottomTab(
                 scaleX = s
                 scaleY = s
             },
-        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+        verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = contentColor,
-            modifier = Modifier.size(24.dp),
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            label,
+            fontSize = 11.sp,
+            // 固定行高 + 去掉 font padding：文字块高度确定，中点才和图标对齐
+            lineHeight = 12.sp,
+            color = contentColor,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
         )
-        Text(label, fontSize = 11.sp, color = contentColor)
     }
 }
 
@@ -163,8 +183,10 @@ fun NexioBottomTabs(
 
     val tabsBackdrop = rememberLayerBackdrop()
 
+    // 必须给容器显式高度：手势层用 fillMaxSize()，不显式限高会被它撑成
+    // 父级全高，CenterStart 对齐下可见胶囊就跑到屏幕正中（v2.5.13 的 bug）。
     BoxWithConstraints(
-        modifier,
+        modifier.height(containerHeight),
         contentAlignment = Alignment.CenterStart,
     ) {
         val density = LocalDensity.current
@@ -191,6 +213,15 @@ fun NexioBottomTabs(
         // 不能用 selectedTabIndex lambda 做 remember key：每次重组都是新实例，
         // currentIndex 会被冲掉导致点 tab 无效
         var currentIndex by remember { mutableIntStateOf(selectedTabIndex()) }
+        // 由本控件发起、等待宿主确认的目标页；-1 表示没有在途的选择。
+        //
+        // 为什么需要它：宿主是 HorizontalPager，翻页途中 currentPage 会**依次经过
+        // 中间的页**——从首页滑到「我的」会先经过「工具箱」。这些中间值一旦回灌
+        // 进来，底栏就会把 currentIndex 改成中间页，再反过来通知宿主切到中间页，
+        // 于是页面被拽回中间（v2.5.15 修的 bug：只在滑到最左/最右时出现，因为
+        // 相邻两页之间不存在会被经过的中间页）。
+        // 发起选择后只认目标本身，抵达后才解除锁定。
+        var pendingTarget by remember { mutableIntStateOf(-1) }
         val dampedDragAnimation = remember(animationScope) {
             DampedDragAnimation(
                 animationScope = animationScope,
@@ -205,9 +236,21 @@ fun NexioBottomTabs(
             )
         }
         val latestSelectedTabIndex by rememberUpdatedState(selectedTabIndex)
+        // 保险丝：万一宿主因为被打断等原因始终没抵达目标，超时后自动解锁，
+        // 避免 pendingTarget 永久屏蔽宿主的外部选中。
+        LaunchedEffect(pendingTarget) {
+            if (pendingTarget < 0) return@LaunchedEffect
+            delay(1200)
+            pendingTarget = -1
+        }
         LaunchedEffect(dampedDragAnimation) {
             snapshotFlow { latestSelectedTabIndex() }
                 .collectLatest { index ->
+                    // 在途期间忽略宿主回灌的中间页，只等目标页抵达。
+                    if (pendingTarget >= 0) {
+                        if (index == pendingTarget) pendingTarget = -1
+                        return@collectLatest
+                    }
                     if (index != currentIndex) {
                         currentIndex = index
                     }
@@ -218,7 +261,9 @@ fun NexioBottomTabs(
                 .drop(1)
                 .collectLatest { index ->
                     dampedDragAnimation.animateToValue(index.toFloat())
-                    onTabSelected(index)
+                    // 这里不要再调 onTabSelected：本控件发起的选择已在手势里直接
+                    // 通知过宿主，宿主自己发起的变更回传过去只是无意义的回声，
+                    // 而且会和手势里那次并发翻页、把页面拽回中途的某一页。
                 }
         }
 
@@ -371,6 +416,9 @@ fun NexioBottomTabs(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         val downX = down.position.x
+                        // 新手势接管一切：解锁上一轮可能没等到确认的 pendingTarget，
+                        // 避免它永久屏蔽宿主的外部选中。
+                        pendingTarget = -1
 
                         val capsuleCenterX = if (isLtr) {
                             padPx + (dampedDragAnimation.value + 0.5f) * tabWidth
@@ -380,6 +428,10 @@ fun NexioBottomTabs(
                         val capsuleHalf = tabWidth * 0.55f
                         var dragging = abs(downX - capsuleCenterX) <= capsuleHalf
                         var pressedTab = -1
+                        // 拖动目标自己记账，不读 dampedDragAnimation.targetValue：
+                        // 后者要等 animateTo 的协程真正启动后才会更新，快速拖动时
+                        // 读到的是上一帧的旧值，位移被吃掉一截，松手就吸附到了中间页。
+                        var dragTarget = dampedDragAnimation.value
 
                         if (dragging) {
                             dampedDragAnimation.press()
@@ -399,12 +451,15 @@ fun NexioBottomTabs(
                             val change = event.changes.firstOrNull { it.id == down.id }
                             if (change == null || !change.pressed) {
                                 val target = if (dragging) {
-                                    dampedDragAnimation.targetValue
-                                        .fastRoundToInt()
-                                        .fastCoerceIn(0, tabsCount - 1)
+                                    dragTarget.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
                                 } else {
                                     pressedTab.fastCoerceIn(0, tabsCount - 1)
                                 }
+                                // 锁定目标：宿主翻页途中经过的中间页一律不认，
+                                // 否则页面会被拽回中途（见 pendingTarget 注释）。
+                                // 只有宿主确实会变时才上锁 —— 目标就是宿主当前页的话
+                                // 它不会发出新值，锁就永远解不开了。
+                                if (target != latestSelectedTabIndex()) pendingTarget = target
                                 currentIndex = target
                                 dampedDragAnimation.animateToValue(target.toFloat())
                                 dampedDragAnimation.release()
@@ -422,15 +477,19 @@ fun NexioBottomTabs(
                             // 点 tab 后继续滑 → 接管为拖动
                             if (!dragging && abs(totalDx) > touchSlop) {
                                 dragging = true
+                                // 从「按下时飞向的那个 tab」接管，保证和手指实际位置对齐；
+                                // 直接按在胶囊上时则从胶囊当前视觉位置继续。
+                                dragTarget =
+                                    if (pressedTab >= 0) pressedTab.toFloat()
+                                    else dampedDragAnimation.value
                                 lastX = change.position.x
                             }
 
                             if (dragging && abs(dx) > 0.01f) {
                                 lastX = change.position.x
-                                dampedDragAnimation.updateValue(
-                                    (dampedDragAnimation.targetValue + dx / tabWidth * ltrSign)
-                                        .fastCoerceIn(0f, maxIndex),
-                                )
+                                dragTarget = (dragTarget + dx / tabWidth * ltrSign)
+                                    .fastCoerceIn(0f, maxIndex)
+                                dampedDragAnimation.updateValue(dragTarget)
                                 animationScope.launch {
                                     offsetAnimation.snapTo(offsetAnimation.value + dx)
                                 }

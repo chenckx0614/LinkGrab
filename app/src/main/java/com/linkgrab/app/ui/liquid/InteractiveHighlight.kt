@@ -12,8 +12,10 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.min
 
 /**
  * Ported from Kyant0/AndroidLiquidGlass (catalog/utils/InteractiveHighlight.kt),
@@ -25,7 +27,17 @@ import kotlinx.coroutines.launch
  */
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
-    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
+    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset },
+    /**
+     * 光晕半径的额外缩放，逐帧现读（例如随展开进度收缩）。
+     * 学习自 Nexio：菜单面板展开后要把光晕收小，否则整块玻璃被冲白。
+     */
+    val radiusScale: () -> Float = { 1f },
+    /**
+     * 光晕半径上限。取 min(size.minDimension, 本值)：面板再大也不超过这个半径，
+     * 收起态的小圆按钮则自动退回自身尺寸。null = 不封顶（用 minDimension）。
+     */
+    val radiusBaseDp: Dp? = null,
 ) {
 
     private val pressProgressAnimationSpec =
@@ -59,7 +71,8 @@ class InteractiveHighlight(
                             Color.Transparent,
                         ),
                         center = center,
-                        radius = size.minDimension * 1.5f,
+                        radius = (radiusBaseDp?.let { min(size.minDimension, it.toPx()) }
+                            ?: size.minDimension) * 1.5f * radiusScale(),
                     ),
                     blendMode = BlendMode.Plus,
                 )

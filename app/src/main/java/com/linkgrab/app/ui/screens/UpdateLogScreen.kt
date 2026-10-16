@@ -1,13 +1,19 @@
 package com.linkgrab.app.ui.screens
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.linkgrab.app.ui.theme.IOS26Canvas
+import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS26StickyPage
@@ -16,360 +22,189 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 
 data class UpdateLogItem(val version: String, val date: String, val changes: List<String>)
 
-private val updateLogs = listOf(
+/** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
+val recentLogs = listOf(
+    UpdateLogItem("2.5.33", "2026-10-16", listOf(
+        "修复退出游戏时的卡顿与画面闪烁",
+    )),
+    UpdateLogItem("2.5.32", "2026-10-16", listOf(
+        "修复打开游戏时的白屏闪烁",
+        "转场提速，页面切换更利落",
+    )),
+    UpdateLogItem("2.5.31", "2026-10-14", listOf(
+        "工具箱新增「奶蛙消消乐」，应用内直接玩",
+    )),
+    UpdateLogItem("2.5.30", "2026-10-14", listOf(
+        "恢复页面滑动切换转场，替换渐变效果",
+    )),
+    UpdateLogItem("2.5.29", "2026-10-14", listOf(
+        "页面切换改用系统转场动画",
+        "捐赠支持页上线：赞赏码扫码请作者喝杯咖啡",
+    )),
+    UpdateLogItem("2.5.28", "2026-10-14", listOf(
+        "修复进入关于应用页闪退的问题",
+        "交流与反馈改为在关于应用页内展开",
+    )),
+    UpdateLogItem("2.5.27", "2026-10-14", listOf(
+        "关于应用页改为新样式：大图标、版本号与内嵌更新日志",
+        "新增捐赠支持入口",
+    )),
+    UpdateLogItem("2.5.26", "2026-10-14", listOf(
+        "新增「关于应用」页：应用图标、版本信息与更新日志入口",
+        "新增「交流与反馈」页（内容筹备中）",
+    )),
+    UpdateLogItem("2.5.25", "2026-10-14", listOf(
+        "修复实时状态通知偶发不消失的问题",
+        "新增更新设置页：当前版本、检查更新、自动检查与更新提醒开关",
+    )),
+    UpdateLogItem("2.5.24", "2026-10-13", listOf(
+        "图片预览背景改为虚化压暗，不再是纯黑",
+        "视频播放补齐暂停、快进快退与可拖动进度条",
+    )),
+    UpdateLogItem("2.5.23", "2026-10-13", listOf(
+        "优化进入页面的过渡动画，减少掉帧",
+    )),
+    UpdateLogItem("2.5.22", "2026-10-13", listOf(
+        "更新弹窗换为新样式，标题与按钮随下载状态变化",
+        "下载或安装途中也能随时关闭弹窗",
+    )),
+    UpdateLogItem("2.5.21", "2026-10-13", listOf(
+        "统一各处图标的尺寸与配色",
+        "放大图片按钮的点击区域，减少误触",
+    )),
+    UpdateLogItem("2.5.20", "2026-10-12", listOf(
+        "设置里的开关换为新样式，支持左右滑动切换",
+    )),
+    UpdateLogItem("2.5.19", "2026-10-12", listOf(
+        "删除确认弹窗改为液态玻璃效果",
+    )),
+    UpdateLogItem("2.5.18", "2026-10-12", listOf(
+        "修复已知问题",
+    )),
+    UpdateLogItem("2.5.17", "2026-10-12", listOf(
+        "修复小红书解析不出来",
+        "修复图片过一段时间就保存失败，并提升保存画质",
+    )),
+    UpdateLogItem("2.5.16", "2026-10-12", listOf(
+        "顶栏按钮统一换为液态玻璃样式",
+        "历史记录与解析结果的「选择」改为右上角菜单",
+    )),
+    UpdateLogItem("2.5.15", "2026-10-12", listOf(
+        "底栏顺序调整为「首页 / 我的 / 工具箱」",
+        "修复已知问题",
+    )),
+    UpdateLogItem("2.5.14", "2026-10-12", listOf(
+        "顶部导航栏改为渐进式模糊，过渡更自然",
+        "返回按钮升级为液态玻璃版",
+        "主页标签页支持左右滑动切换",
+        "修复已知问题",
+    )),
+    UpdateLogItem("2.5.13", "2026-10-12", listOf(
+        "修复已知问题",
+    )),
     UpdateLogItem("2.5.12", "2026-10-12", listOf(
-        "底栏新增 Nexio 液态玻璃风格（学习自开源项目 Nexio 课程表）：三层玻璃结构——可见层 vibrancy+blur、透明捕获层按压放大透出、玻璃滑块带色散折射；统一手势层支持按下标签胶囊飞入保持按压、按住拖动 1:1 跟手、松手吸附选中",
-        "该风格设为默认底栏；原有 iOS27 / HyperOS4 / HarmonyOS 7 / Material 3 仍可在设置中切换",
+        "底栏新增 iOS27 液态玻璃风格，并设为默认",
     )),
-    UpdateLogItem("2.5.11", "2026-10-12", listOf(
-        "底栏新增 Material Design 3（M3 Expressive）风格：按 Google 官方规范还原——80dp 贴边通栏实底容器（surface-container）、64×32dp 药丸选中指示器（secondary-container）弹性滑动、label-medium 12sp 标签、MD 标准 ripple 按压反馈，深浅色模式全适配",
-        "设置页「底栏风格」新增第四档：Material 3",
+)
+
+/** 更早的版本：按主题归并成几个阶段，默认折叠。 */
+private val archiveLogs = listOf(
+    UpdateLogItem("2.5.0 – 2.5.11", "2026-10-09 ~ 10-12", listOf(
+        "底栏新增 Material 3 风格",
+        "图片预览支持左右翻页、双指缩放与实况播放",
+        "下载改为直接保存原始文件，更快且不损画质",
+        "修复已知问题",
     )),
-    UpdateLogItem("2.5.10", "2026-10-11", listOf(
-        "抖音解析可靠性修复：实测确认旧 iteminfo 接口已下线（恒定 encrypt_data_miss），从通道链移除，失败时少跑两趟死接口",
-        "分享页 SSR 兜底增强：实测该页只在携带 ttwid 会话时才内嵌媒体数据；风控过滤时强制刷新 ttwid 换新会话重试",
-        "SSR 兜底新增 /share/note/ 路径，覆盖图文作品；解析出的 item_list/aweme_details 结构完全复用现有提取逻辑",
+    UpdateLogItem("2.3.6 – 2.4.0", "2026-09-27", listOf(
+        "小红书改用更稳定的解析方案",
+        "抖音支持选择保存清晰度",
+        "修复已知问题",
     )),
-    UpdateLogItem("2.5.9", "2026-10-11", listOf(
-        "小红书新增官方 feed 接口通道：WebView 抠不到页面数据时，注入 JS 借页面自带签名器调用 /api/sns/web/v1/feed，拿到完整 image_list（部分 SSR 缺图的笔记在此接口有原图地址）",
-        "feed 接口图片清洗：/sns-webp 压缩路径还原为 /sns-img 原图路径，并截掉 !webp 等处理参数后缀",
-        "实况照片/视频笔记同样支持从 feed 接口提取（master_url + backup_urls 候选回退）",
+    UpdateLogItem("2.3.0 – 2.3.5", "2026-09-14 ~ 09-27", listOf(
+        "新增音乐解析下载（酷我分享链接）",
+        "修复已知问题",
     )),
-    UpdateLogItem("2.5.8", "2026-10-10", listOf(
-        "按钮交互对齐 Apple Liquid Glass 官方规范（.glassEffect(.regular.interactive())）：按压时玻璃轻微「生长」而非缩小，松手欠阻尼弹簧果冻回弹",
-        "图片预览的返回按钮与底部操作栏升级为真·液态玻璃：实时采样背后画面做模糊与边缘折射，按压时折射增强、内阴影加深，指尖位置出现加色光晕（touch-point illumination）",
-        "底部多个操作合并为一整块玻璃胶囊（GlassEffectContainer 规范：相邻玻璃控件合并成同一块玻璃），操作项在其上独立按压反馈",
-        "全局 iOS 风格按钮（返回/主按钮/描边按钮）统一改为按压生长 + 弹性回弹手感",
+    UpdateLogItem("2.2.0 – 2.2.11", "2026-09-09 ~ 09-12", listOf(
+        "重做首次启动引导页，可预览并选择底栏样式",
+        "修复已知问题",
     )),
-    UpdateLogItem("2.5.7", "2026-10-10", listOf(
-        "页面转场修复：所有详情页恢复 iOS 视差 push/pop（新页从右侧推入、背后页面 30% 视差退让，返回比进入更快更干脆），替换掉上一版平淡的淡入缩放",
-        "图片预览返回按钮升级为真·iOS 27 液态按压：高光跟随指尖位置、按住整钮跟手压缩、松手欠阻尼弹簧果冻回弹，底部操作胶囊同样生效，按压带轻触震动反馈",
+    UpdateLogItem("2.1.0 – 2.1.11", "2026-09-09", listOf(
+        "底栏新增 HarmonyOS 7 风格",
+        "解析结果页重构，信息展示更清晰",
+        "修复已知问题",
     )),
-    UpdateLogItem("2.5.6", "2026-10-10", listOf(
-        "图片预览返回按钮新增 iOS 27 液态按压反馈：按住时跟手压缩、局部高光折射，松手带弹性回弹",
+    UpdateLogItem("2.0.0 – 2.0.9", "2026-09-07 ~ 09-09", listOf(
+        "解析引擎全面重构，不再依赖第三方解析网站",
+        "新增小红书实况照片与抖音图文的解析下载",
+        "全部页面升级为吸顶导航栏",
+        "修复已知问题",
     )),
-    UpdateLogItem("2.5.5", "2026-10-10", listOf(
-        "重做图片预览界面：增加顶部返回/标题/页码、顶部渐变承托和底部浮动操作栏，图片查看不再像临时黑色弹窗",
-        "保留左右滑动、双击缩放、捏合拖动、实况播放与下载功能，并避开页码与操作栏重叠",
+    UpdateLogItem("1.6.5 – 1.8.3", "2026-08-13 ~ 09-07", listOf(
+        "基于 Liquid Glass 规范重构全局界面",
+        "历史记录与更新日志改为新布局",
+        "修复已知问题",
     )),
-    UpdateLogItem("2.5.4", "2026-10-10", listOf(
-        "小红书解析增强：新增 explore / discovery/item 双页面入口回退，保留 xsec_token 等签名参数，覆盖不同网络环境下单一路径被拦截的情况",
-        "解析策略参考近期仍在维护的 XHS-Downloader、xiaohongshu-cli 与 ucmao/media-parser 的公开页面 SSR 方案",
-    )),
-    UpdateLogItem("2.5.3", "2026-10-10", listOf(
-        "优化 iOS 27 底栏流畅度：移除拖拽过程中会触发整块重组的多余偏移动画，触摸移动改为直接更新绘制状态",
-        "降低静态玻璃模糊半径，并避免每个触摸事件创建协程，减少 Compose 与 GPU 压力",
-    )),
-    UpdateLogItem("2.5.2", "2026-10-10", listOf(
-        "补齐详情页过渡动画：结果页、历史记录、更新日志、音乐和工具页统一加入淡入 + 轻微缩放转场，减少页面硬切",
-        "底部主标签页继续保留方向感滑动，进入详情页使用更柔和的层次动画",
-    )),
-    UpdateLogItem("2.5.1", "2026-10-10", listOf(
-        "动画优化：页面 push/pop 转场缩短并减轻缩放，连续切换更跟手，减少拖沓和掉帧感",
-        "解析提速：小红书 Cronet 桌面/移动浏览器通道并行竞速，避免失败时串行等待；平台链接正则改为预编译复用",
-        "稳定性修复：统一复用链接识别规则，降低分享文案解析时的重复开销",
-    )),
-    UpdateLogItem("2.5.0", "2026-10-09", listOf(
-        "图片预览全面重做：左右滑动翻页（原来只能点箭头）、双击在 1x/2.5x 之间切换、双指捏合 1x–5x 缩放且放大后可拖动查看细节（带边界）、单击隐藏/显示控制栏，底部圆点页码指示",
-        "解析可靠性修复（抖音）：接口请求补上 ttwid 会话 Cookie —— 没有它抖音风控会间歇性返回空数据，这是「偶尔解析失败」的主因；分享页兜底同时尝试「200 直出」与「跟随重定向」两种策略",
-        "解析可靠性修复（小红书）：主通道 Cronet 此前没带 a1/webId 匿名会话 Cookie，会偶尔撞上验证壳页；现在携带会话，且桌面 UA 拿不到内容时自动用移动端 UA 重试",
-        "下载性能优化：图片直接落盘原始字节（不再解码→重压缩 JPEG），下载更快、不再损失画质、内存占用大幅下降，并按响应头自动匹配 png/webp 等真实格式",
-        "批量下载重构：「下载全部」改为串行队列 + 跨文件聚合进度，不再 N 个协程并发互相覆盖进度条",
-    )),
-    UpdateLogItem("2.4.0", "2026-09-27", listOf(
-        "抖音视频新增「保存清晰度」选择：解析出全部画质档位（1080P / 720P 等）可按需选择，默认最高画质；预览始终播放最高画质，选择只影响下载的文件，文件名会带上清晰度后缀",
-        "修复实况照片保存报错：实况视频的 CDN 地址带时效签名、首选地址可能失效，现在解析时会把 backupUrls 等全部候选地址一起收下，下载时逐个回退；同时下载前校验 HTTP 状态码与内容类型，失败会给出明确原因而不是写入坏文件",
-        "图片/视频下载改用完整浏览器 UA；小红书 CDN 请求补上 Referer，降低 403 概率",
-    )),
-    UpdateLogItem("2.3.9", "2026-09-27", listOf(
-        "小红书解析改用高星开源项目 JoeanAmier/XHS-Downloader 的方案：它的核心就是用 Chrome 同源的 TLS 指纹发普通 GET 请求读取笔记页（curl_cffi impersonate=chrome*），不签名、不需要 Cookie。Android 上没有 curl_cffi，等价实现是 Cronet（Google 官方的 Chromium 网络栈，TLS 与真实 Chrome 一致），现已接入并作为主通道",
-        "小红书解析通道顺序：Cronet（Chrome TLS）→ WebView → 直连 → 旧降级链，全部失败时会展示各通道原因",
-        "新增 Cronet 依赖（约增加几 MB 安装包体积）",
-    )),
-    UpdateLogItem("2.3.8", "2026-09-27", listOf(
-        "紧急修复：v2.3.7 重构的小红书主通道实际从未运行——展开短链是阻塞网络请求，却在主线程协程里调用，Android 直接抛 NetworkOnMainThreadException，整条链路一步都没执行；现已将整个小红书分支移到 IO 线程",
-        "解析失败时同时展示 WebView 主通道与直连通道两个失败原因，方便定位问题",
-    )),
-    UpdateLogItem("2.3.7", "2026-09-27", listOf(
-        "小红书解析方案重构：主通道改为「应用内展开短链 → 内置 WebView 直接打开带令牌的笔记直链」。诊断发现短链跳转环节对部分客户端会降级到信息流页（导致 WebView 拿不到笔记），而展开短链这一步用普通请求从未失败；先展开再打开，跳过这个不确定因素",
-        "解析失败时一次性展示所有通道的真实失败原因（WebView 直载 / 直连 / 渲染刮图 / 第三方），不再层层掩盖",
-        "实测确认：笔记页对非浏览器指纹客户端返回登录页（Shield 的 TLS 指纹检测），短链展开正常且带回 xsec_token；机器人 UA（Googlebot 等）也会被拦，第三方解析站 tools.emmmm.dev 已失效",
-    )),
-    UpdateLogItem("2.3.6", "2026-09-27", listOf(
-        "修复小红书笔记解析被安全拦截：小红书 Shield 会对网络客户端做 TLS 指纹检测，OkHttp 这类客户端访问笔记页会被 302 到登录页（实测 curl 能过、HTTP 库被拦）；现在改用内置 WebView（Chromium 网络栈，与真实浏览器指纹一致）直接加载笔记页并提取完整 SSR 数据，图集、视频、实况照片都能拿到",
-        "诊断过程：直接复现 App 的请求链路，确认短链展开正常（302 带回 xsec_token）、笔记页 TLS 指纹被墙是唯一卡点",
-        "原「链接已失效或缺少安全令牌」的报错文案改为真实原因描述（网页端安全拦截）",
-    )),
-    UpdateLogItem("2.3.5", "2026-09-27", listOf(
-        "修复「不支持的链接格式」误导性报错：降级解析链的平台识别漏了 xhslink.cn / xhs.link 短链变体，原生解析失败后会用它自己的「不支持」错误把真实原因盖住；现在降级也失败时优先展示原生解析的真实错误",
-        "短链解析加固：小红书会把「不认识的客户端」的分享短链降级跳到首页信息流而不是笔记页；现在展开短链时携带匿名会话并优先用移动端 UA，展开结果不是笔记页时退回原始短链直接跟重定向",
-        "兼容分享文案把短链从中间折行的情况（https://xhslink.cn/o 换行 /xxxx），提取链接前先拼回断点",
-    )),
-    UpdateLogItem("2.3.4", "2026-09-27", listOf(
-        "修复小红书图片/笔记解析报错：小红书 2026 年起对不带 cookie 的请求返回验证壳页，现在解析前会先像浏览器一样引导出 a1 / webId 匿名会话（IP 被墙时本地合成同构的 a1 兜底）",
-        "移除站内 Referer 请求头：小红书会把带站内 Referer 的请求当作 SPA 导航重定向到登录页，这是此前解析失败的另一个原因",
-        "重写短链展开：xhslink.cn 这类短链并不返回 302，而是 200 + HTML 跳转指针页，现在会从页面里抠出真实地址，并支持逐跳展开短链链",
-        "会话引导与合成 a1 逻辑移植自开源项目 tamnd/xiaohongshu-cli（Apache-2.0）",
-    )),
-    UpdateLogItem("2.3.3", "2026-09-27", listOf(
-        "抖音视频清晰度修复：之前固定取 video.play_addr，而抖音这个字段恒定返回 720p 的播放地址，下载出来必然发虚；现在改为遍历 video.bit_rate[] 画质档位，按码率取最高一档",
-        "画质档位优先选择 H.264：H.265 档位码率虽高但兼容性差，部分机型和系统相册播不出来，只有在全是 H.265 时才退而用之",
-        "抖音封面改为优先取 origin_cover 原图，之前取 cover 压缩小图，在结果页放大展示时明显发虚；图集封面直接使用第一张原图",
-        "修复 webp 过滤失效：抖音图片地址都带 ?biz_tag= 之类的查询串，原来的 endsWith(\".webp\") 永远为假，等于没筛；现在先去掉 query 再比后缀",
-    )),
-    UpdateLogItem("2.3.2", "2026-09-16", listOf(
-        "应用内更新：检测到新版本后可直接在应用内下载 APK 并调起系统安装器，不再需要跳转到浏览器",
-        "更新对话框新增下载进度条；下载完成后自动显示「立即安装」，无 APK 资产时兜底打开 release 页面",
-        "Android 8+ 缺少「安装未知应用」权限时会先引导到系统设置授权，授权后可重试",
-    )),
-    UpdateLogItem("2.3.1", "2026-09-15", listOf(
-        "iOS 27 风格全局统一：新增 iOS 27 风格输入框、加载指示器与统一错误色，替换各页面残留的 Material3 OutlinedTextField 与 CircularProgressIndicator",
-        "设置页「软件更新」行支持整行点击；工具箱、设置列表行增加 iOS 风格按压缩放反馈",
-        "结果页、历史记录、骨架屏的背景色统一使用 iOS 27 语义色，移除 MaterialTheme.colorScheme 硬引用",
-    )),
-    UpdateLogItem("2.3.0", "2026-09-14", listOf(
-        "新增「音乐解析下载」：粘贴酷我音乐的分享链接，提取歌名、歌手、封面与完整歌词，支持 128k / 320k 音质下载到系统音乐库",
-        "说明：网易云、QQ 等平台的音频直链带一次性时效签名和防盗链，公共解析服务当前也大多不可用，因此这一版先接入链路最稳定的酷我；在酷我音乐 App 里「分享 → 复制链接」即可",
-    )),
-    UpdateLogItem("2.2.11", "2026-09-12", listOf(
-        "转场节奏：进入新页面稍慢更从容（380ms），返回更快更干脆（300ms）——pop 比 push 短一截是 iOS 手感的一部分",
-        "页面之间新增一层左缘投影：页面全屏就位时投影落在屏幕外看不见，一旦开始推入／返回、页面横向移动，投影自然显现，两层页面有了明确的上下层关系",
-        "底栏标签切换不再只是淡入淡出：改为顺着方向做小幅位移 + 轻微缩放，往右切新页从右侧进、往左切反过来，换页更有实感",
-        "顺带把 8 处重复的转场定义收敛成一个统一的页面封装，后续调转场只改一处",
-    )),
-    UpdateLogItem("2.2.10", "2026-09-11", listOf(
-        "修复 iOS 27 底栏选中项丢失玻璃效果：v2.2.9 把 Layer 2 的 drawBackdrop 整个去掉了，而这层正是给胶囊提供「模糊底」的，导致选中位置采样不到模糊内容",
-        "现在恢复 Layer 2 的 blur，但把它的底色 alpha 从 0.4 压到 0.06 —— 底色会被整层 tint 染蓝，压低后既能保留玻璃模糊，又不会形成蓝色遮罩",
-    )),
-    UpdateLogItem("2.2.9", "2026-09-10", listOf(
-        "修复 iOS 27 底栏的蓝色遮罩：Layer 2 之前用 drawBackdrop 录制时把 containerColor 背景和 backdrop 又画了一遍进去，经胶囊折射后形成蓝色块；改为只 clip + layerBackdrop + tint 录制 tab 内容本身",
-        "蓝色强调色略微降低强度（alpha 0.85）并仅作用于 tab 图标/文字，胶囊玻璃后的蓝色更干净、不再像遮罩",
-    )),
-    UpdateLogItem("2.2.8", "2026-09-10", listOf(
-        "回退 v2.2.7 的吸顶标题栏玻璃增强：降低 tint alpha + 加 hairline 后在页面上出现了一条明显横线，先恢复为 v2.2.6 的实色过渡方案",
-    )),
-    UpdateLogItem("2.2.7", "2026-09-10", listOf(
-        "吸顶标题栏的玻璃沉浸效果增强：blur 从 20dp 提到 30dp，底色不透明度大幅降低（浅色 0.18 / 深色 0.28），更像 iOS 系统毛玻璃",
-        "吸顶头触发阈值从 56dp 降到 36dp，上滑一点就开始出现毛玻璃；底部新增 0.5dp hairline separator，强化玻璃边缘",
-    )),
-    UpdateLogItem("2.2.6", "2026-09-10", listOf(
-        "修复 iOS 27 底栏长按已选中的标签时胶囊/光晕来回跳：回退了拖拽手势内直接改 currentIndex 的做法，避免 press 动画与 LaunchedEffect 的 press 动画竞争同一组 Animatable",
-        "长按未选中标签的切换改为走 tab 项的 onLongClick 兜底：三种底栏的 tab 都支持长按触发选择，不再依赖拖拽手势",
-    )),
-    UpdateLogItem("2.2.5", "2026-09-10", listOf(
-        "修复 iOS 27 底栏长按未选中的标签时滑块不跟手：手指落下即按坐标滑到对应标签，长按、点击、拖拽现在都即时响应",
-        "iOS 27 底栏性能优化：静止时不再挂 lens 折射 shader（原来是每帧无条件跑），Layer 2 的重复高光叠加移除，滑动与按压更跟手",
-    )),
-    UpdateLogItem("2.2.4", "2026-09-10", listOf(
-        "引导页选好样式进入主页时，底栏会从引导页里那根预览条所在的位置缓缓落到屏幕底部：位置、大小、透明度都是连续过渡，像是同一根条被放了下去",
-        "落位用弹性曲线并带一点点回落，横向与缩放置信度稍快、竖直方向更慢更软，整体约 0.7 秒落定",
-        "若取不到预览位置（例如直接跳过）则不做动画，底栏照常规出现",
-    )),
-    UpdateLogItem("2.2.3", "2026-09-10", listOf(
-        "底栏选择页改为直接嵌入**真实**底栏组件：液态玻璃、HyperOS 4、HarmonyOS 7 三种都是装上后的原样效果，不再是简化示意图",
-        "预览里的底栏可以点：点图标会切换选中项，三种风格同时联动，方便对比各自的选中动画",
-        "底栏玻璃现在采样引导页背景光晕，折射与模糊都是真实效果",
-        "背景光晕跟随翻页做轻微视差位移，翻页时前后景更有层次",
-    )),
-    UpdateLogItem("2.2.2", "2026-09-10", listOf(
-        "修复 2.2.1 首次启动闪退：回退了「等设置读出来再创建导航、把引导页当作起始页」的改动，导航图创建时机恢复原样",
-        "首屏不再闪一帧首页：改为在跳转到引导页完成前，用一层与应用背景同色的遮挡层盖住内容，效果相同但不改导航结构",
-        "去引导页时首页直接让位不再横向滑走，引导页进场改为直接替换、离场淡出",
-        "引导页主视觉浮动改用位移实现（不再使用可能为负的内边距），光晕绘制补充了尺寸为 0 的兜底",
-    )),
-    UpdateLogItem("2.2.1", "2026-09-10", listOf(
-        "修复首次启动时会先闪一帧首页再跳到引导页：改为等设置读取完成后再创建导航，起始页直接就是引导页或首页，中间只铺一层与应用背景同色的底",
-        "重做引导页翻页动画：不再整页横向推走，改为淡入淡出 + 轻微缩放 + 轻微滞后位移，页面在到达屏幕边缘前就已淡出，不再有被硬切一半的割裂感",
-        "引导页视觉重做：主图标改为带渐变、投影与呼吸光环的圆角方块，并缓慢上下浮动；背景改为两团随页面主题色平滑过渡、缓慢漂移的柔光",
-        "新增欢迎页，底栏样式选择卡片改用次级背景填充与对勾选中态，选择页支持纵向滚动",
-    )),
-    UpdateLogItem("2.2.0", "2026-09-09", listOf(
-        "重构首次启动引导页：三张介绍页改用真实图标卡片，页面背景加入跟随主题色的柔和光晕",
-        "引导页新增最后一页「选择底栏样式」：iOS 27 / HyperOS 4 / HarmonyOS 7 三选一，每张卡片带迷你底栏预览，可直观对比风格差异",
-        "首次启动时选择的底栏样式会直接保存，之后仍可在设置-外观中更换",
-        "页面指示器改为选中项拉长成小胶囊的弹性动画，按钮与跳过排版对齐不再跳动",
-    )),
-    UpdateLogItem("2.1.11", "2026-09-09", listOf(
-        "紧急修复：解析完成后进入结果页闪退（v2.1.10 引入）",
-        "原因：结果页底栏毛玻璃误用了导航层的 liquidBackdrop —— 它采样整个 NavHost，而结果页（含这条底栏）就在 NavHost 内，底栏采样它等于采样自己，形成循环引用崩溃",
-        "修复：结果页单独建立内容采样层（只记录 Scaffold 的 content 区，不含 bottomBar），底栏改用这一层，彻底断开自引用",
-    )),
-    UpdateLogItem("2.1.10", "2026-09-09", listOf(
-        "解析结果页底部操作栏改为毛玻璃：实时高斯模糊滚动到栏底的图片/视频内容，从近乎不透明的实色变为通透玻璃",
-        "底栏模糊区域延伸到屏幕底部安全区，与系统毛玻璃导航栏观感一致",
-    )),
-    UpdateLogItem("2.1.9", "2026-09-09", listOf(
-        "移除鸿蒙 7 底栏上方的渐变颜色蒙层：深色模式下它显示成一条突兀的透明条",
-        "鸿蒙 7 底栏光效改为跟手：按压到其他标签时光点几乎立即跟着移动过去，并提高了光效亮度让跟随清晰可见",
-    )),
-    UpdateLogItem("2.1.8", "2026-09-09", listOf(
-        "修正鸿蒙 7 底栏按压光晕：之前是一个只罩住单个标签的小圆斑浮在底栏上，现在改为从指尖向整个胶囊控件内部扩散",
-        "鸿蒙 7 底栏光晕加入扩散动感：半径随按压进度从 40% 扩散到覆盖整个控件，配合容器裁剪形成光在控件内散开的观感",
-    )),
-    UpdateLogItem("2.1.7", "2026-09-09", listOf(
-        "修复三种底栏切换/按压动画掉帧与丢动画（鸿蒙 7）：光效改为在绘制阶段读取动画值，之前在组合期判断导致每帧重组整个底栏",
-        "修复三种底栏切换/按压动画掉帧与丢动画（鸿蒙 7）：径向渐变改为 remember 缓存固定实例 + translate 移动，动画期间每帧零对象分配",
-        "修复三种底栏切换/按压动画掉帧与丢动画（HyperOS4）：遮罩颜色不再每帧 lerp 出新 Color 实例，改为常态色打底 + 按压色 alpha 叠加",
-        "修复三种底栏切换/按压动画掉帧与丢动画（iOS27）：最贵的色散效果（chromaticAberration）现在只在拖拽时开启，点击切换直接跳过",
-    )),
-    UpdateLogItem("2.1.6", "2026-09-09", listOf(
-        "新增 HarmonyOS 7 风格底栏：悬浮胶囊 + 沉浸光感材质 + 光感形变按压反馈",
-        "HarmonyOS 7 底栏按官方规范采用固定宽度居中（2 页签 168vp / 3 页签 248vp），不撑满屏幕",
-        "HarmonyOS 7 底栏选中态使用品牌高亮色 + 细微弹跳动效，不再沿用 HyperOS4 的灰色椭圆遮罩",
-        "HarmonyOS 7 底栏按压光效改为「照亮容器边缘」的环境光，从指尖向外衰减，配合容器轻微形变",
-        "HarmonyOS 7 底栏底部补充渐变颜色蒙层（与页面背景色一致），增强界面空间感",
-        "设置-外观新增「HarmonyOS 7」底栏选项，与 iOS27、HyperOS4 三选一",
-    )),
-    UpdateLogItem("2.1.5", "2026-09-09", listOf(
-        "底栏切换动画掉帧优化（iOS27）：点击驱动的滑动按压峰值从 1.0 降到 0.5，lens/阴影半径减半，转场中 AGSL 采样成本大降",
-        "底栏切换动画掉帧优化（iOS27）：静止时彻底摘掉 lens/chromaticAberration/highlight/shadow/innerShadow（之前传 0 半径仍走 shader 路径，每帧白付采样）",
-        "底栏切换动画掉帧优化（HyperOS4）：遮罩滑动/缩放/变色从重组驱动（animateXxxAsState）改为 Animatable + snapshotFlow 事件驱动，动画过程零重组，drawBackdrop 节点不再反复重建",
-    )),
-    UpdateLogItem("2.1.4", "2026-09-09", listOf(
-        "HyperOS4 底栏按压交互修正：按下不再是圆形涟漪，而是椭圆遮罩整体缩小、加深",
-        "按住任意标签时遮罩会跟随滑动到该标签，松开未点击则弹回选中项，与 HyperOS4 真机行为一致",
-    )),
-    UpdateLogItem("2.1.3", "2026-09-09", listOf(
-        "重做 HyperOS4 底栏：容器改为真正的毛玻璃（backdrop 取样 + 弱模糊），背景内容可以透出来",
-        "选中态改为跟随滑动的浅灰椭圆遮罩（HyperOS4 的标志性元素），去掉之前误加的底部指示线",
-        "胶囊边缘补一圈浅色描边，按下时标签中心出现深灰圆形涟漪，与参考图一致",
-    )),
-    UpdateLogItem("2.1.2", "2026-09-09", listOf(
-        "新增 HyperOS4 风格底栏：可在设置-外观中切换",
-        "HyperOS4 底栏：悬浮胶囊容器，图标+文字垂直排列，选中态高对比深色，未选中态柔和灰色",
-        "HyperOS4 底栏按下反馈：在按下的标签背后出现深色圆形涟漪，与参考图保持一致",
-        "保留现有 iOS27 液态玻璃底栏作为默认样式",
-    )),
-    UpdateLogItem("2.1.1", "2026-09-09", listOf(
-        "增强小红书链接识别：扩展短链变体(xhs.link)、更宽松的中英文括号/方括号包裹、更好的结尾标点清理",
-        "小红书解析增加多路 fallback：__INITIAL_STATE__ → JSON-LD → og:image/meta → 移动 UA 重试 → 任意 xhscdn 图片兜底，降低「解析成功但看不到内容」的概率",
-        "重写实况照片提取：同时探测 stream.h264/h265、video.url、livePhotoUrl、livePhotoMedia 等多条链路",
-        "未登录/失效链接给出更明确的错误提示，而不是泛化的解析失败",
-    )),
-    UpdateLogItem("2.1.0", "2026-09-09", listOf(
-        "重构解析结果页整体排版：合并原来的标题条+概览条为统一信息卡片，媒体区更突出，底部操作栏悬浮固定，复制/下载按钮不再跟随内容滚动",
-        "修复解析后卡在结果页的死循环：上一版移除页面销毁时清空结果后，首页仍用持久状态跳转导致返回首页立刻再跳回结果页。现在把「解析成功跳结果页」改为一次性事件（SharedFlow），首页和历史页发起的解析统一在导航层处理",
-        "结果页状态管理重新梳理：开始新解析时才清 result，页面销毁不动状态，同时保留空状态自动退回兜底",
-        "视频结果页去掉重复信息面板，播放器区域更大，点击即播放；实况照片/图片网格的角标和操作按钮保持一致风格",
-    )),
-    UpdateLogItem("2.0.9", "2026-09-09", listOf(
-        "修复解析结果页返回时偶发白屏：之前在结果页销毁时才清空解析结果，而 pop 转场期间页面还在屏幕上，清空瞬间整页塌成骨架屏；现在改为在开始新解析时才清结果，页面销毁不动任何状态",
-        "结果页增加空状态兜底：若结果为空且不在加载中，自动退回上一页，不再停留在一个只有返回键的空白页",
-    )),
-    UpdateLogItem("2.0.8", "2026-09-09", listOf(
-        "解析结果页进出不再卡顿：转场 340ms 期间先只画占位，动画落地后才加载图片 / 建播放器。Coil 解码首屏大图和 ExoPlayer 的 build+prepare 都是主线程重活，之前一直跟转场动画抢帧",
-        "结果页新增概览条：一眼看清来源平台、媒体数量、实况张数",
-        "历史记录里相同内容不再重复显示：按平台+标题去重（分享链接每次带的 token 都不同，只比 url 会漏）",
-        "历史记录右上角新增「选择」：进入多选后可勾选批量删除，选中卡片描边高亮",
-        "重做删除确认弹窗：换成 iOS 26 风格的圆角面板 + 红色删除图标，替换原来简陋的系统默认弹窗",
-    )),
-    UpdateLogItem("2.0.7", "2026-09-09", listOf(
-        "揪出吸顶头那条线的真凶：backdrop 库的 drawBackdrop 默认会给形状画「高光描边 + 投影」（rim light），且不受滚动进度门控，静止时也画 —— 全宽矩形的描边下边缘就是那条线，之前换了三版渐变都没用",
-        "吸顶头显式关闭 highlight / shadow，静止状态下顶部完全零绘制",
-    )),
-    UpdateLogItem("2.0.6", "2026-09-09", listOf(
-        "重做吸顶头结构：玻璃层（含模糊）收窄到 bar 本体，下面另起一层不含模糊的纯色渐隐，整块遮罩不再比标题低一大截",
-        "修复吸顶头底边的「线」：backdrop 的 blur 是整块矩形统一模糊，模糊区边缘必然是硬边；现在把它藏在 bar 底边并用接近不透明的底色压住",
-        "修复底栏点击没有滑动动画：标签的点击之前直接调导航、绕过了内部选中状态，现在点击也走 animateToValue，玻璃遮罩会滑过去",
-        "底栏外部选中态同步改用 rememberUpdatedState，不再因为 lambda 每次重组都换实例而反复重启观察",
-    )),
-    UpdateLogItem("2.0.5", "2026-09-08", listOf(
-        "修复吸顶头底部的「线」：渐变方向反了——之前是顶部半透明、底部 100% 不透明页面底色，色带与下方未模糊内容形成硬边；现在改为顶部到 bar 底 80% frosted tint、bar 底以下 28dp 渐变到全透明，defocus→focus 软过渡",
-        "渐变断点按状态栏高度动态计算（barEndFrac = (topInset+52dp)/(topInset+80dp)），刘海/挖孔屏上 bar 底位置仍准确",
-        "去掉 vibrancy()：反编译确认其内部是 saturation=1.5x ColorFilter，在中性灰页面会形成偏色矩形；只保留 blur + tint，色靠 blur 自然混合，更接近 iOS Liquid Glass",
-    )),
-    UpdateLogItem("2.0.4", "2026-09-08", listOf(
-        "关闭 Android 预测式返回手势：该手势会与自定义转场抢占控制权，导致返回动画错位/闪屏",
-        "返回手势改由应用内统一接管，非首页/非引导页的返回行为完全一致",
-        "修复解析结果页返回时的动画错误：视频播放器改用 TextureView，不再脱离图层变换产生黑块与错位",
-        "修复实况照片预览弹窗关闭时的残影，退出前先暂停解码",
-        "优化结果页返回卡顿：吸顶模糊图层改为滚动时按需挂载，未滚动时不再做全屏离屏合成",
-        "优化结果页返回卡顿：清除结果只更新结果字段，避免首页多一次全量重组；图片网格补充稳定 key",
-    )),
-    UpdateLogItem("2.0.3", "2026-09-08", listOf(
-        "修复页面未滚动时顶部就出现一块带硬边的「遮罩」：原因是吸顶头的 vibrancy 色彩滤镜（饱和度 1.5x）未随滚动淡出",
-        "吸顶模糊改为滚动超过约 56dp 后才渐入，模糊区底部与页面底色无缝衔接，无分割线",
-    )),
-    UpdateLogItem("2.0.2", "2026-09-08", listOf(
-        "修复小红书解析：补全 xhslink.cn 短链识别、短链自动展开，并加固 __INITIAL_STATE__ 中 undefined 的归一化",
-        "小红书链接过期或缺少安全令牌时，改为提示「请在小红书 App 中重新分享」而不是直接报解析失败",
-        "小红书视频解析新增 h265/av1 编码兜底，图集图片补充 urlPre 回退与实况照片识别",
-        "抖音图文（图集）解析增强：优先取无水印原图 download_url_list，支持更多返回结构",
-        "抖音短链解析新增多级兜底（移动端/桌面端 UA、JS 跳转页面），图文与视频自动适配接口参数",
-        "顶部导航栏去掉分割线：改为下滑时渐变模糊过渡，向下自然消散",
-        "重做页面转场：返回动画改为 iOS 视差推拉，并补齐页面底色，彻底消除切换白屏",
-    )),
-    UpdateLogItem("2.0.1", "2026-09-08", listOf(
-        "修复抖音解析：分享页 SSR 字段下线导致解析失败，切换至 slidesinfo 专用接口，视频与图文均恢复",
-        "修复小红书新版 xhslink.cn 短链无法识别的问题",
-        "全部页面升级为 iOS 26 吸顶导航栏：返回按钮与标题固定顶部，滚动时呈现实时模糊遮罩",
-        "修复底栏点击无选中动画的问题（仅按住滑动才生效）",
-        "修复底部标签反复点击导致页面栈堆积、返回时概率白屏卡住的问题",
-        "底栏尺寸与排版微调，标签切换改用状态保存式导航",
-    )),
-    UpdateLogItem("2.0.0", "2026-09-07", listOf(
-        "解析系统全面重构：接入原生抖音/小红书解析引擎（移植自 parse-video-py），不再依赖第三方解析网站",
-        "新增小红书实况照片（Live Photo）解析、预览播放与下载",
-        "新增抖音图文/Live Photo 解析支持",
-        "实况照片在网格与预览中显示「实况」徽标，可单独下载实况视频",
-        "批量下载时自动同时保存实况图片与实况视频",
-        "解析速度与成功率显著提升，抖音视频直链自动 302 跟随",
-    )),
-    UpdateLogItem("1.8.3", "2026-09-07", listOf("基于 iOS 26 Liquid Glass 设计规范重构全局 UI", "统一系统蓝主题色、更通透的玻璃面板、更精致的圆角与阴影", "优化页面转场动画与按钮按压反馈，提升整体流畅度")),
-    UpdateLogItem("1.8.2", "2026-09-07", listOf("基于 NexioSchedule / HyperOS 4 风格重构全局 UI", "引入紫色主题、液态玻璃面板、Squircle 圆角与深色模式配色", "统一首页、结果页、设置页、历史记录、工具箱和引导页视觉")),
-    UpdateLogItem("1.8.1", "2026-09-01", listOf("按 Backdrop 官方 Glass Bottom Bar 教程补齐共享 LayerBackdrop 采样结构，增强底栏背景内容的实时折射效果")),
-    UpdateLogItem("1.8.0", "2026-08-20", listOf("彻底移除 Miuix，主题、图标、基础控件和模糊兼容层全部迁移到 AndroidX Compose 与 Liquid Glass")),
-    UpdateLogItem("1.7.9", "2026-08-20", listOf("将图片转换、视频转音频和解析结果页面的基础控件迁移为 Material 3 Apple 化组件，移除旧 Miuix Scaffold 与 TopAppBar")),
-    UpdateLogItem("1.7.8", "2026-08-20", listOf("恢复设置页的跟随系统、浅色和深色手动选择")),
-    UpdateLogItem("1.7.7", "2026-08-20", listOf("提升液态玻璃底栏的可视对比度，优化白色基底、蓝色选中态、高光与阴影层次")),
-    UpdateLogItem("1.7.6", "2026-08-20", listOf("标题与状态栏增加安全留白，底栏迁移液态玻璃选中胶囊的弹性滑动和折射动画")),
-    UpdateLogItem("1.7.5", "2026-08-20", listOf("统一巡检各页面间距、标题留白、内容边距和结果页网格布局，优化小屏设备的可读性与底部避让")),
-    UpdateLogItem("1.7.4", "2026-08-20", listOf("接入 AndroidLiquidGlass Backdrop 2.0.0，重构悬浮底栏的液态玻璃背景、选中胶囊和按压反馈")),
-    UpdateLogItem("1.7.3", "2026-08-13", listOf("重做悬浮底部导航选中态、按压反馈和胶囊展开动画")),
-    UpdateLogItem("1.7.2", "2026-08-13", listOf("恢复并重做关于页面", "保留版本信息、更新日志入口和服务说明")),
-    UpdateLogItem("1.7.1", "2026-08-13", listOf("恢复设置页检查更新入口与状态反馈", "保留所有原有设置和更新检查功能")),
-    UpdateLogItem("1.7.0", "2026-08-13", listOf("历史记录和更新日志切换为纯 Compose Apple 布局", "统一内容层卡片、空状态和删除确认交互")),
-    UpdateLogItem("1.6.9", "2026-08-13", listOf("Apple 内容层与控制层布局重构", "玻璃效果收敛到导航与控制层")),
-    UpdateLogItem("1.6.8", "2026-08-13", listOf("首页与导航切换为纯 Compose Apple 风格")),
-    UpdateLogItem("1.6.7", "2026-08-13", listOf("优化小红书图片解析等待策略")),
-    UpdateLogItem("1.6.5", "2026-08-13", listOf("修复 Android 16 Live Updates 通知")),
 )
 
 @Composable
 fun UpdateLogScreen(onBack: () -> Unit) {
+    // 归档区默认收起：几十条细碎记录会把最近的版本淹没
+    var showArchived by remember { mutableStateOf(false) }
+    val visible = if (showArchived) recentLogs + archiveLogs else recentLogs
+
     IOS26Canvas {
         IOS26StickyPage(
             title = "更新日志",
             onBack = onBack,
             spacedBy = 14.dp,
         ) {
-            item { IOS26PageHeader("更新日志", "LinkGrab 的每一次改进。", topPadding = 0.dp) }
-            items(updateLogs.size) { index ->
-                val item = updateLogs[index]
-                IOS26Panel {
-                    Text(
-                        "v${item.version}",
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = iosLabel(),
-                        letterSpacing = (-0.3).sp,
+            item {
+                IOS26PageHeader(
+                    "更新日志",
+                    if (showArchived) "最近的改动，以及按主题归并的历史版本。"
+                    else "LinkGrab 的每一次改进。",
+                    topPadding = 0.dp,
+                )
+            }
+            items(visible.size, key = { visible[it].version }) { index ->
+                UpdateLogCard(visible[index])
+            }
+            if (!showArchived) {
+                item {
+                    IOS26OutlinedButton(
+                        text = "查看更早的版本（${archiveLogs.size} 个）",
+                        onClick = { showArchived = true },
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(
-                        item.date,
-                        color = iosSecondaryLabel(),
-                        modifier = Modifier.padding(top = 3.dp),
-                        fontSize = 14.sp,
-                    )
-                    item.changes.forEach {
-                        Text(
-                            "•  $it",
-                            color = iosSecondaryLabel(),
-                            modifier = Modifier.padding(top = 10.dp),
-                            fontSize = 14.sp,
-                        )
-                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun UpdateLogCard(item: UpdateLogItem) {
+    IOS26Panel {
+        Text(
+            "v${item.version}",
+            fontSize = 19.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = iosLabel(),
+            letterSpacing = (-0.3).sp,
+        )
+        Text(
+            item.date,
+            color = iosSecondaryLabel(),
+            modifier = Modifier.padding(top = 3.dp),
+            fontSize = 14.sp,
+        )
+        item.changes.forEach {
+            Text(
+                "•  $it",
+                color = iosSecondaryLabel(),
+                modifier = Modifier.padding(top = 10.dp),
+                fontSize = 14.sp,
+            )
         }
     }
 }

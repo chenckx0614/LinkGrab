@@ -2,15 +2,13 @@ package com.linkgrab.app.data.repository
 
 import android.content.Context
 import com.linkgrab.app.data.api.CronetFetcher
+import com.linkgrab.app.data.api.CronetPage
 import com.linkgrab.app.data.api.DouyinParser
 import com.linkgrab.app.data.api.WebViewParser
 import com.linkgrab.app.data.api.XhsParser
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.Platform
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /**
@@ -31,6 +29,12 @@ class ParseRepository(context: Context) {
             """https?://(?:(?:www\.)?xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)(?:/[^\s\u3000\"'<>()（）【】\[\]{}]*)?""".toRegex(),
         )
         val GENERIC_URL_PATTERN = """https?://[^\s\u3000\"'<>()（）【】\[\]{}]+""".toRegex()
+
+        /**
+         * 笔记页的 SSR 数据标志。Shield 拦下来的页面（登录页 / 验证码页 / 404 页）
+         * 都不会带这个字段，用它判定「这一发是否真的拿到了笔记数据」。
+         */
+        fun hasNotePayload(html: String): Boolean = "noteDetailMap" in html
     }
 
     private val douyinParser = DouyinParser()
@@ -71,51 +75,58 @@ class ParseRepository(context: Context) {
                 // JoeanAmier/XHS-Downloader 的方案：用 Chrome 同源的 TLS 指纹
                 // （其 curl_cffi impersonate="chrome*" / Android 侧的 Cronet）
                 // 直接 GET 笔记页，不签名、不需要 Cookie，从 SSR 取数据。
-                val noteUrl = xhsParser.expandShareLink(cleanUrl)
+                //
+                // 光有 Chrome 的 TLS 指纹还不够：Shield 还会比对 UA 与 sec-ch-ua。
+                // UA 自称 Chrome 却不发 Client Hints、或两者版本号对不上，都会被
+                // 判为伪造客户端 302 到登录页。头统一由 CronetFetcher.browserHeaders
+                // 生成（详见那里的实测记录）。
 
-                // 主通道：Cronet（Chrome TLS）直取笔记页 HTML → 复用同一份 SSR 解析。
-                // 必须携带 a1/webId 匿名会话 Cookie：小红书对无 Cookie 请求会返回
-                // 验证壳页，之前主通道没带它，是「偶尔解析失败」的主因之一。
-                // 桌面 UA 拿不到内容时再用移动端 Chrome UA 重试一次（部分笔记只对
-                // 移动端渲染完整 SSR 数据）。
-                suspend fun cronetParse(userAgent: String): MediaResult? = runCatching {
-                    cronetFetcher.getHtml(
-                        noteUrl,
-                        cronetFetcher.browserHeaders(userAgent) +
-                            ("Cookie" to xhsParser.sessionCookieHeader()),
-                    )?.let { html -> xhsParser.parseHtml(html) }
-                }.getOrNull()
+                val cookie = runCatching { xhsParser.sessionCookieHeader() }.getOrNull()
+                fun headers(userAgent: String): Map<String, String> =
+                    CronetFetcher.browserHeaders(userAgent) +
+                        (cookie?.let { mapOf("Cookie" to it) } ?: emptyMap())
 
-                // 两种浏览器 UA 并行竞速：不同网络/笔记命中策略不同，避免移动端重试
-                // 把失败场景的等待时间翻倍；拿到首个有效 SSR 结果后取消另一条请求。
-                val viaCronet = coroutineScope {
-                    listOf(CronetFetcher.DESKTOP_CHROME_UA, CronetFetcher.MOBILE_CHROME_UA)
-                        .map { ua -> async { cronetParse(ua) } }
-                        .awaitAll()
-                        .firstOrNull()
-                }
-                if (viaCronet != null) return@withContext Result.success(viaCronet)
-
-                // 小红书同一笔记有 explore / discovery/item 两套 SSR 页面。
-                // 某些网络环境会只拦其中一套，切换页面入口但保留原始签名参数，
-                // 比直接重试同一个 URL 更有效。
-                val alternateUrl = xhsParser.alternateNoteUrl(noteUrl)
-                if (alternateUrl != null) {
-                    suspend fun alternateCronetParse(userAgent: String): MediaResult? = runCatching {
-                        cronetFetcher.getHtml(
-                            alternateUrl,
-                            cronetFetcher.browserHeaders(userAgent) +
-                                ("Cookie" to xhsParser.sessionCookieHeader()),
-                        )?.let { html -> xhsParser.parseHtml(html) }
-                    }.getOrNull()
-                    val viaAlternate = coroutineScope {
-                        listOf(CronetFetcher.DESKTOP_CHROME_UA, CronetFetcher.MOBILE_CHROME_UA)
-                            .map { ua -> async { alternateCronetParse(ua) } }
-                            .awaitAll()
-                            .firstOrNull()
+                /**
+                 * 取第一个真正含 SSR 数据的结果：先桌面 UA，拿不到再试移动端。
+                 *
+                 * 串行而不是并行：实测（2026-10，两条真实分享链接）桌面 UA 稳定拿到
+                 * SSR，移动端 UA 反而会被重定向到无数据的移动端壳页。并行等于每次
+                 * 解析都多发一个注定失败的请求，白白增加被风控计数的机会。
+                 * 移动端仍保留为兜底 —— 个别笔记确实只对移动端下发完整数据。
+                 */
+                suspend fun race(url: String): CronetPage? {
+                    for (ua in listOf(CronetFetcher.DESKTOP_CHROME_UA, CronetFetcher.MOBILE_CHROME_UA)) {
+                        val page = runCatching { cronetFetcher.getPage(url, headers(ua)) }.getOrNull()
+                        if (page?.html?.let(::hasNotePayload) == true) return page
                     }
-                    if (viaAlternate != null) return@withContext Result.success(viaAlternate)
+                    return null
                 }
+
+                // 短链先展开（OkHttp 这一环不做指纹检测，最便宜），展开不成也让
+                // Cronet 自己跟重定向 —— getPage 会带回最终 URL。
+                val expanded = runCatching { xhsParser.expandShareLink(cleanUrl) }.getOrDefault(cleanUrl)
+                val candidates = listOf(expanded, cleanUrl)
+                    .filter { xhsParser.isNoteUrl(it) || it == cleanUrl }
+                    .distinct()
+
+                var lastFinalUrl: String? = null
+                for (start in candidates) {
+                    val page = race(start)
+                    if (page != null) {
+                        xhsParser.parseHtml(page.html)?.let { return@withContext Result.success(it) }
+                    }
+                    lastFinalUrl = page?.finalUrl ?: lastFinalUrl
+
+                    // 小红书同一笔记有 explore / discovery/item 两套 SSR 页面。
+                    // 某些网络环境会只拦其中一套，切换页面入口但保留原始签名参数，
+                    // 比直接重试同一个 URL 更有效。
+                    val alternate = xhsParser.alternateNoteUrl(start) ?: continue
+                    race(alternate)?.let { alt ->
+                        xhsParser.parseHtml(alt.html)?.let { return@withContext Result.success(it) }
+                    }
+                }
+
+                val noteUrl = candidates.firstOrNull() ?: cleanUrl
 
                 // 兜底 1：WebView 直载笔记页（同样走 Chromium 网络栈，但会执行 JS）
                 val viaWeb = runCatching { legacyParser.parseXhsNoteInWebView(noteUrl) }.getOrNull()
@@ -129,11 +140,18 @@ class ParseRepository(context: Context) {
                 val legacy = runCatching { legacyParser.parse(noteUrl) }.getOrNull()
                     ?: Result.failure(Exception("解析失败"))
                 if (legacy.isSuccess) legacy
-                else Result.failure(Exception(
-                    "小红书解析失败：Cronet通道无结果（${if (cronetFetcher.available) "已启用" else "不可用"}）；" +
-                        "WebView通道：${viaWeb?.exceptionOrNull()?.message ?: "无结果"}；" +
-                        "直连：${native.exceptionOrNull()?.message ?: "无结果"}"
-                ))
+                else Result.failure(
+                    Exception(
+                        buildString {
+                            append("小红书解析失败")
+                            append("（Cronet ${if (cronetFetcher.available) "已启用" else "不可用"}，")
+                            append("Chromium ${CronetFetcher.chromiumMajor}）")
+                            lastFinalUrl?.let { append("；最终落地页：${it.take(60)}") }
+                            append("；WebView：${viaWeb?.exceptionOrNull()?.message ?: "无结果"}")
+                            append("；直连：${native.exceptionOrNull()?.message ?: "无结果"}")
+                        }
+                    )
+                )
             }
             Platform.UNKNOWN -> Result.failure(Exception("不支持的链接格式，请输入抖音或小红书链接"))
         }

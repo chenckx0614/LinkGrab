@@ -42,7 +42,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,7 +90,8 @@ import com.linkgrab.app.ui.liquid.HarmonyOS7BottomTabs
 import com.linkgrab.app.ui.liquid.HarmonyOS7TabItem
 import com.linkgrab.app.ui.liquid.HyperOS4BottomTabs
 import com.linkgrab.app.ui.liquid.HyperOS4TabItem
-import com.linkgrab.app.ui.liquid.LiquidBottomTabs
+import com.linkgrab.app.ui.liquid.NexioBottomTabs
+import com.linkgrab.app.ui.liquid.NexioBottomTab
 import com.linkgrab.app.ui.theme.isInDarkTheme
 import com.linkgrab.app.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
@@ -136,7 +137,7 @@ private data class BarStyleOption(
 )
 
 private val barStyles = listOf(
-    BarStyleOption(0, "iOS 27", "液态玻璃胶囊，选中项带折射光效"),
+    BarStyleOption(0, "iOS 27", "三层液态玻璃，选中项有折射光效"),
     BarStyleOption(1, "HyperOS 4", "毛玻璃胶囊，选中项有椭圆遮罩"),
     BarStyleOption(2, "HarmonyOS 7", "悬浮窄胶囊，按压有光感形变"),
 )
@@ -571,9 +572,10 @@ private fun GuideStyleCard(
             }
             // 选中打勾
             if (selected) {
+                // 与历史记录页的选中指示器对齐：24dp 圆 + 16dp 勾
                 Box(
                     Modifier
-                        .size(22.dp)
+                        .size(24.dp)
                         .clip(CircleShape)
                         .background(iosBlue()),
                     contentAlignment = Alignment.Center,
@@ -582,7 +584,7 @@ private fun GuideStyleCard(
                         Icons.Default.Check,
                         contentDescription = null,
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(16.dp),
                     )
                 }
             }
@@ -654,15 +656,15 @@ private fun RealBottomBar(
                 modifier = Modifier.weight(1f),
             ) { selectIndex(0) }
             HyperOS4TabItem(
-                Icons.Default.Build,
-                "工具箱",
+                Icons.Default.Person,
+                "我的",
                 selected = selectedIndex == 1,
                 onPress = { reportPress(1, it) },
                 modifier = Modifier.weight(1f),
             ) { selectIndex(1) }
             HyperOS4TabItem(
-                Icons.Default.Settings,
-                "设置",
+                Icons.Default.Build,
+                "工具箱",
                 selected = selectedIndex == 2,
                 onPress = { reportPress(2, it) },
                 modifier = Modifier.weight(1f),
@@ -683,64 +685,30 @@ private fun RealBottomBar(
                 modifier = Modifier.weight(1f),
             ) { selectIndex(0) }
             HarmonyOS7TabItem(
-                Icons.Default.Build,
-                "工具箱",
+                Icons.Default.Person,
+                "我的",
                 selected = selectedIndex == 1,
                 onPress = { reportPress(1, it) },
                 modifier = Modifier.weight(1f),
             ) { selectIndex(1) }
             HarmonyOS7TabItem(
-                Icons.Default.Settings,
-                "设置",
+                Icons.Default.Build,
+                "工具箱",
                 selected = selectedIndex == 2,
                 onPress = { reportPress(2, it) },
                 modifier = Modifier.weight(1f),
             ) { selectIndex(2) }
         }
-        else -> LiquidBottomTabs(
+        else -> NexioBottomTabs(
             selectedTabIndex = { selectedIndex },
             onTabSelected = onTabSelected,
             backdrop = backdrop,
             tabsCount = 3,
             modifier = Modifier.fillMaxWidth(),
-        ) { selectIndex ->
-            GuideLiquidTabItem(Icons.Default.Home, "首页", Modifier.weight(1f)) { selectIndex(0) }
-            GuideLiquidTabItem(Icons.Default.Build, "工具箱", Modifier.weight(1f)) { selectIndex(1) }
-            GuideLiquidTabItem(Icons.Default.Settings, "设置", Modifier.weight(1f)) { selectIndex(2) }
+        ) {
+            NexioBottomTab(Icons.Default.Home, "首页", Modifier.weight(1f))
+            NexioBottomTab(Icons.Default.Person, "我的", Modifier.weight(1f))
+            NexioBottomTab(Icons.Default.Build, "工具箱", Modifier.weight(1f))
         }
-    }
-}
-
-/** 液态玻璃底栏的标签（与 AppNavigation 里的 LiquidTabItem 一致）。 */
-@Composable
-private fun GuideLiquidTabItem(
-    icon: ImageVector,
-    label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            tint = iosLabel(),
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            label,
-            color = iosLabel(),
-            fontSize = 10.sp,
-            lineHeight = 10.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = (-0.1).sp,
-        )
     }
 }

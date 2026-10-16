@@ -8,6 +8,8 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.widget.Toast
+import android.view.WindowManager
+import kotlin.math.roundToInt
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
@@ -15,6 +17,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
@@ -31,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -46,7 +50,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.MotionPhotosOn
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +73,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -82,11 +96,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -102,12 +121,16 @@ import com.kyant.backdrop.effects.blur
 import com.linkgrab.app.R
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
-import com.linkgrab.app.ui.liquid.LiquidGlassButton
+import com.linkgrab.app.ui.liquid.LiquidGlassBackButton
+import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenu
+import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenuItem
+import com.linkgrab.app.ui.liquid.LiquidGlassDropdownShadowPadding
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26HeaderHeight
 import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
+import com.linkgrab.app.ui.theme.IOS26IconSize
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26Choice
 import com.linkgrab.app.ui.theme.IOS26Panel
@@ -122,6 +145,7 @@ import com.linkgrab.app.ui.theme.iosTertiaryBackground
 import com.linkgrab.app.ui.theme.rememberBackdropLayerActive
 import com.linkgrab.app.viewmodel.DownloadState
 import com.linkgrab.app.viewmodel.MainViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -139,6 +163,11 @@ fun ResultScreen(
     var showPreview by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedImages by remember { mutableStateOf(setOf<Int>()) }
+    // 右上角菜单（液态玻璃容器变换：42dp 圆按钮 ↔ 200dp 面板）
+    var showMenu by remember { mutableStateOf(false) }
+    val menuFraction = remember { Animatable(0f) }
+    // 展开态 or 正在收起的动画中：两者都要保持 backdrop 录制层挂载
+    val menuVisible = showMenu || menuFraction.value > 0.01f
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
     // 保存清晰度选择（视频）：默认最高档，仅影响下载的文件，不影响预览播放
     var selectedQualityIndex by remember(result?.videoUrl) { mutableIntStateOf(0) }
@@ -147,6 +176,7 @@ fun ResultScreen(
     BackHandler {
         when {
             showPreview -> showPreview = false
+            showMenu -> showMenu = false
             selectionMode -> { selectionMode = false; selectedImages = emptySet() }
             else -> { player?.pause(); onBack() }
         }
@@ -192,7 +222,9 @@ fun ResultScreen(
                 videoScrollState.value > scrollThreshold
         }
     }
-    val backdropLayerActive = rememberBackdropLayerActive(headerScrolled)
+    // 菜单展开时页面通常停在顶部（没滚动过），录制层默认是卸载的 → 玻璃采
+    // 样不到任何内容。把菜单可见性并进条件，展开即强制挂载。
+    val backdropLayerActive = rememberBackdropLayerActive(headerScrolled || menuVisible)
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Scaffold(
@@ -240,59 +272,65 @@ fun ResultScreen(
             }
         },
     ) { paddingValues ->
-        // 挂上内容采样层：记录网格/视频区域，供底栏毛玻璃取样。
-        // 底栏在 bottomBar slot 里，不在这棵树内，所以不会自引用。
+        // 底栏专用采样层：整页常驻录制。底栏在 bottomBar slot 里，不在这棵
+        // 树内，所以不会自引用。
         Box(Modifier.fillMaxSize().layerBackdrop(contentBackdrop)) {
-            if (result == null) {
-                if (!uiState.isLoading) {
-                    LaunchedEffect(Unit) { onBack() }
-                }
-                Box(modifier = Modifier.fillMaxSize().padding(top = topInset + IOS26HeaderHeight)) {
-                    ResultLoadingSkeleton()
-                }
-            } else {
-                when (result.type) {
-                    MediaType.IMAGE -> ImageResultBody(
-                        result = result,
-                        gridState = gridState,
-                        heavyContentReady = heavyContentReady,
-                        backdropLayerActive = backdropLayerActive,
-                        headerBackdrop = headerBackdrop,
-                        selectionMode = selectionMode,
-                        selectedImages = selectedImages,
-                        onToggleSelection = { selectionMode = !selectionMode; selectedImages = emptySet() },
-                        onImageClick = { index ->
-                            if (selectionMode) {
-                                selectedImages = if (selectedImages.contains(index)) selectedImages - index else selectedImages + index
-                            } else {
-                                selectedImageIndex = index
-                                showPreview = true
-                            }
-                        },
-                        onDownloadLive = { index ->
-                            val liveCandidates = result.livePhotoCandidates(index)
-                            if (liveCandidates.isNotEmpty()) {
-                                viewModel.downloadVideo(context, liveCandidates, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
-                            }
-                        },
-                        onDownloadImage = { index, imageUrl ->
-                            viewModel.downloadImage(context, imageUrl, "LinkGrab_${System.currentTimeMillis()}_$index.jpg")
-                        },
-                        bottomPadding = paddingValues.calculateBottomPadding(),
-                    )
-                    MediaType.VIDEO -> VideoResultBody(
-                        result = result,
-                        scrollState = videoScrollState,
-                        heavyContentReady = heavyContentReady,
-                        backdropLayerActive = backdropLayerActive,
-                        headerBackdrop = headerBackdrop,
-                        onPlayerCreated = { player = it },
-                        bottomPadding = paddingValues.calculateBottomPadding(),
-                        selectedQualityIndex = selectedQualityIndex,
-                        onSelectQuality = { selectedQualityIndex = it },
-                    )
-                    MediaType.UNKNOWN -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("无法识别的内容类型", color = iosSecondaryLabel(), fontSize = 15.sp)
+            // 吸顶栏 / 右上角菜单专用的一层：只录「页面底色 + 内容」。
+            // 吸顶栏与菜单都在这层之外，不会自引用；底色必须在层**内部**，
+            // 否则菜单盖住的头部空白区在层里是全透明的，糊过去只能糊到空气。
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (backdropLayerActive) Modifier.layerBackdrop(headerBackdrop) else Modifier)
+                    .background(iosBackground()),
+            ) {
+                if (result == null) {
+                    if (!uiState.isLoading) {
+                        LaunchedEffect(Unit) { onBack() }
+                    }
+                    Box(modifier = Modifier.fillMaxSize().padding(top = topInset + IOS26HeaderHeight)) {
+                        ResultLoadingSkeleton()
+                    }
+                } else {
+                    when (result.type) {
+                        MediaType.IMAGE -> ImageResultBody(
+                            result = result,
+                            gridState = gridState,
+                            heavyContentReady = heavyContentReady,
+                            selectionMode = selectionMode,
+                            selectedImages = selectedImages,
+                            onToggleSelection = { selectionMode = !selectionMode; selectedImages = emptySet() },
+                            onImageClick = { index ->
+                                if (selectionMode) {
+                                    selectedImages = if (selectedImages.contains(index)) selectedImages - index else selectedImages + index
+                                } else {
+                                    selectedImageIndex = index
+                                    showPreview = true
+                                }
+                            },
+                            onDownloadLive = { index ->
+                                val liveCandidates = result.livePhotoCandidates(index)
+                                if (liveCandidates.isNotEmpty()) {
+                                    viewModel.downloadVideo(context, liveCandidates, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
+                                }
+                            },
+                            onDownloadImage = { index, imageUrl ->
+                                viewModel.downloadImage(context, imageUrl, "LinkGrab_${System.currentTimeMillis()}_$index.jpg")
+                            },
+                            bottomPadding = paddingValues.calculateBottomPadding(),
+                        )
+                        MediaType.VIDEO -> VideoResultBody(
+                            result = result,
+                            scrollState = videoScrollState,
+                            heavyContentReady = heavyContentReady,
+                            onPlayerCreated = { player = it },
+                            bottomPadding = paddingValues.calculateBottomPadding(),
+                            selectedQualityIndex = selectedQualityIndex,
+                            onSelectQuality = { selectedQualityIndex = it },
+                        )
+                        MediaType.UNKNOWN -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("无法识别的内容类型", color = iosSecondaryLabel(), fontSize = 15.sp)
+                        }
                     }
                 }
             }
@@ -310,21 +348,93 @@ fun ResultScreen(
                     if (selectionMode) { selectionMode = false; selectedImages = emptySet() }
                     else { player?.pause(); onBack() }
                 },
-                actions = {
-                    if (result?.type == MediaType.IMAGE && result.images.size > 1) {
-                        Text(
-                            if (selectionMode) "完成" else "选择",
-                            color = iosBlue(),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { selectionMode = !selectionMode; selectedImages = emptySet() }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                        )
-                    }
-                },
             )
+            // 右上角菜单：与历史记录同一套液态玻璃容器变换
+            if (result?.type == MediaType.IMAGE && result.images.size > 1) {
+                if (menuVisible) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                indication = null,
+                                interactionSource = remember { MutableInteractionSource() },
+                            ) { showMenu = false },
+                    )
+                }
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(top = (topInset + 5.dp - LiquidGlassDropdownShadowPadding).coerceAtLeast(0.dp))
+                        // 吸顶栏水平内边距 20dp，菜单自带 24dp，补 4dp 对齐右缘
+                        .offset(x = 4.dp),
+                    contentAlignment = Alignment.TopEnd,
+                ) {
+                    LiquidGlassDropdownMenu(
+                        show = showMenu,
+                        backdrop = headerBackdrop,
+                        fraction = menuFraction,
+                        onDismiss = { showMenu = false },
+                        triggerIcon = Icons.Default.MoreVert,
+                        triggerContentDescription = "更多",
+                        onExpand = { showMenu = true },
+                    ) {
+                        if (selectionMode) {
+                            LiquidGlassDropdownMenuItem(
+                                text = if (selectedImages.size == result.images.size) "取消全选" else "全选",
+                                onClick = {
+                                    showMenu = false
+                                    selectedImages = if (selectedImages.size == result.images.size) {
+                                        emptySet()
+                                    } else {
+                                        result.images.indices.toSet()
+                                    }
+                                },
+                                icon = {
+                                    Icon(
+                                        Icons.Default.SelectAll,
+                                        contentDescription = null,
+                                        tint = iosLabel(),
+                                        modifier = Modifier.size(IOS26IconSize.MenuItem),
+                                    )
+                                },
+                            )
+                            LiquidGlassDropdownMenuItem(
+                                text = "完成",
+                                onClick = {
+                                    showMenu = false
+                                    selectionMode = false
+                                    selectedImages = emptySet()
+                                },
+                                icon = {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = iosLabel(),
+                                        modifier = Modifier.size(IOS26IconSize.MenuItem),
+                                    )
+                                },
+                            )
+                        } else {
+                            LiquidGlassDropdownMenuItem(
+                                text = "选择",
+                                onClick = {
+                                    showMenu = false
+                                    selectionMode = true
+                                    selectedImages = emptySet()
+                                },
+                                icon = {
+                                    Icon(
+                                        Icons.Default.Checklist,
+                                        contentDescription = null,
+                                        tint = iosLabel(),
+                                        modifier = Modifier.size(IOS26IconSize.MenuItem),
+                                    )
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -352,8 +462,6 @@ private fun ImageResultBody(
     result: MediaResult,
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     heavyContentReady: Boolean,
-    backdropLayerActive: Boolean,
-    headerBackdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     selectionMode: Boolean,
     selectedImages: Set<Int>,
     onToggleSelection: () -> Unit,
@@ -379,8 +487,7 @@ private fun ImageResultBody(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             modifier = Modifier
-                .weight(1f)
-                .then(if (backdropLayerActive) Modifier.layerBackdrop(headerBackdrop) else Modifier),
+                .weight(1f),
         ) {
             itemsIndexed(result.images, key = { index, _ -> index }) { index, imageUrl ->
                 val isLive = result.isLivePhoto(index)
@@ -418,14 +525,27 @@ private fun ImageResultBody(
                                 SmallRoundButton(
                                     onClick = { onDownloadLive(index) },
                                     bg = iosBlue().copy(alpha = 0.9f),
-                                    content = { Text("▶", color = Color.White, fontSize = 13.sp) },
+                                    content = {
+                                        // 原来是 Text("▶") 文字当图标；改用"实况照片"语义的图标
+                                        Icon(
+                                            Icons.Default.MotionPhotosOn,
+                                            contentDescription = "下载实况照片",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(IOS26IconSize.Inline),
+                                        )
+                                    },
                                 )
                             }
                             SmallRoundButton(
                                 onClick = { onDownloadImage(index, imageUrl) },
                                 bg = iosGroupedBackground().copy(alpha = 0.85f),
                                 content = {
-                                    Icon(Icons.Default.Download, contentDescription = "下载", modifier = Modifier.size(18.dp), tint = iosLabel())
+                                    Icon(
+                                        Icons.Default.Download,
+                                        contentDescription = "下载",
+                                        tint = iosLabel(),
+                                        modifier = Modifier.size(IOS26IconSize.Inline),
+                                    )
                                 },
                             )
                         }
@@ -441,8 +561,6 @@ private fun VideoResultBody(
     result: MediaResult,
     scrollState: androidx.compose.foundation.ScrollState,
     heavyContentReady: Boolean,
-    backdropLayerActive: Boolean,
-    headerBackdrop: com.kyant.backdrop.backdrops.LayerBackdrop,
     onPlayerCreated: (ExoPlayer?) -> Unit,
     bottomPadding: androidx.compose.ui.unit.Dp,
     selectedQualityIndex: Int,
@@ -450,14 +568,12 @@ private fun VideoResultBody(
 ) {
     val context = LocalContext.current
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    var playing by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(top = topInset + IOS26HeaderHeight)
             .padding(horizontal = 20.dp)
-            .then(if (backdropLayerActive) Modifier.layerBackdrop(headerBackdrop) else Modifier)
             .verticalScroll(scrollState),
     ) {
         ResultMetaCard(result = result)
@@ -485,8 +601,7 @@ private fun VideoResultBody(
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
                     .clip(IOSCornerSmall)
-                    .background(Color.Black)
-                    .clickable { exoPlayer?.let { it.playWhenReady = !it.playWhenReady; playing = it.playWhenReady } },
+                    .background(Color.Black),
                 contentAlignment = Alignment.Center,
             ) {
                 if (exoPlayer != null) {
@@ -495,10 +610,15 @@ private fun VideoResultBody(
                             (android.view.LayoutInflater.from(ctx)
                                 .inflate(R.layout.player_view_texture, null) as PlayerView).apply {
                                 this.player = exoPlayer
+                                // 关掉 Media3 自带控制器：外层要接管触摸（点一下切换控件
+                                // 显隐），而且它的样式跟整套 iOS 26 语言不一致。
+                                this.useController = false
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
+                    // 自定义控制层：暂停/播放、快退快进 10 秒、可拖动进度条
+                    VideoControlsOverlay(player = exoPlayer, modifier = Modifier.matchParentSize())
                 } else {
                     result.coverUrl?.let { coverUrl ->
                         AsyncImage(
@@ -565,6 +685,271 @@ private fun VideoResultBody(
         }
 
         Spacer(modifier = Modifier.height(bottomPadding + 16.dp))
+    }
+}
+
+/**
+ * 给当前 Dialog 窗口开启系统级背景模糊（FLAG_BLUR_BEHIND，minSdk 31 全设备可用）。
+ * Dialog 是独立窗口，backdrop 库的录制层采样不到主窗口内容，跨窗口模糊只能走系统。
+ * 抽出来是为了让「需要模糊背景的弹窗」统一处理，不用各写一遍窗口配置。
+ */
+@Composable
+private fun EnableDialogBlurBehind() {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    DisposableEffect(view) {
+        val window = (view.parent as? DialogWindowProvider)?.window
+        if (window != null) {
+            val blurEnabled = window.windowManager.isCrossWindowBlurEnabled
+            window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+            window.attributes = window.attributes.apply {
+                blurBehindRadius = with(density) { 24.dp.toPx().roundToInt() }
+                // 系统关掉跨窗口模糊（省电模式）时加深压暗兜底
+                dimAmount = if (blurEnabled) 0f else 0.55f
+            }
+        }
+        onDispose { }
+    }
+}
+
+/** 毫秒 → m:ss */
+private fun formatMediaTime(ms: Long): String {
+    val totalSec = (ms / 1000L).coerceAtLeast(0L)
+    return "%d:%02d".format(totalSec / 60, totalSec % 60)
+}
+
+/**
+ * 视频播放控制层：暂停/播放、快退 10 秒、快进 10 秒、可拖动进度条（带时间）。
+ *
+ * 为什么自己做一套：原来指望 Media3 PlayerView 的自带控制器，但外层的 Box 挂了
+ * `.clickable` 用来「点一下播放/暂停」，把全部触摸都吃掉了 —— 控制器收不到点击
+ * 事件，永远不显示，于是看起来就是「没有任何控件」。现在自带控制器关掉，改画
+ * 这套与 iOS 26 一致的控件：点画面切换显隐，播放中 3 秒后自动隐藏，暂停时常驻。
+ */
+@Composable
+private fun VideoControlsOverlay(
+    player: ExoPlayer,
+    modifier: Modifier = Modifier,
+) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var positionMs by remember { mutableLongStateOf(0L) }
+    var durationMs by remember { mutableLongStateOf(0L) }
+    var scrubbing by remember { mutableStateOf(false) }
+    var controlsVisible by remember { mutableStateOf(true) }
+    val haptic = LocalHapticFeedback.current
+
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+                if (playing) controlsVisible = true
+            }
+
+            override fun onPlaybackStateChanged(state: Int) {
+                durationMs = player.duration.takeIf { it > 0 } ?: 0L
+                if (state == Player.STATE_ENDED) {
+                    isPlaying = false
+                    controlsVisible = true
+                }
+            }
+        }
+        player.addListener(listener)
+        isPlaying = player.playWhenReady && player.playbackState != Player.STATE_ENDED
+        durationMs = player.duration.takeIf { it > 0 } ?: 0L
+        positionMs = player.currentPosition.coerceAtLeast(0L)
+        onDispose { player.removeListener(listener) }
+    }
+
+    // 播放中轮询进度：200ms 一次足够顺滑，且不在组合期高频写状态
+    LaunchedEffect(isPlaying, scrubbing) {
+        while (isPlaying && !scrubbing) {
+            positionMs = player.currentPosition.coerceAtLeast(0L)
+            delay(200L)
+        }
+    }
+    // 播放后自动隐藏控件，暂停时保持常驻
+    LaunchedEffect(isPlaying, controlsVisible) {
+        if (isPlaying && controlsVisible) {
+            delay(3000L)
+            controlsVisible = false
+        }
+    }
+
+    fun seekToRatio(ratio: Float) {
+        if (durationMs <= 0L) return
+        val target = (ratio.coerceIn(0f, 1f) * durationMs).toLong()
+        player.seekTo(target)
+        positionMs = target
+    }
+
+    val progress = if (durationMs > 0L) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    // 预先算好再进手势 lambda：detectDragGestures 的 lambda 作用域里直接写
+    // `durationMs > 0L` 会让编译器报 compareTo 缺 operator（作用域解析问题），
+    // 提到外面就正常了。
+    val canSeek = durationMs > 0L
+    // 暂停时始终显示控件，否则点击画面会「什么都点不出来」
+    val showControls = controlsVisible || !isPlaying
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { controlsVisible = !controlsVisible },
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        if (showControls) {
+            // 底部渐变：只负责承托控件，不遮画面主体
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(104.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.62f)),
+                        ),
+                    ),
+            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            ) {
+                // 进度条 + 时间
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        formatMediaTime(positionMs),
+                        color = Color.White.copy(alpha = 0.86f),
+                        fontSize = 11.sp,
+                        modifier = Modifier.width(38.dp),
+                    )
+                    // 进度条：点击跳转 + 拖动擦洗
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(24.dp)
+                            .pointerInput(durationMs) {
+                                detectTapGestures { offset ->
+                                    if (durationMs > 0L) {
+                                        seekToRatio(offset.x / size.width)
+                                        scrubbing = false
+                                    }
+                                }
+                            }
+                            .pointerInput(durationMs) {
+                                detectDragGestures(
+                                    onDragStart = { offset ->
+                                        scrubbing = true
+                                        if (canSeek) seekToRatio(offset.x / size.width)
+                                    },
+                                    onDrag = { change, _ ->
+                                        if (canSeek) seekToRatio(change.position.x / size.width)
+                                    },
+                                    onDragEnd = { scrubbing = false },
+                                    onDragCancel = { scrubbing = false },
+                                )
+                            },
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White.copy(alpha = 0.26f)),
+                        )
+                        Box(
+                            Modifier
+                                .fillMaxWidth(progress)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(Color.White),
+                        )
+                        Box(
+                            Modifier
+                                .offset(x = (progress * 100f).coerceIn(0f, 100f).dp - 6.dp)
+                                .size(12.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                        )
+                    }
+                    Text(
+                        formatMediaTime(durationMs),
+                        color = Color.White.copy(alpha = 0.86f),
+                        fontSize = 11.sp,
+                        modifier = Modifier.width(38.dp),
+                        textAlign = TextAlign.End,
+                    )
+                }
+                // 控制按钮：快退 10s / 播放暂停 / 快进 10s
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PlayerControlButton(
+                        icon = Icons.Default.Replay10,
+                        contentDescription = "快退 10 秒",
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                            player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
+                            positionMs = player.currentPosition.coerceAtLeast(0L)
+                        },
+                    )
+                    PlayerControlButton(
+                        icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "暂停" else "播放",
+                        size = 34.dp,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                            player.playWhenReady = !player.playWhenReady
+                            isPlaying = player.playWhenReady
+                        },
+                    )
+                    PlayerControlButton(
+                        icon = Icons.Default.Forward10,
+                        contentDescription = "快进 10 秒",
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                            val d = player.duration.takeIf { it > 0 } ?: 0L
+                            player.seekTo((player.currentPosition + 10_000L).coerceAtMost(d))
+                            positionMs = player.currentPosition.coerceAtLeast(0L)
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 播放器上的圆形图标按钮（44dp 触控区，符合无障碍下限） */
+@Composable
+private fun PlayerControlButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 24.dp,
+) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(size),
+        )
     }
 }
 
@@ -737,6 +1122,11 @@ private fun SelectionIndicator(selected: Boolean, order: Int?, modifier: Modifie
     }
 }
 
+/**
+ * 图片网格上的小圆形操作按钮。
+ * 视觉圆仍是 34dp，但**触控目标扩到 44dp**（无障碍最小建议值）—— 原来整个
+ * IconButton 只有 34dp，在网格里手指很容易点空或点到相邻卡片。
+ */
 @Composable
 private fun SmallRoundButton(
     onClick: () -> Unit,
@@ -745,8 +1135,15 @@ private fun SmallRoundButton(
 ) {
     IconButton(
         onClick = onClick,
-        modifier = Modifier.size(34.dp).background(bg, CircleShape),
-    ) { content() }
+        modifier = Modifier.size(44.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .background(bg, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { content() }
+    }
 }
 
 @Composable
@@ -758,7 +1155,14 @@ private fun PlayOverlay(modifier: Modifier = Modifier) {
             .background(Color.Black.copy(alpha = 0.5f)),
         contentAlignment = Alignment.Center,
     ) {
-        Text("▶", color = Color.White, fontSize = 22.sp)
+        // 原来是 Text("▶")：文字当图标，字体渲染因设备而异，读屏还会念出"▶"。
+        // 这张覆盖层是装饰性的（卡片本身可点并有自己的描述），所以描述设为 null。
+        Icon(
+            Icons.Default.PlayArrow,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(IOS26IconSize.Display),
+        )
     }
 }
 
@@ -798,10 +1202,18 @@ private fun ImagePreviewDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
+        // 背景不再是一整块死黑。
+        // 参考 Nexio 的 BlurBottomSheet：弹窗遮罩用「系统级模糊 + 半透明压暗」，
+        // 而不是 opaque 纯色 —— 纯黑全屏就是那块「大黑片」。这里给窗口开
+        // FLAG_BLUR_BEHIND（minSdk 31 全设备可用），再压一层半透明的暗色，
+        // 于是背景是"被虚化且压暗的上一页"，而不是一块黑板。
+        EnableDialogBlurBehind()
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black),
+                // 遮罩透明度在**绘制期**读取（drawBehind），不在组合期用
+                // Modifier.background —— 后者会在打开动画期间引发重组（Nexio 的做法）
+                .drawBehind { drawRect(Color.Black.copy(alpha = 0.82f)) },
         ) {
             // 被录进 backdrop 的内容层：只有图片/视频本体。
             // 玻璃控件本身不放进录制层，避免「玻璃采样玻璃」。
@@ -866,13 +1278,12 @@ private fun ImagePreviewDialog(
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    LiquidGlassButton(
-                        backdrop = previewBackdrop,
+                    LiquidGlassBackButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(42.dp),
-                    ) {
-                        Text("‹", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Light)
-                    }
+                        backdrop = previewBackdrop,
+                        buttonSize = 42.dp,
+                        darkBackground = true,
+                    )
                     Column(
                         modifier = Modifier.weight(1f).padding(horizontal = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -916,14 +1327,22 @@ private fun ImagePreviewDialog(
                 // 底部浮动操作栏：一整块 Liquid Glass 胶囊（真背景模糊），
                 // 操作项在其上做按压「生长」+ 触摸点照亮 —— 对齐 Apple
                 // GlassEffectContainer 内多个 glass 按钮合并成一块玻璃的规范。
+                // shape / effects 两个 lambda 必须 remember 住：drawBackdrop 的
+                // ModifierNodeElement 按**引用**比较它们，每次组合新建 lambda 就会
+                // 判不等 → 节点 update → 重录采样层 + 重跑一次 GPU 模糊。
+                // 在预览页这种高频重组的场景（翻页、缩放）会明显掉帧（Nexio 的做法）。
+                val barShape: RoundedCornerShape = remember { RoundedCornerShape(26.dp) }
+                val barShapeBlock: () -> RoundedCornerShape = remember { { barShape } }
+                val barEffects: com.kyant.backdrop.BackdropEffectScope.() -> Unit =
+                    remember { { blur(10f.dp.toPx()) } }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + 18.dp)
                         .drawBackdrop(
                             backdrop = previewBackdrop,
-                            shape = { RoundedCornerShape(26.dp) },
-                            effects = { blur(10f.dp.toPx()) },
+                            shape = barShapeBlock,
+                            effects = barEffects,
                             onDrawSurface = { drawRect(Color.White.copy(alpha = 0.10f)) },
                         )
                         .padding(horizontal = 6.dp, vertical = 5.dp),

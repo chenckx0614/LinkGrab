@@ -67,8 +67,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _predictiveBack = MutableStateFlow(0)
     val predictiveBack: StateFlow<Int> = _predictiveBack.asStateFlow()
 
-    private val _bottomBarStyle = MutableStateFlow(4)
+    private val _bottomBarStyle = MutableStateFlow(0)
     val bottomBarStyle: StateFlow<Int> = _bottomBarStyle.asStateFlow()
+
+    private val _autoCheckUpdate = MutableStateFlow(true)
+    val autoCheckUpdate: StateFlow<Boolean> = _autoCheckUpdate.asStateFlow()
+
+    private val _updateReminder = MutableStateFlow(true)
+    val updateReminder: StateFlow<Boolean> = _updateReminder.asStateFlow()
+
+    // 最近一次检查是否为手动触发：手动检查发现新版本始终弹窗；
+    // 自动检查弹不弹由「更新提醒」开关决定。
+    private val _manualUpdateCheck = MutableStateFlow(false)
+    val manualUpdateCheck: StateFlow<Boolean> = _manualUpdateCheck.asStateFlow()
 
     private val _updateResult = MutableStateFlow<UpdateResult?>(null)
     val updateResult: StateFlow<UpdateResult?> = _updateResult.asStateFlow()
@@ -113,15 +124,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.bottomBarStyle.collect { _bottomBarStyle.value = it }
         }
         viewModelScope.launch {
+            settingsRepository.autoCheckUpdate.collect { _autoCheckUpdate.value = it }
+        }
+        viewModelScope.launch {
+            settingsRepository.updateReminder.collect { _updateReminder.value = it }
+        }
+        viewModelScope.launch {
             settingsRepository.guideShown.collect {
                 _guideShown.value = it
                 _dataLoaded.value = true
             }
         }
-        // 启动时检查更新
+        // 启动时检查更新（受「自动检查更新」开关控制；等开关加载完再决定）
         viewModelScope.launch {
             kotlinx.coroutines.delay(2000) // 延迟2秒避免影响启动
+            if (!_autoCheckUpdate.value) return@launch
             try {
+                _manualUpdateCheck.value = false // 自动检查：弹窗与否看「更新提醒」
                 _updateResult.value = updateChecker.checkForUpdate()
             } catch (e: Exception) {
                 // 静默失败，不崩溃
@@ -141,6 +160,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setBottomBarStyle(style: Int) {
         viewModelScope.launch { settingsRepository.setBottomBarStyle(style) }
+    }
+
+    fun setAutoCheckUpdate(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoCheckUpdate(enabled) }
+    }
+
+    fun setUpdateReminder(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setUpdateReminder(enabled) }
     }
 
     fun toggleLiveUpdates(enabled: Boolean) {
@@ -239,6 +266,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun checkForUpdate() {
         viewModelScope.launch {
             _isCheckingUpdate.value = true
+            _manualUpdateCheck.value = true // 手动检查：发现新版本始终弹窗
             _updateResult.value = updateChecker.checkForUpdate()
             _isCheckingUpdate.value = false
         }

@@ -56,11 +56,10 @@ class XhsParser {
         .followSslRedirects(false)
         .build()
 
-    private val desktopUa =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-
-    private val mobileUa =
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+    // UA 与 Cronet 内置 Chromium 版本保持同源：XHS 会比对 UA 与 sec-ch-ua，
+    // 两者版本号对不上就按伪造客户端处理（见 CronetFetcher.browserHeaders 注释）。
+    private val desktopUa get() = CronetFetcher.DESKTOP_CHROME_UA
+    private val mobileUa get() = CronetFetcher.MOBILE_CHROME_UA
 
     private val undefinedValue = Regex("""(?<=[:\[,])\s*undefined(?=\s*[,}\]])""")
     private val statePattern = Regex(
@@ -72,6 +71,9 @@ class XhsParser {
 
     /** 笔记页地址：/explore/{24位id} 或 /discovery/item/{24位id} */
     private val notePathPattern = Regex("""xiaohongshu\.com/(?:explore|discovery/item)/([0-9a-fA-F]{24})""")
+
+    /** 该地址是否为笔记直链（用于判断短链是否被降级跳到了信息流页）。 */
+    fun isNoteUrl(url: String): Boolean = notePathPattern.containsMatchIn(url)
 
     /**
      * 同一篇笔记在小红书有两套公开页面入口。部分网络/UA 对 explore
@@ -133,17 +135,19 @@ class XhsParser {
     private fun parseFromHtml(html: String): MediaResult? {
         if (html.isBlank()) return null
 
+        // 出口统一升级为 https：SSR 下发的图片地址是明文 http，
+        // Android 默认禁止明文流量，不升级会「解析成功但看不到图」。
         // Strategy A: __INITIAL_STATE__ JSON
         parseInitialState(html)?.let { root ->
             val result = parseInitialStateRoot(root)
-            if (result != null && result.hasContent) return result
+            if (result != null && result.hasContent) return result.withSecureUrls()
         }
 
         // Strategy B: JSON-LD structured data
-        parseJsonLd(html)?.let { return it }
+        parseJsonLd(html)?.let { return it.withSecureUrls() }
 
         // Strategy C: OpenGraph + meta tags
-        parseMetaTags(html)?.let { return it }
+        parseMetaTags(html)?.let { return it.withSecureUrls() }
 
         return null
     }
@@ -340,7 +344,7 @@ class XhsParser {
             images = all,
             coverUrl = all.first(),
             source = "xiaohongshu",
-        )
+        ).withSecureUrls()
     }
 
     // endregion
@@ -367,10 +371,9 @@ class XhsParser {
 
     private fun bootstrapSession(): AnonSession {
         try {
-            val request = Request.Builder().url("https://www.xiaohongshu.com/explore")
-                .header("User-Agent", desktopUa)
-                .header("Accept", "text/html,application/xhtml+xml")
-                .build()
+            val builder = Request.Builder().url("https://www.xiaohongshu.com/explore")
+            CronetFetcher.browserHeaders(desktopUa).forEach { (k, v) -> builder.header(k, v) }
+            val request = builder.build()
             noRedirectClient.newCall(request).execute().use { resp ->
                 var a1: String? = null
                 var webId: String? = null
@@ -465,9 +468,9 @@ class XhsParser {
 
     private fun tryHop(url: String, userAgent: String): String? {
         return try {
-            val request = Request.Builder().url(url)
-                .header("User-Agent", userAgent)
-                .header("Accept", "text/html,application/xhtml+xml")
+            val builder = Request.Builder().url(url)
+            CronetFetcher.browserHeaders(userAgent).forEach { (k, v) -> builder.header(k, v) }
+            val request = builder
                 .header("Cookie", cookieHeader())
                 .build()
             noRedirectClient.newCall(request).execute().use { resp ->
@@ -486,12 +489,11 @@ class XhsParser {
     }
 
     private fun fetch(url: String, userAgent: String): Pair<String, String> {
-        val request = Request.Builder().url(url)
-            .header("User-Agent", userAgent)
-            // 注意不要带 Referer：站内 Referer 会被小红书当成 SPA 导航，
-            // 直接 302 到登录页（参考 xiaohongshu-cli 的抓取说明）。
-            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-            .header("Accept-Language", "zh-CN,zh;q=0.9")
+        // 注意不要带 Referer：站内 Referer 会被小红书当成 SPA 导航，
+        // 直接 302 到登录页（参考 xiaohongshu-cli 的抓取说明）。
+        val builder = Request.Builder().url(url)
+        CronetFetcher.browserHeaders(userAgent).forEach { (k, v) -> builder.header(k, v) }
+        val request = builder
             .header("Cookie", cookieHeader())
             .build()
         client.newCall(request).execute().use { resp ->
@@ -740,17 +742,51 @@ class XhsParser {
         return null
     }
 
+    /**
+     * 图片地址：一律换成**无签名原图**。
+     *
+     * SSR 下发的 `urlDefault` 长这样：
+     * ```
+     * http://sns-webpic-qc.xhscdn.com/202610122014/828a9cdc…/1040g008…!nd_dft_wlteh_webp_3
+     *                                 ↑ 签名时间戳      ↑ 32位hash        ↑ 压缩处理参数
+     * ```
+     * 它有两个坑：
+     * 1. **带时效**：实测同一张图，20:14 签发的地址 20:21 还能取，19:14 签发的
+     *    已经 403。解析完不立刻下载就存不下——这正是「解析成功但保存失败」的来源。
+     * 2. **是压缩图**：实测同一张笔记图，压缩版 90KB，原图 1.8MB。
+     *
+     * 换成同区域的 `sns-img` 域名、去掉签名段与处理后缀，得到的就是无签名、
+     * 长期有效、画质明显更好的原图：
+     * ```
+     * https://sns-img-qc.xhscdn.com/1040g008…
+     * https://sns-img-qc.xhscdn.com/notes_pre_post/1040g3k8…
+     * ```
+     * 注意 `notes_pre_post/` 是 fileId 的一部分，必须保留（见 fileId 字段）。
+     * 域名里没有 `sns-webpic`（例如 ci.xiaohongshu.com）时无法换算，退回原地址。
+     */
     private fun pickImageUrl(img: JsonObject): String? {
-        val urlDefault = img.string("urlDefault")
+        val raw = img.string("urlDefault")
             ?: img.string("urlPre")
             ?: img.string("url")
             ?: img.string("originUrl")
-        if (urlDefault.isNullOrEmpty()) return null
-        if ("notes_pre_post" !in urlDefault) return urlDefault
-        val imageId = urlDefault.substringAfterLast('/').substringBefore('!')
-        if (imageId.isEmpty()) return urlDefault
-        val spectrum = if ("spectrum" in urlDefault) "spectrum/" else ""
-        return "https://ci.xiaohongshu.com/notes_pre_post/$spectrum$imageId?imageView2/format/jpg"
+        if (raw.isNullOrBlank()) return null
+        return originalImageUrl(raw, img.string("fileId"))
+    }
+
+    /** 签名段：/<10~14位时间戳>/<32位hex>/，去掉后就剩 fileId。 */
+    private val signedPathPattern = Regex("""(?:https?://[^/]+)?/\d{10,14}/[0-9a-fA-F]{32}/""")
+
+    private fun originalImageUrl(raw: String, fileId: String?): String {
+        val host = raw.substringAfter("://", "").substringBefore('/')
+        val id = fileId?.takeIf { it.isNotBlank() }
+            ?: signedPathPattern.find(raw)?.let { raw.substring(it.range.last + 1).substringBefore('!') }
+        val stable = if (host.contains("sns-webpic") && !id.isNullOrBlank()) {
+            "https://${host.replace("sns-webpic", "sns-img")}/$id"
+        } else {
+            null
+        }
+        // 换算不出来就用原地址，但必须升级为 https（Android 默认禁止明文 HTTP）
+        return MediaResult.secureUrl(stable ?: raw)
     }
 
     /**

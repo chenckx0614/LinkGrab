@@ -53,6 +53,16 @@ class LiveUpdatesService : Service() {
         getSystemService(NOTIFICATION_SERVICE) as NotificationManager
     }
 
+    // finish 的延迟停止句柄：finish 后 2 秒内如果新一轮任务 START/UPDATE 到来，
+    // 必须先撤掉旧定时器，否则它会把刚显示的新通知砍掉（通知「闪没」）。
+    private val mainHandler by lazy { android.os.Handler(mainLooper) }
+    private val finishRunnable = Runnable {
+        notificationManager.cancel(NOTIFICATION_ID) // 兜底：确保通知一定被移除
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        Log.d(TAG, "Service stopped after finish")
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -63,6 +73,9 @@ class LiveUpdatesService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand action=${intent?.action}")
+        // 任何新指令都先撤销「延迟停止」：finish 后马上开始新一轮时，
+        // 旧定时器若不撤，会把新通知移除，服务也跟着死掉。
+        mainHandler.removeCallbacks(finishRunnable)
         when (intent?.action) {
             ACTION_START -> {
                 val title = intent.getStringExtra(EXTRA_TITLE) ?: "LinkGrab"
@@ -87,6 +100,8 @@ class LiveUpdatesService : Service() {
             }
             ACTION_STOP -> {
                 Log.d(TAG, "Stopping service")
+                mainHandler.removeCallbacks(finishRunnable)
+                notificationManager.cancel(NOTIFICATION_ID) // 兜底：确保通知一定被移除
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -149,9 +164,21 @@ class LiveUpdatesService : Service() {
         val notification = buildNotification(title, content, progress, maxProgress, indeterminate)
         logParams("UPDATE", title, content, progress, maxProgress, indeterminate)
 
-        // Reuse same notificationId
-        notificationManager.notify(NOTIFICATION_ID, notification)
-        Log.d(TAG, "notify(id=$NOTIFICATION_ID) — updated, progress=$progress/$maxProgress")
+        // 必须走 startForeground 而不是 notificationManager.notify()：
+        // notify() 发出的 ongoing 通知不挂服务生命周期——若服务在两次更新之间
+        // 被 stopForeground 过（finish 后又来一条迟到 UPDATE），通知会变成
+        // 「ongoing 但无人负责移除」的孤儿，永远划不掉、也不消失。
+        // startForeground 是幂等的，重复调用只是刷新前台通知。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+        Log.d(TAG, "startForeground(id=$NOTIFICATION_ID) — updated, progress=$progress/$maxProgress")
     }
 
     // ==================== Finish ====================
@@ -160,13 +187,20 @@ class LiveUpdatesService : Service() {
         val notification = buildNotification(title, content, 100, 100, false)
         logParams("FINISH", title, content, 100, 100, false)
 
-        notificationManager.notify(NOTIFICATION_ID, notification)
+        // 同 UPDATE：走 startForeground 保持生命周期绑定
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
-        android.os.Handler(mainLooper).postDelayed({
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            Log.d(TAG, "Service stopped after finish")
-        }, 2000)
+        // 2 秒后收摊；期间若有新指令（START/UPDATE/FINISH/STOP），
+        // onStartCommand 会先 removeCallbacks 撤掉本定时器。
+        mainHandler.postDelayed(finishRunnable, 2000)
     }
 
     // ==================== Build Notification ====================

@@ -48,6 +48,29 @@ data class MediaResult(
     fun livePhotoUrl(index: Int): String? = livePhotos[index]?.firstOrNull()
 
     val hasLivePhotos: Boolean get() = livePhotos.isNotEmpty()
+
+    /**
+     * 把所有媒体地址统一为 https。
+     *
+     * 小红书 SSR 下发的图片地址是 `http://sns-webpic-qc.xhscdn.com/...`（明文），
+     * 而 App `targetSdk ≥ 28` 时 Android 默认禁止明文 HTTP，本项目也没有开
+     * `usesCleartextTraffic` —— 明文地址在 Coil 加载和下载时会直接失败，
+     * 表现为「解析成功但看不到图 / 保存失败」。CDN 对 https 的支持是完整的
+     * （实测 http 与 https 返回完全相同的字节），所以统一升级即可。
+     */
+    fun withSecureUrls(): MediaResult = copy(
+        images = images.map(::secureUrl),
+        videoUrl = videoUrl?.let(::secureUrl),
+        coverUrl = coverUrl?.let(::secureUrl),
+        livePhotos = livePhotos.mapValues { (_, urls) -> urls.map(::secureUrl) },
+        videoQualities = videoQualities.map { it.copy(url = secureUrl(it.url)) },
+    )
+
+    companion object {
+        /** 仅升级协议，其余部分（含 CDN 签名与处理参数）原样保留。 */
+        fun secureUrl(url: String): String =
+            if (url.startsWith("http://", ignoreCase = true)) "https://${url.substring(7)}" else url
+    }
 }
 
 enum class MediaType {

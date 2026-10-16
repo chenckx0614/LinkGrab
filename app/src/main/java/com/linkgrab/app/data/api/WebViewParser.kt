@@ -394,7 +394,12 @@ class WebViewParser(private val context: Context) {
                 .filter { it.contains("xhscdn") || it.contains("sns-webpic") || it.contains("ci.xiaohongshu") }
 
             if (images.isNotEmpty()) {
-                MediaResult(type = MediaType.IMAGE, title = title, images = images.distinct().take(20), source = "xiaohongshu")
+                MediaResult(
+                    type = MediaType.IMAGE,
+                    title = title,
+                    images = images.distinct().take(20),
+                    source = "xiaohongshu",
+                ).withSecureUrls()
             } else null
         } catch (e: Exception) { null }
     }
@@ -495,7 +500,7 @@ class WebViewParser(private val context: Context) {
                         title = title,
                         images = images.distinct().take(20),
                         source = "xiaohongshu"
-                    )
+                    ).withSecureUrls()
                 )
             }
 
@@ -613,8 +618,13 @@ class WebViewParser(private val context: Context) {
             val urls = """"([^"]+)"""".toRegex().findAll(urlsStr).map { it.groupValues[1] }.toList()
 
             when {
-                type == "v" && urls.isNotEmpty() -> Result.success(MediaResult(type = MediaType.VIDEO, title = "视频", videoUrl = urls.first(), source = "webview"))
-                type == "i" && urls.isNotEmpty() -> Result.success(MediaResult(type = MediaType.IMAGE, title = "图片", images = urls, source = "webview"))
+                type == "v" && urls.isNotEmpty() -> Result.success(
+                    MediaResult(type = MediaType.VIDEO, title = "视频", videoUrl = urls.first(), source = "webview").withSecureUrls()
+                )
+
+                type == "i" && urls.isNotEmpty() -> Result.success(
+                    MediaResult(type = MediaType.IMAGE, title = "图片", images = urls, source = "webview").withSecureUrls()
+                )
                 else -> Result.failure(Exception("未找到媒体内容"))
             }
         } catch (e: Exception) {

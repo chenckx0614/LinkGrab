@@ -19,6 +19,8 @@ class SettingsRepository(private val context: Context) {
         private val LIVE_UPDATES_KEY = intPreferencesKey("live_updates")
         private val GUIDE_SHOWN_KEY = intPreferencesKey("guide_shown")
         private val BOTTOM_BAR_STYLE_KEY = intPreferencesKey("bottom_bar_style")
+        private val AUTO_CHECK_UPDATE_KEY = intPreferencesKey("auto_check_update")
+        private val UPDATE_REMINDER_KEY = intPreferencesKey("update_reminder")
     }
 
     val colorMode: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -38,8 +40,16 @@ class SettingsRepository(private val context: Context) {
     }
 
     val bottomBarStyle: Flow<Int> = context.dataStore.data.map { preferences ->
-        // 默认 Nexio 液态玻璃（4）；0-3 为历史风格（iOS27/HyperOS4/HarmonyOS7/Material3）
-        preferences[BOTTOM_BAR_STYLE_KEY] ?: 4
+        // 默认 Nexio 液态玻璃（0）；1-3 为 HyperOS4 / HarmonyOS7 / Material3
+        preferences[BOTTOM_BAR_STYLE_KEY] ?: 0
+    }
+
+    val autoCheckUpdate: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[AUTO_CHECK_UPDATE_KEY] != 0 // 默认开
+    }
+
+    val updateReminder: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[UPDATE_REMINDER_KEY] != 0 // 默认开
     }
 
     suspend fun setColorMode(mode: Int) {
@@ -69,6 +79,18 @@ class SettingsRepository(private val context: Context) {
     suspend fun setBottomBarStyle(style: Int) {
         context.dataStore.edit { preferences ->
             preferences[BOTTOM_BAR_STYLE_KEY] = style
+        }
+    }
+
+    suspend fun setAutoCheckUpdate(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[AUTO_CHECK_UPDATE_KEY] = if (enabled) 1 else 0
+        }
+    }
+
+    suspend fun setUpdateReminder(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[UPDATE_REMINDER_KEY] = if (enabled) 1 else 0
         }
     }
 }

@@ -54,7 +54,8 @@ import kotlin.math.roundToInt
  * Material Design 3 Navigation Bar（M3 Expressive）。
  *
  * 按 Google 官方规范还原（m3.material.io/components/navigation-bar）：
- * 1. **容器**：全宽、80dp 高、不透明 —— 颜色取 `surface-container`
+ * 1. **容器**：全宽、68dp 高（规范 80dp，实测在本机其他 56dp 悬浮风格旁
+ *    显得笨高，收紧为 68dp）、不透明 —— 颜色取 `surface-container`
  *    （浅色 #F3EDF7 / 深色 #211F26），无边框无投影（M3 用色调面代替阴影）。
  *    与 iOS/鸿蒙的悬浮胶囊完全不同的形态：贴边、通栏、实底。
  * 2. **激活指示器（active indicator）**：64×32dp 全圆角药丸，颜色
@@ -87,7 +88,7 @@ fun Md3BottomTabs(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(80.dp)
+            .height(68.dp)
             .background(containerColor),
         contentAlignment = Alignment.Center,
     ) {
@@ -130,7 +131,7 @@ fun Md3BottomTabs(
                         y = 0,
                     )
                 }
-                .padding(top = 12.dp) // 指示器垂直位置：顶部 12dp 起，图标区垂直居中
+                .padding(top = 8.dp) // 指示器垂直位置：顶部 8dp 起，图标区垂直居中
                 .width(64.dp)
                 .height(32.dp)
                 .graphicsLayer {
@@ -180,8 +181,8 @@ fun Md3TabItem(
             ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // 图标区：32dp 高，与容器内的药丸指示器对齐（顶部 12dp 偏移相同）
-        Spacer(Modifier.height(12.dp))
+        // 图标区：32dp 高，与容器内的药丸指示器对齐（顶部 8dp 偏移相同）
+        Spacer(Modifier.height(8.dp))
         Box(
             modifier = Modifier.size(32.dp),
             contentAlignment = Alignment.Center,
