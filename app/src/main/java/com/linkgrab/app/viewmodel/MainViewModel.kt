@@ -180,10 +180,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.autoOrganize.collect { _autoOrganize.value = it }
         }
         viewModelScope.launch {
-            settingsRepository.guideVersion.collect {
-                // 版本化引导：小于 3.0 正式版门槛（302）就要展示新欢迎页——
-                // 老用户升级也看一次；3.0.0/3.0.1 测试包写过的 300 同样小于 302
-                _guideShown.value = it < SettingsRepository.GUIDE_VERSION_3_0
+            settingsRepository.guideNeeded.collect {
+                // 只在第一次安装（本地无任何记录）时展示欢迎页
+                _guideShown.value = !it
                 _dataLoaded.value = true
             }
         }

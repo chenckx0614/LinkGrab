@@ -409,6 +409,7 @@ private fun MainTabs(
             onNavigateToUpdateSettings = onNavigateToUpdateSettings,
             onNavigateToDownloads = onNavigateToDownloads,
             onNavigateToAbout = onNavigateToAbout,
+            onNavigateToBottomBarStyle = onNavigateToBottomBarStyle,
         )
         else -> ToolboxScreen(
             onNavigateToVideoToAudio = onNavigateToVideoToAudio,

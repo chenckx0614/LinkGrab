@@ -15,9 +15,6 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class SettingsRepository(private val context: Context) {
 
     companion object {
-        /** 3.0 正式版的引导门槛：与本版 versionCode 一致（302）。 */
-        const val GUIDE_VERSION_3_0 = 302
-
         private val COLOR_MODE_KEY = intPreferencesKey("color_mode")
         private val PREDICTIVE_BACK_KEY = intPreferencesKey("predictive_back")
         private val LIVE_UPDATES_KEY = intPreferencesKey("live_updates")
@@ -43,14 +40,11 @@ class SettingsRepository(private val context: Context) {
     }
 
     /**
-     * 引导页展示版本：key 沿用 guide_shown，但语义改为「已看过的最新大版本号」。
-     * 旧版本写入 1；3.0 正式版起写入 [GUIDE_VERSION_3_0]（versionCode 302）。
-     * 小于门槛就要再展示一次——老用户升级 3.0 会看到新欢迎页，之后不再出现。
-     * 门槛必须等于正式发布的 versionCode：3.0.0/3.0.1 测试包（301）已写过 300，
-     * 若门槛停在 300，正式版会被误判为「已看过」。
+     * 引导页（欢迎页）只在**第一次安装**时展示：本地没有任何记录（key 不存在）
+     * 视为全新安装；看过一次就写入 1，之后升级、重装数据保留都不再出现。
      */
-    val guideVersion: Flow<Int> = context.dataStore.data.map { preferences ->
-        preferences[GUIDE_SHOWN_KEY] ?: 0
+    val guideNeeded: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[GUIDE_SHOWN_KEY] == null
     }
 
     val bottomBarStyle: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -101,7 +95,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setGuideShown() {
         context.dataStore.edit { preferences ->
-            preferences[GUIDE_SHOWN_KEY] = GUIDE_VERSION_3_0 // 看完 3.0 欢迎页
+            preferences[GUIDE_SHOWN_KEY] = 1 // 看过欢迎页
         }
     }
 
