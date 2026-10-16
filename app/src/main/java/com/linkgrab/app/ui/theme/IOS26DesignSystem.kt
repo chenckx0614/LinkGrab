@@ -818,8 +818,8 @@ val IOS26HeaderScrollThreshold = 56.dp
  * 沉浸效果对齐 Nexio 课程表的 ProgressiveBlurTopBar（性能档）：
  * 1. 糊层不再是「统一模糊 + 硬底边 + 独立渐隐条」，而是整块 blur(12dp) 后用
  *    DstIn 垂直渐变把糊层底边**溶解**进页面，过渡连续无硬边；
- * 2. 蒙版底色很淡（20% × progress），滚动内容清晰可见；
- * 3. 叠加一层随滚动淡入的多档 surface 渐变遮罩，顶部更柔和。
+ * 2. 表面着色 55% × progress（与底栏毛玻璃同档），滚动内容隐约透出；
+ * 3. 叠加一层随滚动淡入的轻量 surface 渐变遮罩，只软化上缘。
  * 行为仍匹配 UIKit：顶部时全透明，滚动后出现 compact 标题。
  */
 @Composable
@@ -883,13 +883,15 @@ fun IOS26BlurHeader(
                     effects = {
                         val p = progress
                         if (p > 0.01f) {
-                            blur(12f.dp.toPx())
+                            // 与结果页底栏毛玻璃同款：blur 18dp，视觉统一
+                            blur(18f.dp.toPx())
                         }
                     },
                     onDrawSurface = {
                         val p = progress
                         if (p > 0.01f) {
-                            drawRect(bg.copy(alpha = 0.2f * p))
+                            // 着色提到 0.55：模糊内容透得出来，又不糊住标题
+                            drawRect(bg.copy(alpha = 0.55f * p))
                         }
                     },
                 )
@@ -902,13 +904,15 @@ fun IOS26BlurHeader(
                 .align(Alignment.TopCenter)
                 .graphicsLayer { alpha = progress }
                 .drawBehind {
+                    // 之前最高 0.85 的实色遮罩把模糊全盖死了（看起来像没糊）；
+                    // 降到轻罩一层，只负责软化上缘，让玻璃透出来
                     drawRect(
                         Brush.verticalGradient(
-                            0f to bg.copy(alpha = 0.85f),
-                            0.45f to bg.copy(alpha = 0.55f),
-                            0.7f to bg.copy(alpha = 0.32f),
-                            0.85f to bg.copy(alpha = 0.14f),
-                            0.93f to bg.copy(alpha = 0.05f),
+                            0f to bg.copy(alpha = 0.32f),
+                            0.45f to bg.copy(alpha = 0.20f),
+                            0.7f to bg.copy(alpha = 0.10f),
+                            0.85f to bg.copy(alpha = 0.04f),
+                            0.93f to bg.copy(alpha = 0.01f),
                             1f to Color.Transparent,
                         )
                     )
