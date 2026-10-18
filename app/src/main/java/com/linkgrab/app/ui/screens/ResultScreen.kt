@@ -169,8 +169,17 @@ fun ResultScreen(
     // 展开态 or 正在收起的动画中：两者都要保持 backdrop 录制层挂载
     val menuVisible = showMenu || menuFraction.value > 0.01f
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
-    // 保存清晰度选择（视频）：默认最高档，仅影响下载的文件，不影响预览播放
-    var selectedQualityIndex by remember(result?.videoUrl) { mutableIntStateOf(0) }
+    // 保存清晰度选择（视频）：默认记住上次选的档位（按 label 匹配，比下标
+    // 可靠——不同视频的档位数量不一样），没记住过就用最高档。
+    // 仅影响下载的文件，不影响预览播放。
+    val preferredQuality by viewModel.preferredQuality.collectAsState()
+    var selectedQualityIndex by remember(result?.videoUrl, preferredQuality) {
+        mutableIntStateOf(
+            result?.videoQualities
+                ?.indexOfFirst { it.label == preferredQuality }
+                ?.takeIf { it >= 0 } ?: 0
+        )
+    }
 
     // 系统返回：先处理弹窗/多选，否则暂停播放器再退出
     BackHandler {
@@ -238,6 +247,8 @@ fun ResultScreen(
                     selectionMode = selectionMode,
                     selectedImages = selectedImages,
                     downloadState = downloadState,
+                    // 这篇之前存过：主按钮变成「再存一份」，避免重复保存没提示
+                    alreadyDownloaded = uiState.alreadyDownloaded,
                     onCopy = { text ->
                         copyToClipboard(context, text)
                         Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
@@ -326,7 +337,12 @@ fun ResultScreen(
                             onPlayerCreated = { player = it },
                             bottomPadding = paddingValues.calculateBottomPadding(),
                             selectedQualityIndex = selectedQualityIndex,
-                            onSelectQuality = { selectedQualityIndex = it },
+                            onSelectQuality = { index ->
+                                selectedQualityIndex = index
+                                // 记住这次选的档位，下次解析视频默认用它
+                                result.videoQualities.getOrNull(index)?.label
+                                    ?.let { viewModel.setPreferredQuality(it) }
+                            },
                         )
                         MediaType.UNKNOWN -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("无法识别的内容类型", color = iosSecondaryLabel(), fontSize = 15.sp)
@@ -1012,6 +1028,7 @@ private fun ResultBottomBar(
     onDownloadAll: (List<Int>) -> Unit,
     backdrop: Backdrop? = null,
     selectedQualityLabel: String? = null,
+    alreadyDownloaded: Boolean = false,
 ) {
     val buttonText: String
     val buttonEnabled: Boolean
@@ -1027,6 +1044,7 @@ private fun ResultBottomBar(
                     "下载中 $progress%"
                 }
                 selectionMode && selectedImages.isNotEmpty() -> "下载选中(${selectedImages.size})"
+                alreadyDownloaded -> "再存一份(${result.images.size})"
                 else -> "下载全部(${result.images.size})"
             }
             buttonEnabled = downloadState !is DownloadState.Downloading
@@ -1037,7 +1055,9 @@ private fun ResultBottomBar(
             buttonText = if (downloadState is DownloadState.Downloading) {
                 "下载中 ${(downloadState as DownloadState.Downloading).progress}%"
             } else if (selectedQualityLabel != null) {
-                "下载视频 · $selectedQualityLabel"
+                if (alreadyDownloaded) "再存一份 · $selectedQualityLabel" else "下载视频 · $selectedQualityLabel"
+            } else if (alreadyDownloaded) {
+                "再存一份"
             } else "下载视频"
             buttonEnabled = downloadState !is DownloadState.Downloading && result.videoUrl != null
             onPrimaryClick = { onDownloadAll(emptyList()) }

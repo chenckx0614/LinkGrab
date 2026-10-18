@@ -26,6 +26,8 @@ class SettingsRepository(private val context: Context) {
         private val DOWNLOAD_CONCURRENCY_KEY = intPreferencesKey("download_concurrency")
         private val AUTO_ORGANIZE_KEY = intPreferencesKey("auto_organize")
         private val TOOLBOX_BROWSER_KEY = intPreferencesKey("toolbox_open_in_browser")
+        private val CLIPBOARD_DETECT_KEY = intPreferencesKey("clipboard_auto_detect")
+        private val QUALITY_LABEL_KEY = stringPreferencesKey("preferred_quality_label")
     }
 
     val colorMode: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -144,6 +146,28 @@ class SettingsRepository(private val context: Context) {
     suspend fun setToolboxOpenInBrowser(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[TOOLBOX_BROWSER_KEY] = if (enabled) 1 else 0
+        }
+    }
+
+    /** 回前台时是否自动识别剪贴板里的分享链接（默认开）。 */
+    val clipboardDetect: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[CLIPBOARD_DETECT_KEY] != 0 // 默认开
+    }
+
+    suspend fun setClipboardDetect(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[CLIPBOARD_DETECT_KEY] = if (enabled) 1 else 0
+        }
+    }
+
+    /** 上次选的保存清晰度（按 label 存，如 "1080P"；空串表示没选过 → 用最高档）。 */
+    val preferredQuality: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[QUALITY_LABEL_KEY] ?: ""
+    }
+
+    suspend fun setPreferredQuality(label: String) {
+        context.dataStore.edit { preferences ->
+            preferences[QUALITY_LABEL_KEY] = label
         }
     }
 }

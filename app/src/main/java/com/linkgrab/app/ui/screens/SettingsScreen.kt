@@ -210,6 +210,21 @@ fun SettingsScreen(
                         )
                     }
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
+                    // 剪贴板自动识别：回前台时把复制的分享链接变成一张「立即解析」卡片
+                    val clipboardDetect by viewModel.clipboardDetect.collectAsState()
+                    IOS26ListRow(
+                        "剪贴板自动识别",
+                        if (clipboardDetect) "回到应用时自动识别复制的分享链接" else "只在你点「从剪贴板粘贴」时读取",
+                    ) {
+                        IOS26Switch(
+                            checked = clipboardDetect,
+                            onCheckedChange = { enabled ->
+                                switchHaptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                viewModel.setClipboardDetect(enabled)
+                            },
+                        )
+                    }
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
                     // 检查更新挪进「更新设置」二级页，这里只留一行入口带版本号
                     IOS26ListRow(
                         "更新设置",

@@ -18,7 +18,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="粘贴链接快速解析"
+        android:text="剪贴板链接一键解析"
         android:textSize="12sp"
         android:textColor="#B0FFFFFF"
         android:layout_marginTop="2dp" />
@@ -40,7 +40,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="打开应用粘贴链接"
+            android:text="点一下：解析剪贴板"
             android:textSize="13sp"
             android:textColor="#CCFFFFFF" />
 

@@ -8,6 +8,7 @@
         android:shortcutLongLabel="@string/shortcut_parse_long">
         <intent
             android:action="android.intent.action.VIEW"
+            android:data="linkgrab://parse"
             android:targetPackage="com.linkgrab.app"
             android:targetClass="com.linkgrab.app.MainActivity" />
     </shortcut>
@@ -19,6 +20,7 @@
         android:shortcutLongLabel="@string/shortcut_history_long">
         <intent
             android:action="android.intent.action.VIEW"
+            android:data="linkgrab://history"
             android:targetPackage="com.linkgrab.app"
             android:targetClass="com.linkgrab.app.MainActivity" />
     </shortcut>

@@ -40,9 +40,10 @@ class ParseWidget : AppWidgetProvider() {
         ) {
             val views = RemoteViews(context.packageName, R.layout.widget_parse)
 
-            // Set up click to open app
+            // 点一下 = 读剪贴板并解析（以前只是「打开 App」，等于白占一个格子）
             val intent = Intent(context, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
+                data = android.net.Uri.parse("linkgrab://parse")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val pendingIntent = android.app.PendingIntent.getActivity(

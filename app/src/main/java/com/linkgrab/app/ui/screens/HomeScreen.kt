@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,6 +33,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.linkgrab.app.data.model.Platform
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26Canvas
@@ -52,7 +56,28 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     var input by remember { mutableStateOf("") }
-    LaunchedEffect(initialShareText) { initialShareText?.takeIf { it.isNotBlank() }?.let { input = it; viewModel.parseUrl(it) } }
+    // 分享进来的文本只负责回填输入框：解析由 MainActivity 统一做一次
+    //（以前这里也调 parseUrl，一次分享会解析两遍）。
+    LaunchedEffect(initialShareText) {
+        initialShareText?.takeIf { it.isNotBlank() }?.let { input = it }
+    }
+
+    // ---- 剪贴板自动识别（3.0.16）----
+    val clipboardDetect by viewModel.clipboardDetect.collectAsState()
+    var clipboardLink by remember { mutableStateOf<String?>(null) }
+    var dismissedLink by remember { mutableStateOf<String?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, clipboardDetect) {
+        if (!clipboardDetect) clipboardLink = null
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && clipboardDetect) {
+                val link = readClipboard(context)?.let { viewModel.supportedLinkIn(it) }
+                clipboardLink = if (link != null && link != dismissedLink && link != input) link else null
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     // 注意：不要在这里用 `if (state.result != null) onNavigateToResult()`。
     // result 是持久状态（结果页返回后仍非空），据此跳转会造成「返回首页→
     // 立刻再跳回结果页」的死循环。跳转改由 MainViewModel.navigateToResult
@@ -65,6 +90,45 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
         ) {
             item {
                 IOS26PageHeader("LinkGrab", "保存你真正想留下的内容", topPadding = 0.dp)
+            }
+            clipboardLink?.let { link ->
+                item {
+                    IOS26Panel(Modifier.fillMaxWidth()) {
+                        Text(
+                            "检测到${viewModel.platformLabelOf(link)}链接",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = iosLabel(),
+                            letterSpacing = (-0.2).sp,
+                        )
+                        Text(
+                            "剪贴板里有一条可解析的分享链接",
+                            color = iosSecondaryLabel(),
+                            modifier = Modifier.padding(top = 3.dp),
+                            fontSize = 13.sp,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            IOS26Button(
+                                "立即解析",
+                                {
+                                    clipboardLink = null
+                                    input = link
+                                    viewModel.parseUrl(link)
+                                },
+                                Modifier.weight(1f),
+                            )
+                            IOS26OutlinedButton(
+                                "忽略",
+                                {
+                                    dismissedLink = link
+                                    clipboardLink = null
+                                },
+                                Modifier.weight(0.55f),
+                            )
+                        }
+                    }
+                }
             }
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
@@ -148,7 +212,17 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
 }
 
 private fun paste(context: Context, onPaste: (String) -> Unit) {
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    val value = clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString().orEmpty()
+    val value = readClipboard(context).orEmpty()
     if (value.isBlank()) Toast.makeText(context, "剪贴板为空", Toast.LENGTH_SHORT).show() else onPaste(value)
+}
+
+/** 读剪贴板首条文本；空/无权限时返回 null。Android 10+ 仅前台可读，正好符合这里的用法。 */
+private fun readClipboard(context: Context): String? {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    return clipboard?.primaryClip
+        ?.takeIf { it.itemCount > 0 }
+        ?.getItemAt(0)
+        ?.text
+        ?.toString()
+        ?.takeIf { it.isNotBlank() }
 }

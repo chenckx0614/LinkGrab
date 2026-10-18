@@ -450,10 +450,23 @@ private fun MainTabs(
 fun AppNavigation(
     viewModel: MainViewModel,
     initialShareText: String? = null,
+    /** 桌面快捷方式 / 小组件带进来的目标路由（一次性）。 */
+    initialRoute: String? = null,
+    /** 路由已消费，通知外层清掉，避免重组时重复跳转。 */
+    onRouteConsumed: () -> Unit = {},
 ) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+
+    // 快捷方式/小组件直达：等 NavHost 起来再跳（首帧 LaunchedEffect 之后）
+    LaunchedEffect(initialRoute) {
+        val route = initialRoute ?: return@LaunchedEffect
+        onRouteConsumed()
+        if (route != Screen.MainTabs.route) {
+            navController.navigate(route) { launchSingleTop = true }
+        }
+    }
 
     val onMainTabs = currentDestination?.route == Screen.MainTabs.route
 

@@ -99,6 +99,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _toolboxOpenInBrowser = MutableStateFlow(false)
     val toolboxOpenInBrowser: StateFlow<Boolean> = _toolboxOpenInBrowser.asStateFlow()
 
+    /** 回前台自动识别剪贴板里的分享链接（默认开）。 */
+    private val _clipboardDetect = MutableStateFlow(true)
+    val clipboardDetect: StateFlow<Boolean> = _clipboardDetect.asStateFlow()
+
+    /** 上次选的保存清晰度 label（"1080P" 之类；空 = 用最高档）。 */
+    private val _preferredQuality = MutableStateFlow("")
+    val preferredQuality: StateFlow<String> = _preferredQuality.asStateFlow()
+
     /** 批量解析结果（3.0）。 */
     private val _batchResults = MutableStateFlow<List<BatchParseItem>>(emptyList())
     val batchResults: StateFlow<List<BatchParseItem>> = _batchResults.asStateFlow()
@@ -120,6 +128,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** 最近一次成功解析的平台显示名（抖音/小红书），下载归档用。 */
     var currentPlatformLabel: String? = null
         private set
+
+    /** 最近一次成功解析的作品标题与平台 key，下载成功后给历史打「已保存」。 */
+    private var currentTitle: String = ""
+    private var currentPlatformKey: String = ""
+
+    /** 缓存有效期：媒体直链带签名（小红书约 1 小时失效），45 分钟稳妥。 */
+    private val cacheTtlMs = 45 * 60 * 1000L
 
     // 最近一次检查是否为手动触发：手动检查发现新版本始终弹窗；
     // 自动检查弹不弹由「更新提醒」开关决定。
@@ -185,6 +200,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.toolboxOpenInBrowser.collect { _toolboxOpenInBrowser.value = it }
         }
         viewModelScope.launch {
+            settingsRepository.clipboardDetect.collect { _clipboardDetect.value = it }
+        }
+        viewModelScope.launch {
+            settingsRepository.preferredQuality.collect { _preferredQuality.value = it }
+        }
+        viewModelScope.launch {
             settingsRepository.guideNeeded.collect {
                 // 只在第一次安装（本地无任何记录）时展示欢迎页
                 _guideShown.value = !it
@@ -241,6 +262,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setToolboxOpenInBrowser(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setToolboxOpenInBrowser(enabled) }
     }
+
+    fun setClipboardDetect(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setClipboardDetect(enabled) }
+    }
+
+    fun setPreferredQuality(label: String) {
+        viewModelScope.launch { settingsRepository.setPreferredQuality(label) }
+    }
+
+    /**
+     * 从一段任意文本里挑出第一个**受支持**的分享链接（剪贴板/分享文案用）。
+     * 只认抖音和小红书，返回 null 表示这段文字没什么可解析的。
+     */
+    fun supportedLinkIn(text: String): String? {
+        if (text.isBlank()) return null
+        return extractUrls(text).firstOrNull {
+            parseRepository.detectPlatform(it) != Platform.UNKNOWN
+        }
+    }
+
+    /** 平台显示名（给剪贴板提示卡片用）。 */
+    fun platformLabelOf(url: String): String =
+        parseRepository.detectPlatform(url).displayName
 
     fun markGuideShown() {
         viewModelScope.launch { settingsRepository.setGuideShown() }
@@ -325,27 +369,102 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 error = null,
                 result = null,
                 platform = platform,
+                url = url,
+                fromCache = false,
+                alreadyDownloaded = false,
             )
+
+            // ① 缓存命中（同一链接 45 分钟内解析过）→ 直接秒开，一次网络请求都不发
+            val cached = historyRepository.cachedResult(url)
+            if (cached != null) {
+                applyParsedResult(url, platform, cached, fromCache = true)
+                return@launch
+            }
 
             parseRepository.parse(url)
                 .onSuccess { result ->
-                    _uiState.value = _uiState.value.copy(isLoading = false, result = result)
-                    currentPlatformLabel = platform.displayName // 下载归档用
-                    // 用一次性事件驱动跳转：首页和历史页发起的解析都能到达
-                    _navigateToResult.tryEmit(Unit)
-                    historyRepository.add(
-                        HistoryItem(
-                            platform = platform.name.lowercase(),
-                            title = result.title.ifEmpty { "未命名" },
-                            cover = result.coverUrl ?: result.images.firstOrNull() ?: "",
-                            url = url,
-                            type = if (result.type == com.linkgrab.app.data.model.MediaType.VIDEO) "video" else "image",
-                        )
-                    )
+                    applyParsedResult(url, platform, result, fromCache = false)
                 }
                 .onFailure { e ->
-                    _uiState.value = _uiState.value.copy(isLoading = false, error = e.message ?: "解析失败")
+                    // ② 网络失败但本地有旧缓存（哪怕过了有效期）：先给个能用的结果，
+                    //    媒体直链可能已失效，但标题/封面/结构都还在，总比直接报错强
+                    val stale = historyRepository.cachedResult(url, ignoreTtl = true)
+                    if (stale != null) {
+                        applyParsedResult(url, platform, stale, fromCache = true)
+                        return@onFailure
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = friendlyParseError(e),
+                    )
                 }
+        }
+    }
+
+    /**
+     * 解析成功的统一收尾：落历史、挂缓存、标记「已存过」，再发一次跳转事件。
+     * 首次解析和缓存命中都走这里，保证两条路径行为一致。
+     */
+    private suspend fun applyParsedResult(
+        url: String,
+        platform: Platform,
+        result: MediaResult,
+        fromCache: Boolean,
+    ) {
+        val platformKey = platform.name.lowercase()
+        val title = result.title.ifEmpty { "未命名" }
+        currentPlatformLabel = platform.displayName // 下载归档用
+        currentPlatformKey = platformKey
+        currentTitle = title
+
+        val alreadyDownloaded = historyRepository
+            .findDownloadedByKey(platformKey, title) != null
+
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            result = result,
+            error = null,
+            platform = platform,
+            url = url,
+            fromCache = fromCache,
+            alreadyDownloaded = alreadyDownloaded,
+        )
+        // 用一次性事件驱动跳转：首页和历史页发起的解析都能到达
+        _navigateToResult.tryEmit(Unit)
+
+        historyRepository.add(
+            HistoryItem(
+                platform = platformKey,
+                title = title,
+                cover = result.coverUrl ?: result.images.firstOrNull() ?: "",
+                url = url,
+                type = if (result.type == com.linkgrab.app.data.model.MediaType.VIDEO) "video" else "image",
+            )
+        )
+        if (!fromCache) {
+            historyRepository.cacheResult(url, result, cacheTtlMs)
+        }
+    }
+
+    /**
+     * 把底层异常翻译成用户能看懂、能行动的话。
+     * 以前一律弹「解析失败」，用户既不知道是网络、风控还是链接过期。
+     */
+    private fun friendlyParseError(e: Throwable): String {
+        val raw = e.message.orEmpty().trim()
+        if (raw.isBlank()) return "解析失败，请稍后重试"
+        if ("不支持的链接" in raw) return raw
+        val low = raw.lowercase()
+        return when {
+            listOf("timeout", "timed out", "超时", "connection reset", "connect", "unable to resolve", "network")
+                .any { it in low } -> "网络超时或连不上。检查网络后重试，也可以换个网络"
+            listOf("403", "401", "forbidden", "unauthorized", "无权", "登录")
+                .any { it in low } -> "被站点拒绝了（可能需要登录或触发了风控）。可以试试用浏览器打开"
+            listOf("404", "410", "not found", "不存在", "已删除", "已失效", "失效")
+                .any { it in low } -> "内容不存在或已被删除"
+            listOf("captcha", "verify", "验证", "风控", "shield").any { it in low } ->
+                "碰上站点的人机校验了。换个网络或过一会儿再试"
+            else -> raw
         }
     }
 
@@ -477,6 +596,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _downloadState.value = DownloadState.Success
                     val msg = if (total > 1) "已保存 $total 个${noun}文件" else "${noun}保存成功"
                     showDownloadCompleteNotification(context, msg, isVideo = isVideoBatch)
+                    // 记住「这篇存过了」：下次同一作品再解析时提示，避免重复保存
+                    val firstFile = snapshot
+                        .firstOrNull { it.status == DownloadStatus.Success }
+                        ?.filename.orEmpty()
+                    runCatching {
+                        historyRepository.markDownloaded(
+                            currentPlatformKey,
+                            currentTitle,
+                            firstFile,
+                        )
+                    }
+                    _uiState.value = _uiState.value.copy(alreadyDownloaded = true)
                 }
                 succeeded > 0 -> {
                     val pauseHint = if (pausedCount > 0) "；$pausedCount 个已暂停，可在下载管理继续" else ""
@@ -919,6 +1050,12 @@ data class ParseUiState(
     val result: MediaResult? = null,
     val error: String? = null,
     val platform: Platform = Platform.UNKNOWN,
+    /** 本次解析的原始链接（缓存、下载标记都按它对齐）。 */
+    val url: String = "",
+    /** 结果来自本地缓存（同一链接 45 分钟内解析过 / 网络失败时的旧缓存兜底）。 */
+    val fromCache: Boolean = false,
+    /** 这篇作品之前已经保存过了（结果页据此提示「再存一份」）。 */
+    val alreadyDownloaded: Boolean = false,
 )
 
 sealed class DownloadState {
