@@ -25,6 +25,14 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.14", "2026-10-18", listOf(
+            "修文叔叔「显示不全」：网页页不再被录进底栏玻璃采样层（WebView 被录制会丢图、大片灰块白块）",
+            "网页页不再套模糊 + 投影外壳，WebView 直接渲染，图片与列表不再缺一半",
+            "WebView 量出真实尺寸后才开始加载，加载完成后补发 resize，修正站点按 innerHeight 算错的整页高度",
+            "工具页「选择文件」真正可用：补齐网页文件选择器回调（上传必需）",
+        )
+    ),
+    UpdateLogItem(
         "3.0.13", "2026-10-18", listOf(
             "文叔叔工具页改用标准手机 Chrome UA（去掉 WebView 标记）",
             "工具页开启设备宽度 viewport 与缩放，白底渲染，避免被站点限制",

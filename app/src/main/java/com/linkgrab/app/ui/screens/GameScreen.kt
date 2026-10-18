@@ -1,8 +1,12 @@
 package com.linkgrab.app.ui.screens
 
+import android.app.Activity
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.net.Uri
+import android.view.View
 import android.webkit.CookieManager
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -10,6 +14,8 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -49,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -72,6 +79,18 @@ import kotlinx.coroutines.delay
 
 /** 消消乐地址（GitHub Pages）。 */
 const val GameUrl = "https://chenckx0614.github.io/naiwaxxl/"
+
+/**
+ * 让站点用「当前真实的 innerHeight」重算 CSS 变量，等价于浏览器里转一下屏。
+ *
+ * 文叔叔手机版的整页高度是 `height: calc(var(--vh) * 100)`，而 `--vh` 只在
+ * `<head>` 的内联脚本里算一次（`window.innerHeight * 0.01`），之后只监听
+ * `resize`。WebView 尺寸还没定、或命中缓存先跑脚本时 innerHeight 可能是 0，
+ * 算出来 `--vh: 0px` → 整页高度塌成 0，只剩客服球 / ☰ / 打开App 横幅这些
+ * fixed 元素，表现就是「显示不全、加载不全」。dispatch 一次 resize 即可救回。
+ */
+private const val DispatchResizeJs =
+    "(function(){window.dispatchEvent(new Event('resize'));})();"
 
 /**
  * 奶蛙消消乐（工具箱 → 应用内 WebView 游戏页）。
@@ -99,10 +118,16 @@ fun ToolWebScreen(url: String, onBack: () -> Unit, desktop: Boolean = false) =
  *
  * 防白屏 / 防掉帧 / 防卡死：
  * - WebView **延迟到转场结束后再挂载**（转场期间每帧 measure 全屏自绘大户必掉帧）。
- * - 页面加载完成后整体淡入，首帧不闪。
+ * - **等 WebView 量出尺寸再 loadUrl**：边长为 0 时开跑，站点按
+ *   `window.innerHeight` 算出的 `--vh` 会是 0，整页高度塌陷（文叔叔就是这么
+ *   表现的：只剩客服球 / ☰ / 打开App 横幅）。
+ * - 页面加载完成后补发一次 `resize`，让站点用真实 innerHeight 重算一次
+ *   `--vh`——命中缓存、首帧尺寸未定时也能自动纠正。
+ * - 页面加载完成后整体淡入，首帧不闪；淡入结束摘掉 alpha 合成层。
  * - 主框架加载失败或 10 秒超时进入失败态（重试 / 浏览器打开），不再无限转圈。
  * - 工具页用标准手机 Chrome UA（去掉 WebView 标记），避免被站点识别为空壳/限制渲染。
- * - WebChromeClient + 三方 Cookie：缺了它们 alert/file/登录态会静默失效。
+ * - WebChromeClient + 三方 Cookie：缺了它们 alert/file/登录态会静默失效；
+ *   文件选择器单独接 onShowFileChooser，否则「选择文件」点了没反应。
  */
 @Composable
 fun WebPageScreen(
@@ -134,6 +159,38 @@ fun WebPageScreen(
         animationSpec = tween(200),
         label = "webPageAlpha",
     )
+    // 淡入结束后摘掉 alpha 修饰符：WebView 长期处在 alpha 合成层里容易出现
+    // 整块灰/白、局部不刷新的画面问题，稳定之后让它直接画在父层上。
+    var fadeFinished by remember { mutableStateOf(false) }
+    LaunchedEffect(pageLoaded) {
+        if (pageLoaded) {
+            delay(260) // 略大于 200ms 的淡入
+            fadeFinished = true
+        }
+    }
+    // 文件选择回调（WebChromeClient.onShowFileChooser）。
+    // 没有它，网页里的 <input type="file"> 点了没任何反应——文叔叔的核心动作
+    // 就是「选文件上传」，缺这一环整个工具等于不可用。
+    var fileChooserCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+    val fileChooserLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val callback = fileChooserCallback
+        fileChooserCallback = null
+        if (callback == null) return@rememberLauncherForActivityResult
+        val data = result.data
+        val uris: Array<Uri>? = if (result.resultCode == Activity.RESULT_OK && data != null) {
+            val clip = data.clipData
+            when {
+                clip != null -> Array(clip.itemCount) { i -> clip.getItemAt(i).uri }
+                data.data != null -> arrayOf(data.data!!)
+                else -> null
+            }
+        } else {
+            null
+        }
+        callback.onReceiveValue(uris)
+    }
     // 顶栏统一用 topInset 显式定位（返回键 / 菜单按钮共用同一套坐标运算）
     val topInset = WindowInsets.statusBars
         .asPaddingValues()
@@ -157,6 +214,7 @@ fun WebPageScreen(
     fun retry() {
         loadFailed = false
         pageLoaded = false
+        fadeFinished = false
         pageTitle = ""
         reloadKey++
     }
@@ -245,6 +303,9 @@ fun WebPageScreen(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    // 工具页垫一层实色白底：WebView 还没出首帧 / 局部没画到时，
+                    // 露出的是白纸而不是应用背景色，观感上不会像「缺了一块」。
+                    .background(if (transparentBackground) Color.Transparent else Color.White)
             ) {
                 val snapshot = leavingSnapshot
                 when {
@@ -299,7 +360,8 @@ fun WebPageScreen(
                         AndroidView(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .alpha(webViewAlpha),
+                                // 淡入期间才挂 alpha 层，稳定后摘掉（见 fadeFinished）
+                                .then(if (fadeFinished) Modifier else Modifier.alpha(webViewAlpha)),
                             factory = { ctx ->
                                 WebView(ctx).apply {
                                     settings.javaScriptEnabled = true
@@ -323,6 +385,28 @@ fun WebPageScreen(
                                                     "(${consoleMessage?.sourceId()}:${consoleMessage?.lineNumber()})",
                                             )
                                             return super.onConsoleMessage(consoleMessage)
+                                        }
+
+                                        override fun onShowFileChooser(
+                                            webView: WebView,
+                                            filePathCallback: ValueCallback<Array<Uri>>,
+                                            fileChooserParams: android.webkit.WebChromeClient.FileChooserParams,
+                                        ): Boolean {
+                                            // 不接这个回调，网页里的 <input type=file>
+                                            // 点了毫无反应（WebView 默认直接吞掉）
+                                            fileChooserCallback?.onReceiveValue(null)
+                                            fileChooserCallback = filePathCallback
+                                            return try {
+                                                fileChooserLauncher.launch(
+                                                    fileChooserParams.createIntent()
+                                                )
+                                                true
+                                            } catch (_: Exception) {
+                                                // 没有可用的文件选择器：把回调置空，
+                                                // 否则网页那边会一直等，无法再点第二次
+                                                fileChooserCallback = null
+                                                false
+                                            }
                                         }
                                     }
                                     // 三方 Cookie：站点登录态/统计依赖
@@ -351,18 +435,25 @@ fun WebPageScreen(
                                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
                                     } else {
                                         // 工具页手机模式：标准手机 Chrome UA（不带 wv 标记），
-                                        // 白底 + 设备宽度 viewport + 缩放，避免被站点限制渲染。
+                                        // 白底 + 设备宽度 viewport。
                                         settings.userAgentString =
                                             "Mozilla/5.0 (Linux; Android 14; SM-S918B)" +
                                                 " AppleWebKit/537.36 (KHTML, like Gecko)" +
                                                 " Chrome/124.0.0.0 Mobile Safari/537.36"
                                         settings.useWideViewPort = true
-                                        settings.loadWithOverviewMode = true
+                                        // 不跟 overviewMode：它会在内容比视口宽时把整页
+                                        // 缩到屏宽（文字变米粒、右边留白，像「显示不全」）。
+                                        // 站点自己带 width=device-width，按 1:1 排版最稳。
+                                        settings.loadWithOverviewMode = false
                                         settings.setSupportZoom(true)
                                         settings.builtInZoomControls = true
                                         settings.displayZoomControls = false
                                         settings.textZoom = 100
-                                        settings.setSupportMultipleWindows(true)
+                                        // 多窗口必须关：开着却不实现 onCreateWindow，
+                                        // window.open / target=_blank 会被静默吞掉，
+                                        // 链接点了没反应。关掉后同一 WebView 内打开。
+                                        settings.setSupportMultipleWindows(false)
+                                        settings.cacheMode = WebSettings.LOAD_DEFAULT
                                         setBackgroundColor(android.graphics.Color.WHITE)
                                     }
                                     webViewClient = object : WebViewClient() {
@@ -393,6 +484,21 @@ fun WebPageScreen(
                                         ) {
                                             pageLoaded = true
                                             pageTitle = view.title ?: ""
+                                            // 站点按 window.innerHeight 算的 --vh 只算一次；
+                                            // 这里补发 resize，让它用真实视口高度重算。
+                                            // 首帧尺寸未定 / 命中缓存时算错的 --vh 会把
+                                            // 整页高度压成 0（只剩固定的客服球/横幅）。
+                                            view.evaluateJavascript(DispatchResizeJs, null)
+                                            view.postDelayed(
+                                                {
+                                                    try {
+                                                        view.evaluateJavascript(DispatchResizeJs, null)
+                                                    } catch (_: Exception) {
+                                                        // WebView 已销毁，忽略
+                                                    }
+                                                },
+                                                350,
+                                            )
                                         }
 
                                         override fun onReceivedError(
@@ -432,7 +538,52 @@ fun WebPageScreen(
                                             return true
                                         }
                                     }
-                                    loadUrl(url)
+                                    // ---- 加载闸门 ----
+                                    // 必须等 WebView 量出真实尺寸再 loadUrl：
+                                    // 文叔叔手机版整页高度是 calc(var(--vh)*100)，
+                                    // --vh 在 <head> 里用 window.innerHeight 算一次。
+                                    // 视图还是 0×0 就开始加载 → --vh = 0 → 整页高度塌成
+                                    // 0，只剩客服球/☰/打开App 横幅这些 fixed 元素，
+                                    // 表现就是「显示不全」。等尺寸出来再加载，从源头避免。
+                                    var loadStarted = false
+                                    fun startLoad() {
+                                        if (loadStarted) return
+                                        loadStarted = true
+                                        this@apply.loadUrl(url)
+                                    }
+                                    addOnLayoutChangeListener(
+                                        object : View.OnLayoutChangeListener {
+                                            override fun onLayoutChange(
+                                                v: View,
+                                                left: Int,
+                                                top: Int,
+                                                right: Int,
+                                                bottom: Int,
+                                                oldLeft: Int,
+                                                oldTop: Int,
+                                                oldRight: Int,
+                                                oldBottom: Int,
+                                            ) {
+                                                val w = right - left
+                                                val h = bottom - top
+                                                if (w <= 0 || h <= 0) return
+                                                if (!loadStarted) {
+                                                    startLoad()
+                                                } else if (w != oldRight - oldLeft ||
+                                                    h != oldBottom - oldTop
+                                                ) {
+                                                    // 视口变了（旋屏 / 输入法 / 重新布局）：
+                                                    // 让站点重算 --vh 与整页高度
+                                                    (v as WebView)
+                                                        .evaluateJavascript(DispatchResizeJs, null)
+                                                }
+                                            }
+                                        }
+                                    )
+                                    // 兜底：布局回调没来（极端情况）也别让页面干等着
+                                    post {
+                                        if (width > 0 && height > 0) startLoad()
+                                    }
                                     // Debug 包开远程调试：PC Chrome 打开
                                     // chrome://inspect 即可看页面实际渲染与报错
                                     if (com.linkgrab.app.BuildConfig.DEBUG) {

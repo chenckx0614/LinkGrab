@@ -187,6 +187,9 @@ private const val PopMs = 400
 /** iOS system deceleration curve — fast start, long smooth tail. */
 private val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
+/** 承载 WebView 的页面：不套覆盖式模糊外壳，原因见 [IOSPageSurface]。 */
+private val WebViewHostRoutes = setOf(Screen.Game.route, Screen.ToolWeb.route)
+
 /**
  * 页面自身路由：页面据此与「当前目的地」比对，判断自己是否被上层页面覆盖。
  * 被覆盖的页面套上模糊遮罩——iOS push 的核心语言：新页滑入，旧页原地
@@ -291,10 +294,22 @@ private fun iosExit(transition: ExitTransition): ExitSpec =
  * 把 lastTarget 写成 1，下次回到它时初值正确。
  *
  * 阴影是常驻的（不做动画），开销只是一层 elevation 绘制。
+ *
+ * 例外：承载 WebView 的页面（[WebViewHostRoutes]）不套这层外壳——WebView 走
+ * Chromium 自己的合成，外面包 blur/RenderEffect 容易导致局部灰白、内容只画
+ * 一半；这类页面不透明、也不会被盖上，外壳没有收益。
  */
 @Composable
 private fun IOSPageSurface(content: @Composable () -> Unit) {
     val myRoute = LocalMyRoute.current
+    if (myRoute in WebViewHostRoutes) {
+        // WebView 是 Chromium 自己的合成表面（functor），外面再包 RenderEffect
+        // 模糊 / graphicsLayer 时，画面可能出现整块灰白、内容不重绘、只画一半
+        // 的问题（同一页面用系统浏览器打开完全正常）。这类页面本身不透明、
+        // 也不会被别的页面盖住（返回即销毁），所以直接原样渲染。
+        content()
+        return
+    }
     val currentRoute = currentRouteState.value
     val target = if (currentRoute == null || myRoute == currentRoute) 0f else 1f
     var lastTarget by rememberSaveable { mutableFloatStateOf(target) }
@@ -549,12 +564,20 @@ fun AppNavigation(
         // off-screen, and without it the window background (white) shows
         // through as a flash between pages.
         Box(Modifier.fillMaxSize().background(iosBackground())) {
+            // 采样层只在「底栏真的在屏幕上」时才录制（v3.0.14）。
+            // 它存在的唯一理由是给底栏玻璃提供模糊采样源；推入的页面
+            // （结果页 / 工具页 / 游戏页）根本没有底栏，录制纯属白烧一次
+            // 全屏重绘。更关键的是 WebView 走 Chromium 的 functor 合成，
+            // 被录进 GraphicsLayer 后只拿得到一部分帧 —— 页面会出现大片
+            // 灰块/白块、图片和列表缺一半（同一页面用系统浏览器打开是完整的）。
+            // 所以非主标签页一律不进采样层，WebView 页面从此不再被录制。
+            val recordNavBackdrop = !transitioning && onMainTabs
             NavHost(
                 navController = navController,
                 startDestination = Screen.MainTabs.route,
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(if (transitioning) Modifier else Modifier.layerBackdrop(liquidBackdrop)),
+                    .then(if (recordNavBackdrop) Modifier.layerBackdrop(liquidBackdrop) else Modifier),
             ) {
 
             composable(
