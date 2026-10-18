@@ -25,6 +25,13 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.13", "2026-10-18", listOf(
+            "文叔叔工具页改用标准手机 Chrome UA（去掉 WebView 标记）",
+            "工具页开启设备宽度 viewport 与缩放，白底渲染，避免被站点限制",
+            "游戏页保持透明底配方，不受工具页改动影响",
+        )
+    ),
+    UpdateLogItem(
         "3.0.12", "2026-10-18", listOf(
             "菜单外部点击关闭：展开后点任意空白处即可收起",
             "返回键优先关闭菜单，再处理网页历史 / 退出",

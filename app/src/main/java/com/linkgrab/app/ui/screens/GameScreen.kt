@@ -78,7 +78,8 @@ const val GameUrl = "https://chenckx0614.github.io/naiwaxxl/"
  * 游戏页用原始配方（透明底、无 viewport 干预），实测最稳。
  */
 @Composable
-fun GameScreen(onBack: () -> Unit) = WebPageScreen(url = GameUrl, desktop = false, onBack = onBack)
+fun GameScreen(onBack: () -> Unit) =
+    WebPageScreen(url = GameUrl, desktop = false, transparentBackground = true, onBack = onBack)
 
 /**
  * 工具箱网页类工具（应用内打开）。
@@ -86,7 +87,7 @@ fun GameScreen(onBack: () -> Unit) = WebPageScreen(url = GameUrl, desktop = fals
  */
 @Composable
 fun ToolWebScreen(url: String, onBack: () -> Unit, desktop: Boolean = false) =
-    WebPageScreen(url = url, desktop = desktop, onBack = onBack)
+    WebPageScreen(url = url, desktop = desktop, transparentBackground = false, onBack = onBack)
 
 /**
  * 通用应用内网页页（工具箱网页类工具共用）。
@@ -100,11 +101,16 @@ fun ToolWebScreen(url: String, onBack: () -> Unit, desktop: Boolean = false) =
  * - WebView **延迟到转场结束后再挂载**（转场期间每帧 measure 全屏自绘大户必掉帧）。
  * - 页面加载完成后整体淡入，首帧不闪。
  * - 主框架加载失败或 10 秒超时进入失败态（重试 / 浏览器打开），不再无限转圈。
- * - UA 去掉 WebView 标记；桌面模式出 PC 页（文叔叔移动网页面本身就是精简落地页）。
+ * - 工具页用标准手机 Chrome UA（去掉 WebView 标记），避免被站点识别为空壳/限制渲染。
  * - WebChromeClient + 三方 Cookie：缺了它们 alert/file/登录态会静默失效。
  */
 @Composable
-fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
+fun WebPageScreen(
+    url: String,
+    desktop: Boolean,
+    transparentBackground: Boolean = false,
+    onBack: () -> Unit,
+) {
     var webView by remember { mutableStateOf<WebView?>(null) }
     // 转场（约 320ms）结束后才真正挂载 WebView
     var ready by remember { mutableStateOf(false) }
@@ -324,8 +330,7 @@ fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
                                     CookieManager.getInstance()
                                         .setAcceptThirdPartyCookies(this, true)
                                     if (desktop) {
-                                        // 桌面模式：PC 页内容完整（文叔叔移动网页面
-                                        // 本身就是精简落地页），整页缩放 + 可双指缩放
+                                        // 桌面模式：PC 页内容完整，整页缩放 + 可双指缩放
                                         settings.userAgentString =
                                             "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" +
                                                 " AppleWebKit/537.36 (KHTML, like Gecko)" +
@@ -336,16 +341,29 @@ fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
                                         settings.builtInZoomControls = true
                                         settings.displayZoomControls = false
                                         settings.textZoom = 100
-                                        // 之前用移动 UA 装过旧版的设备可能缓存了
-                                        // 移动页，工具页一律绕过缓存重新拉
                                         settings.cacheMode = WebSettings.LOAD_NO_CACHE
                                         clearCache(true)
                                         setBackgroundColor(android.graphics.Color.WHITE)
-                                    } else {
+                                    } else if (transparentBackground) {
                                         // 游戏模式：原始配方（3.0.6 之前一直很稳），
                                         // 透明底 + 不碰 viewport，别再引入闪屏
                                         settings.mediaPlaybackRequiresUserGesture = false
                                         setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                                    } else {
+                                        // 工具页手机模式：标准手机 Chrome UA（不带 wv 标记），
+                                        // 白底 + 设备宽度 viewport + 缩放，避免被站点限制渲染。
+                                        settings.userAgentString =
+                                            "Mozilla/5.0 (Linux; Android 14; SM-S918B)" +
+                                                " AppleWebKit/537.36 (KHTML, like Gecko)" +
+                                                " Chrome/124.0.0.0 Mobile Safari/537.36"
+                                        settings.useWideViewPort = true
+                                        settings.loadWithOverviewMode = true
+                                        settings.setSupportZoom(true)
+                                        settings.builtInZoomControls = true
+                                        settings.displayZoomControls = false
+                                        settings.textZoom = 100
+                                        settings.setSupportMultipleWindows(true)
+                                        setBackgroundColor(android.graphics.Color.WHITE)
                                     }
                                     webViewClient = object : WebViewClient() {
                                         override fun shouldOverrideUrlLoading(
