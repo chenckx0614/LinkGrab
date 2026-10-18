@@ -25,6 +25,19 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.17", "2026-10-18", listOf(
+            "列表不再硬切：删除/新增时其余卡片弹簧跟随，首屏逐条淡入上浮（历史/下载管理/批量结果/更新日志）",
+            "历史记录支持左滑删除（滑到底弹确认，不会误删），选中时勾选圈弹跳 + 卡片高亮",
+            "卡片展开统一成弹簧手感：关于页的交流反馈与内嵌更新日志",
+            "「我的 / 工具箱 / 文件传输」分组与行依次上浮入场",
+            "封面图淡入（历史、批量结果、结果页）",
+            "保存成功时底栏按钮变成「✓ 已保存」，1.4 秒后弹回，不再弹 Toast",
+            "批量结果勾选弹跳 + 选中行高亮描边",
+            "解析出错时输入面板抖一下（配触觉反馈）",
+            "骨架屏与解析结果交叉淡入，不再硬切",
+        )
+    ),
+    UpdateLogItem(
         "3.0.16", "2026-10-18", listOf(
             "主动识别：回到应用时自动发现剪贴板里的分享链接，一条卡片点「立即解析」（我的→通用 可关闭）",
             "同一链接 45 分钟内再解析直接秒开；网络失败时用上次的结果兜底",
@@ -314,7 +327,9 @@ fun UpdateLogScreen(onBack: () -> Unit) {
                 )
             }
             items(visible.size, key = { visible[it].version }) { index ->
-                UpdateLogCard(visible[index])
+                StaggeredAppear(index, Modifier.animateItem()) {
+                    UpdateLogCard(visible[index])
+                }
             }
             if (!showArchived) {
                 item {

@@ -20,6 +20,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -135,19 +137,23 @@ fun DownloadsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
             } else {
                 items(tasks.size, key = { tasks[it].id }) { index ->
                     val task = tasks[index]
-                    TaskRow(
-                        task = task,
-                        onPause = {
-                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                            viewModel.pauseTask(task.id)
-                        },
-                        onResume = {
-                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                            viewModel.resumeTask(context, task.id)
-                        },
-                        onCancel = { viewModel.cancelTask(context, task.id) },
-                    )
-                    if (index != tasks.lastIndex) IOS26Divider(Modifier.padding(vertical = 4.dp))
+                    StaggeredAppear(index, Modifier.animateItem()) {
+                        Column {
+                            TaskRow(
+                                task = task,
+                                onPause = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                    viewModel.pauseTask(task.id)
+                                },
+                                onResume = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                    viewModel.resumeTask(context, task.id)
+                                },
+                                onCancel = { viewModel.cancelTask(context, task.id) },
+                            )
+                            if (index != tasks.lastIndex) IOS26Divider(Modifier.padding(vertical = 4.dp))
+                        }
+                    }
                 }
             }
 
@@ -230,8 +236,13 @@ private fun TaskRow(
                 },
                 modifier = Modifier.padding(top = 2.dp),
             )
-            // 细进度条
+            // 细进度条：值走 spring，避免下载进度一格一格"跳"
             if (task.status == DownloadStatus.Downloading || task.status == DownloadStatus.Paused) {
+                val animatedProgress by animateFloatAsState(
+                    targetValue = (task.progress / 100f).coerceIn(0f, 1f),
+                    animationSpec = spring(dampingRatio = 0.9f, stiffness = 240f),
+                    label = "taskProgress",
+                )
                 Box(
                     Modifier
                         .padding(top = 6.dp)
@@ -241,7 +252,7 @@ private fun TaskRow(
                 ) {
                     Box(
                         Modifier
-                            .fillMaxWidth(task.progress / 100f)
+                            .fillMaxWidth(animatedProgress)
                             .height(3.dp)
                             .background(iosBlue(), RoundedCornerShape(2.dp)),
                     )

@@ -1,6 +1,7 @@
 package com.linkgrab.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -22,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -36,6 +41,7 @@ import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS26StickyPage
+import com.linkgrab.app.ui.theme.IOSCornerLarge
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosError
 import com.linkgrab.app.ui.theme.iosLabel
@@ -78,16 +84,18 @@ fun BatchResultScreen(viewModel: MainViewModel, onBack: () -> Unit) {
 
             items(items.size, key = { items[it].url }) { index ->
                 val item = items[index]
-                BatchCard(
-                    item = item,
-                    selected = selected[item.url] == true,
-                    onToggle = {
-                        if (item.isSuccess) {
-                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                            selected[item.url] = !(selected[item.url] ?: false)
-                        }
-                    },
-                )
+                StaggeredAppear(index, Modifier.animateItem()) {
+                    BatchCard(
+                        item = item,
+                        selected = selected[item.url] == true,
+                        onToggle = {
+                            if (item.isSuccess) {
+                                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                selected[item.url] = !(selected[item.url] ?: false)
+                            }
+                        },
+                    )
+                }
             }
 
             item {
@@ -140,6 +148,23 @@ fun BatchResultScreen(viewModel: MainViewModel, onBack: () -> Unit) {
 
 @Composable
 private fun BatchCard(item: BatchParseItem, selected: Boolean, onToggle: () -> Unit) {
+    // 选中行高亮：外圈描边颜色渐变（面板本身没有 tint 参数，包一层描边即可）
+    val ringColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) iosBlue().copy(alpha = 0.55f) else Color.Transparent,
+        animationSpec = androidx.compose.animation.core.tween(160),
+        label = "batchRing",
+    )
+    val checkBg by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) iosBlue() else iosTertiaryBackground(),
+        animationSpec = androidx.compose.animation.core.tween(140),
+        label = "batchCheckBg",
+    )
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(IOSCornerLarge)
+            .border(1.dp, ringColor, IOSCornerLarge)
+    ) {
     IOS26Panel(Modifier.fillMaxWidth().clickable(onClick = onToggle)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // 封面
@@ -188,25 +213,41 @@ private fun BatchCard(item: BatchParseItem, selected: Boolean, onToggle: () -> U
                 )
             }
 
-            // 选择圈
+            // 选择圈：颜色过渡 + 勾弹跳（原来是 Text("✓")，字体渲染不一致）
             Box(
                 Modifier
                     .padding(start = 8.dp)
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(
-                        when {
-                            selected -> iosBlue()
-                            item.isSuccess -> iosTertiaryBackground()
-                            else -> iosTertiaryBackground()
-                        }
-                    ),
+                    .background(checkBg),
                 contentAlignment = Alignment.Center,
             ) {
-                if (selected) {
-                    Text("✓", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color.White)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = selected,
+                    enter = androidx.compose.animation.scaleIn(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = 0.5f,
+                            stiffness = 900f,
+                        ),
+                        initialScale = 0.4f,
+                    ) + androidx.compose.animation.fadeIn(
+                        androidx.compose.animation.core.tween(110),
+                    ),
+                    exit = androidx.compose.animation.scaleOut(
+                        androidx.compose.animation.core.tween(90),
+                    ) + androidx.compose.animation.fadeOut(
+                        androidx.compose.animation.core.tween(90),
+                    ),
+                ) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(15.dp),
+                    )
                 }
             }
         }
+    }
     }
 }

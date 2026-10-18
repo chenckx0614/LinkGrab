@@ -126,61 +126,34 @@ fun AboutScreen(
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     var feedbackExpanded by remember { mutableStateOf(false) }
-                    val feedbackRotation by animateFloatAsState(
-                        targetValue = if (feedbackExpanded) 90f else 0f,
-                        animationSpec = tween(durationMillis = 200),
-                        label = "aboutFeedbackRotation",
-                    )
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                                feedbackExpanded = !feedbackExpanded
-                            },
-                    ) {
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 4.dp, vertical = 13.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+                    // 统一走 ExpandableSection：chevron 弹簧旋转 + 高度弹簧 + 内容淡入
+                    ExpandableSection(
+                        expanded = feedbackExpanded,
+                        onToggle = { feedbackExpanded = !feedbackExpanded },
+                        header = {
                             Text(
                                 "交流与反馈",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = iosLabel(),
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 13.dp),
                             )
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                contentDescription = null,
-                                tint = iosDisclosureColor(),
-                                modifier = Modifier
-                                    .size(IOS26IconSize.Disclosure)
-                                    .graphicsLayer { rotationZ = feedbackRotation },
+                        },
+                    ) {
+                        Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 13.dp)) {
+                            Text(
+                                "敬请期待",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = iosLabel(),
                             )
-                        }
-                        AnimatedVisibility(
-                            visible = feedbackExpanded,
-                            enter = expandVertically(),
-                            exit = shrinkVertically(),
-                        ) {
-                            Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 13.dp)) {
-                                Text(
-                                    "敬请期待",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = iosLabel(),
-                                )
-                                Text(
-                                    "交流群与反馈通道正在筹备中，后续版本会在这里上线。",
-                                    fontSize = 14.sp,
-                                    lineHeight = 22.sp,
-                                    color = iosSecondaryLabel(),
-                                    modifier = Modifier.padding(top = 4.dp),
-                                )
-                            }
+                            Text(
+                                "交流群与反馈通道正在筹备中，后续版本会在这里上线。",
+                                fontSize = 14.sp,
+                                lineHeight = 22.sp,
+                                color = iosSecondaryLabel(),
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
                         }
                     }
                     IOS26Divider(Modifier.padding(vertical = 2.dp))
@@ -249,72 +222,53 @@ fun AboutScreen(
                     }
                     recent.forEachIndexed { index, entry ->
                         var expanded by remember(entry.version) { mutableStateOf(index == 0) }
-                        val rotation by animateFloatAsState(
-                            targetValue = if (expanded) 90f else -90f,
-                            animationSpec = tween(durationMillis = 200),
-                            label = "aboutChangelogRotation$index",
-                        )
                         if (index > 0) {
                             IOS26Divider(Modifier.padding(vertical = 2.dp))
                         }
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { expanded = !expanded },
-                        ) {
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 4.dp, vertical = 13.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    "v${entry.version}",
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = iosLabel(),
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    entry.date,
-                                    fontSize = 14.sp,
-                                    color = iosSecondaryLabel(),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = iosDisclosureColor(),
-                                    modifier = Modifier
-                                        .size(IOS26IconSize.Disclosure)
-                                        .graphicsLayer { rotationZ = rotation },
-                                )
-                            }
-                            AnimatedVisibility(
-                                visible = expanded,
-                                enter = expandVertically(),
-                                exit = shrinkVertically(),
-                            ) {
-                                Column(
-                                    Modifier.padding(start = 6.dp, end = 4.dp, bottom = 12.dp),
+                        ExpandableSection(
+                            expanded = expanded,
+                            onToggle = { expanded = !expanded },
+                            header = {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 13.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    entry.changes.forEach { change ->
-                                        Row(Modifier.padding(bottom = 2.dp)) {
-                                            Text(
-                                                "• ",
-                                                fontSize = 14.sp,
-                                                lineHeight = 22.sp,
-                                                color = iosSecondaryLabel(),
-                                            )
-                                            Text(
-                                                change,
-                                                fontSize = 14.sp,
-                                                lineHeight = 22.sp,
-                                                color = iosSecondaryLabel(),
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                        }
+                                    Text(
+                                        "v${entry.version}",
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = iosLabel(),
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        entry.date,
+                                        fontSize = 14.sp,
+                                        color = iosSecondaryLabel(),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                            },
+                        ) {
+                            Column(
+                                Modifier.padding(start = 6.dp, end = 4.dp, bottom = 12.dp),
+                            ) {
+                                entry.changes.forEach { change ->
+                                    Row(Modifier.padding(bottom = 2.dp)) {
+                                        Text(
+                                            "• ",
+                                            fontSize = 14.sp,
+                                            lineHeight = 22.sp,
+                                            color = iosSecondaryLabel(),
+                                        )
+                                        Text(
+                                            change,
+                                            fontSize = 14.sp,
+                                            lineHeight = 22.sp,
+                                            color = iosSecondaryLabel(),
+                                            modifier = Modifier.weight(1f),
+                                        )
                                     }
                                 }
                             }

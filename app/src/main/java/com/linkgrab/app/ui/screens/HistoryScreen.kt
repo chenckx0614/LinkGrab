@@ -1,6 +1,15 @@
 package com.linkgrab.app.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.ExperimentalAnimationSpecApi
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,7 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.animation.core.Animatable
@@ -34,14 +43,20 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxState
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -96,7 +112,7 @@ private fun platformName(raw: String): String = when (raw) {
     else -> raw
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (String) -> Unit) {
     val history by viewModel.allHistory.collectAsState(initial = emptyList())
@@ -250,29 +266,51 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                     }
                 }
             } else {
-                items(filtered, key = { it.id }) { item ->
-                    HistoryCard(
-                        item = item,
-                        selectionMode = selectionMode,
-                        selected = item.id in selected,
-                        onClick = {
-                            if (selectionMode) {
-                                selected = if (item.id in selected) selected - item.id
-                                else selected + item.id
-                            } else {
-                                onParseUrl(item.url)
+                itemsIndexed(filtered, key = { _, item -> item.id }) { index, item ->
+                    // 左滑删除：滑过阈值不直接删，弹确认框（返回 false 卡片自己弹回）
+                    val currentItem by rememberUpdatedState(item)
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.EndToStart) {
+                                pendingDelete = listOf(currentItem)
                             }
+                            false
                         },
-                        onLongClick = {
-                            if (selectionMode) {
-                                selected = if (item.id in selected) selected - item.id
-                                else selected + item.id
-                            } else {
-                                selectionMode = true
-                                selected = setOf(item.id)
-                            }
-                        },
+                        positionalThreshold = { distance -> distance * 0.35f },
                     )
+                    StaggeredAppear(index) {
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            // 删除/新增时其余卡片弹簧跟随，而不是整列瞬间跳一下
+                            modifier = Modifier.animateItem(),
+                            enableDismissFromStartToEnd = false,
+                            enableDismissFromEndToStart = !selectionMode,
+                            backgroundContent = { SwipeDeleteBackground(dismissState) },
+                        ) {
+                            HistoryCard(
+                                item = item,
+                                selectionMode = selectionMode,
+                                selected = item.id in selected,
+                                onClick = {
+                                    if (selectionMode) {
+                                        selected = if (item.id in selected) selected - item.id
+                                        else selected + item.id
+                                    } else {
+                                        onParseUrl(item.url)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (selectionMode) {
+                                        selected = if (item.id in selected) selected - item.id
+                                        else selected + item.id
+                                    } else {
+                                        selectionMode = true
+                                        selected = setOf(item.id)
+                                    }
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -301,16 +339,29 @@ private fun HistoryCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    // 选中态的颜色过渡 + 勾选弹跳：硬切会很"廉价"，这里统一走 160ms / 欠阻尼 spring
+    val highlight = selectionMode && selected
+    val cardBg by androidx.compose.animation.animateColorAsState(
+        targetValue = if (highlight) iosBlue().copy(alpha = 0.10f) else iosGlass(),
+        animationSpec = tween(160),
+        label = "historyCardBg",
+    )
+    val cardBorder by androidx.compose.animation.animateColorAsState(
+        targetValue = if (highlight) iosBlue().copy(alpha = 0.6f) else iosGlassStroke(),
+        animationSpec = tween(160),
+        label = "historyCardBorder",
+    )
+    val checkBg by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) iosBlue() else iosTertiaryBackground(),
+        animationSpec = tween(140),
+        label = "historyCheckBg",
+    )
     Row(
         Modifier
             .fillMaxWidth()
             .clip(IOSCornerMedium)
-            .background(iosGlass())
-            .border(
-                0.5.dp,
-                if (selectionMode && selected) iosBlue().copy(alpha = 0.6f) else iosGlassStroke(),
-                IOSCornerMedium,
-            )
+            .background(cardBg)
+            .border(0.5.dp, cardBorder, IOSCornerMedium)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -320,10 +371,17 @@ private fun HistoryCard(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .background(if (selected) iosBlue() else iosTertiaryBackground()),
+                    .background(checkBg),
                 contentAlignment = Alignment.Center,
             ) {
-                if (selected) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = selected,
+                    enter = scaleIn(
+                        animationSpec = spring(dampingRatio = 0.5f, stiffness = 900f),
+                        initialScale = 0.4f,
+                    ) + fadeIn(tween(110)),
+                    exit = scaleOut(tween(90)) + fadeOut(tween(90)),
+                ) {
                     // 原来是 Text("✓") 文字当图标：不同设备字体渲染不一致、深色模式
                     // 也不会跟着主题走。改用真图标。
                     Icon(
@@ -369,6 +427,37 @@ private fun HistoryCard(
                 modifier = Modifier.size(IOS26IconSize.Disclosure),
             )
         }
+    }
+}
+
+/**
+ * 左滑时露出的红色删除底：随跟手进度加深、图标放大，松手未过阈值会自然收回。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeDeleteBackground(state: SwipeToDismissBoxState) {
+    val progress = state.progress
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(IOSCornerMedium)
+            .background(IOSRed.copy(alpha = 0.10f + 0.18f * progress))
+            .padding(horizontal = 22.dp),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Icon(
+            Icons.Default.Delete,
+            contentDescription = "删除",
+            tint = IOSRed,
+            modifier = Modifier
+                .size(22.dp)
+                .graphicsLayer {
+                    alpha = 0.35f + 0.65f * progress
+                    val s = 0.85f + 0.15f * progress
+                    scaleX = s
+                    scaleY = s
+                },
+        )
     }
 }
 

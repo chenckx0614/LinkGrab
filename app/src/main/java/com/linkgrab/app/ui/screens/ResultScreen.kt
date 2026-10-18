@@ -13,6 +13,7 @@ import kotlin.math.roundToInt
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -158,6 +159,12 @@ fun ResultScreen(
     val uiState by viewModel.uiState.collectAsState()
     val downloadState by viewModel.downloadState.collectAsState()
     val result = uiState.result
+    // 骨架 → 内容的交叉淡入进度（结果到达后 240ms 内从 0 到 1）
+    val contentFade by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (result != null) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(240),
+        label = "resultContentFade",
+    )
 
     var selectedImageIndex by remember { mutableIntStateOf(0) }
     var showPreview by remember { mutableStateOf(false) }
@@ -191,18 +198,22 @@ fun ResultScreen(
         }
     }
 
-    // Toast 下载状态
+    // 保存成功：按钮 morph 成「✓ 已保存」，不再弹 Toast（反馈就在按钮上）
+    var justSaved by remember { mutableStateOf(false) }
     LaunchedEffect(downloadState) {
         when (val state = downloadState) {
             is DownloadState.Success -> {
                 vibrateDevice(context)
-                Toast.makeText(context, "保存成功", Toast.LENGTH_SHORT).show()
+                justSaved = true
                 viewModel.resetDownloadState()
+                kotlinx.coroutines.delay(1400)
+                justSaved = false
             }
             is DownloadState.Error -> {
                 Toast.makeText(context, "保存失败: ${state.message}", Toast.LENGTH_SHORT).show()
                 viewModel.resetDownloadState()
             }
+            is DownloadState.Downloading -> justSaved = false
             else -> {}
         }
     }
@@ -249,6 +260,7 @@ fun ResultScreen(
                     downloadState = downloadState,
                     // 这篇之前存过：主按钮变成「再存一份」，避免重复保存没提示
                     alreadyDownloaded = uiState.alreadyDownloaded,
+                    justSaved = justSaved,
                     onCopy = { text ->
                         copyToClipboard(context, text)
                         Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
@@ -303,7 +315,14 @@ fun ResultScreen(
                         ResultLoadingSkeleton()
                     }
                 } else {
-                    when (result.type) {
+                    // 骨架 → 内容交叉淡入：内容从 0 淡到 1 的同时骨架淡出，
+                    // 中间不会闪一帧纯背景（以前是硬切）
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { alpha = contentFade }
+                    ) {
+                        when (result.type) {
                         MediaType.IMAGE -> ImageResultBody(
                             result = result,
                             gridState = gridState,
@@ -346,6 +365,18 @@ fun ResultScreen(
                         )
                         MediaType.UNKNOWN -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("无法识别的内容类型", color = iosSecondaryLabel(), fontSize = 15.sp)
+                        }
+                    }
+                    }
+                    // 内容淡入的过程中，骨架在下面同步淡出
+                    if (contentFade < 0.99f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = topInset + IOS26HeaderHeight)
+                                .graphicsLayer { alpha = 1f - contentFade }
+                        ) {
+                            ResultLoadingSkeleton()
                         }
                     }
                 }
@@ -638,7 +669,7 @@ private fun VideoResultBody(
                 } else {
                     result.coverUrl?.let { coverUrl ->
                         AsyncImage(
-                            model = ImageRequest.Builder(context).data(coverUrl).crossfade(false).build(),
+                            model = ImageRequest.Builder(context).data(coverUrl).crossfade(true).build(),
                             contentDescription = "视频封面",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
@@ -1029,6 +1060,7 @@ private fun ResultBottomBar(
     backdrop: Backdrop? = null,
     selectedQualityLabel: String? = null,
     alreadyDownloaded: Boolean = false,
+    justSaved: Boolean = false,
 ) {
     val buttonText: String
     val buttonEnabled: Boolean
@@ -1103,12 +1135,57 @@ private fun ResultBottomBar(
                 modifier = Modifier.weight(1f),
                 enabled = copyText.isNotBlank(),
             )
-            IOS26Button(
-                text = buttonText,
-                onClick = onPrimaryClick,
+            // 保存成功后按钮"变身"成「✓ 已保存」，1.4s 后弹回（见 justSaved）
+            androidx.compose.animation.AnimatedContent(
+                targetState = justSaved,
+                transitionSpec = {
+                    (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180)) +
+                        androidx.compose.animation.scaleIn(
+                            initialScale = 0.86f,
+                            animationSpec = androidx.compose.animation.core.spring(
+                                dampingRatio = 0.55f,
+                                stiffness = 700f,
+                            ),
+                        )) togetherWith androidx.compose.animation.fadeOut(
+                        androidx.compose.animation.core.tween(140),
+                    )
+                },
                 modifier = Modifier.weight(1f),
-                enabled = buttonEnabled,
-            )
+                label = "saveMorph",
+            ) { saved ->
+                if (saved) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(iosBlue()),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "已保存",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                } else {
+                    IOS26Button(
+                        text = buttonText,
+                        onClick = onPrimaryClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = buttonEnabled,
+                    )
+                }
+            }
         }
     }
 }

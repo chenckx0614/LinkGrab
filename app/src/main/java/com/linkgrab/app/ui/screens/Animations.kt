@@ -1,22 +1,44 @@
 package com.linkgrab.app.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.linkgrab.app.ui.theme.IOS26IconSize
+import com.linkgrab.app.ui.theme.iosDisclosureColor
+import kotlinx.coroutines.delay
 
 /**
  * iOS 26-style button press: subtle, quick, with slight overshoot.
@@ -109,4 +131,118 @@ fun animatedCounter(targetValue: Int): Int {
         label = "ios26Counter",
     )
     return animatedValue
+}
+
+/**
+ * 列表项错峰入场：前 [maxAnimated] 项依次「淡入 + 上浮 10dp」，间隔 26ms。
+ *
+ * 为什么只做前 N 项：LazyColumn 滚远再滚回来会重建 composition，
+ * 如果每项都播，来回滑会一直重播，看起来像卡顿/闪烁。前 10 项盖住首屏即可，
+ * 后面的直接出现（用户也不会注意）。
+ */
+@Composable
+fun StaggeredAppear(
+    index: Int,
+    modifier: Modifier = Modifier,
+    maxAnimated: Int = 10,
+    content: @Composable () -> Unit,
+) {
+    val animated = index < maxAnimated
+    val progress = remember { Animatable(if (animated) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (animated) {
+            delay(index * 26L)
+            progress.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
+        }
+    }
+    val rise = with(LocalDensity.current) { 10.dp.toPx() }
+    Box(
+        modifier.graphicsLayer {
+            alpha = progress.value
+            translationY = (1f - progress.value) * rise
+        }
+    ) {
+        content()
+    }
+}
+
+/**
+ * 统一的「卡片展开」：头部点击 → chevron 弹簧旋转 90° + 内容高度弹簧展开 + 淡入。
+ *
+ * 以前各处各写一份 `AnimatedVisibility(expandVertically())`，曲线一致但手感
+ * 偏"平"（默认 tween）。这里统一走 spring，并补上触觉反馈。
+ */
+@Composable
+fun ExpandableSection(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    header: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val haptic = LocalHapticFeedback.current
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = 520f),
+        label = "expandChevron",
+    )
+    Column(modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    onToggle()
+                }
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.weight(1f)) { header() }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = iosDisclosureColor(),
+                modifier = Modifier
+                    .size(IOS26IconSize.Disclosure)
+                    .graphicsLayer { rotationZ = rotation },
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(
+                animationSpec = spring(dampingRatio = 0.86f, stiffness = 520f),
+                expandFrom = Alignment.Top,
+            ) + fadeIn(tween(180)),
+            exit = shrinkVertically(
+                animationSpec = spring(dampingRatio = 0.92f, stiffness = 700f),
+                shrinkTowards = Alignment.Top,
+            ) + fadeOut(tween(120)),
+        ) {
+            Box(Modifier.padding(top = 6.dp)) { content() }
+        }
+    }
+}
+
+/**
+ * 错误抖动：`trigger` 每 +1 播一次（水平 ±6dp 抖 3 下，末尾回正）。
+ * 用 Animatable 而不是 infiniteRepeatable：抖完就停，不常驻。
+ */
+@Composable
+fun Modifier.shakeOnTrigger(trigger: Int, amplitudeDp: Float = 6f): Modifier {
+    val offset = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    LaunchedEffect(trigger) {
+        if (trigger <= 0) return@LaunchedEffect
+        val amp = with(density) { amplitudeDp.dp.toPx() }
+        val spec = spring<Float>(dampingRatio = 0.42f, stiffness = 2200f)
+        repeat(3) {
+            offset.animateTo(amp, spec)
+            offset.animateTo(-amp, spec)
+        }
+        offset.animateTo(0f, tween(120))
+    }
+    return this.graphicsLayer { translationX = offset.value }
 }
