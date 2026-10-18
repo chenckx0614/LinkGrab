@@ -25,6 +25,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.20", "2026-10-18", listOf(
+            "修复「二维码」按钮文字换行：按钮文案强制单行显示",
+        )
+    ),
+    UpdateLogItem(
         "3.0.19", "2026-10-18", listOf(
             "新增 B 站解析：BV/av 视频、b23.tv 短链，匿名可拿到 720P 带音轨的完整 mp4；番剧单集尽力支持",
             "新增 微博 解析：自动过访客校验，取原图 / 高清视频；被风控时给明确提示",

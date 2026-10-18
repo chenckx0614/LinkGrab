@@ -473,6 +473,8 @@ fun IOS26OutlinedButton(
             fontSize = 16.sp,
             color = iosLabel(),
             letterSpacing = (-0.2).sp,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }
