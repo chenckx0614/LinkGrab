@@ -532,12 +532,12 @@ private fun StyleTile(
     val shape = RoundedCornerShape(18.dp)
     Column(
         modifier
+            .onGloballyPositioned { coords -> onRect(index, coords.boundsInRoot()) }
             .graphicsLayer {
-                // 收尾：选中的这张代表底栏本体，慢慢沉向屏幕底部交棒
+                // 收尾：选中的这张原地淡出，位置直接交给真底栏
                 if (selected && finishProgress > 0f) {
                     val p = finishProgress
-                    translationY = 340f * p * p
-                    alpha = 1f - ((p - 0.5f) / 0.5f).coerceIn(0f, 1f)
+                    alpha = 1f - p
                 }
             }
             .clip(shape)
@@ -554,8 +554,7 @@ private fun StyleTile(
         Box(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .onGloballyPositioned { coords -> onRect(index, coords.boundsInRoot()) },
+                .clip(RoundedCornerShape(12.dp)),
         ) {
             Image(
                 painter = painterResource(imageRes),
