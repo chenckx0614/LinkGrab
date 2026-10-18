@@ -25,6 +25,13 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.12", "2026-10-18", listOf(
+            "菜单外部点击关闭：展开后点任意空白处即可收起",
+            "返回键优先关闭菜单，再处理网页历史 / 退出",
+            "菜单毛玻璃只采顶栏，不再把 WebView 录进采样层，解决闪屏/显示不全",
+        )
+    ),
+    UpdateLogItem(
         "3.0.11", "2026-10-18", listOf(
             "文叔叔改回手机页面：不再强制桌面版 UA",
             "恢复工具页右上角菜单的毛玻璃背景模糊",

@@ -16,6 +16,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -117,6 +119,7 @@ fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
     // 右上角菜单
     var menuVisible by remember { mutableStateOf(false) }
     val menuFraction = remember { Animatable(0f) }
+    val menuExpandedOrAnimating by remember { derivedStateOf { menuVisible || menuFraction.value > 0.01f } }
     // 退出时的 WebView 截图：转场期间用它替代真 WebView 参与渲染
     var leavingSnapshot by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -129,10 +132,9 @@ fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
     val topInset = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()
-    // 菜单的玻璃采样源：挂在内容列上，常挂不摘。
-    // 之前随菜单开合挂/摘——WebView 是全屏自绘大户，每次重挂都会强制它
-    // 整帧重绘，肉眼看就是"打开菜单闪一下"；现在常驻采样，菜单展开即可模糊。
-    val pageBackdrop = rememberLayerBackdrop()
+    // 菜单的玻璃采样源：只采顶栏，不采 WebView。
+    // WebView 是硬件视图，把它录进 layerBackdrop 会导致画面闪 / 显示不全。
+    val headerBackdrop = rememberLayerBackdrop()
 
     LaunchedEffect(Unit) {
         delay(500) // 覆盖 push 转场窗口（440ms），转场画完才让 WebView 上场
@@ -186,10 +188,15 @@ fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
         onBack()
     }
 
-    // 网页内有历史就先退网页历史（关弹层/退关卡），没有才退出去
+    // 网页内有历史就先退网页历史（关弹层/退关卡），菜单开着先关菜单，没有才退出去
     BackHandler(enabled = true) {
-        val wv = webView
-        if (wv != null && wv.canGoBack()) wv.goBack() else exitPage()
+        when {
+            menuVisible -> menuVisible = false
+            else -> {
+                val wv = webView
+                if (wv != null && wv.canGoBack()) wv.goBack() else exitPage()
+            }
+        }
     }
 
     Box(
@@ -197,13 +204,14 @@ fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
             .fillMaxSize()
             .background(iosBackground())
     ) {
-        Column(Modifier.fillMaxSize().layerBackdrop(pageBackdrop)) {
+        Column(Modifier.fillMaxSize()) {
             // ---- 顶栏：高度固定，菜单在覆盖层里展开，不影响这里 ----
             Row(
                 Modifier
                     .fillMaxWidth()
                     .padding(top = topInset)
-                    .padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    .padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
+                    .layerBackdrop(headerBackdrop),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 LiquidGlassBackButton(
@@ -433,6 +441,18 @@ fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
             }
         }
 
+        // 点菜单外部关闭：捕获全屏点击，铺在菜单下面
+        if (menuExpandedOrAnimating) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                    ) { menuVisible = false },
+            )
+        }
+
         // ---- 菜单覆盖层：全屏、约束宽松，展开不撑动顶栏 ----
         // 定位与 ResultScreen 同配方：top 减去菜单自带 24dp 阴影内边距，
         // 收起态按钮中心正好与返回键中心同一条直线。
@@ -448,7 +468,7 @@ fun WebPageScreen(url: String, desktop: Boolean, onBack: () -> Unit) {
             Box(Modifier.offset(x = 8.dp)) {
                 LiquidGlassDropdownMenu(
                     show = menuVisible,
-                    backdrop = pageBackdrop,
+                    backdrop = headerBackdrop,
                     fraction = menuFraction,
                     triggerIcon = Icons.Default.MoreVert,
                     triggerContentDescription = "更多",
