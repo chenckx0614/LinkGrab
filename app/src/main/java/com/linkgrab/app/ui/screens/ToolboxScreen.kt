@@ -42,6 +42,7 @@ fun ToolboxScreen(
     onNavigateToImageConvert: () -> Unit = {},
     onNavigateToMusic: () -> Unit = {},
     onNavigateToGame: () -> Unit = {},
+    onOpenWenshushu: () -> Unit = {},
 ) {
     IOS26Canvas {
         IOS26StickyPage(title = "工具") {
@@ -57,6 +58,8 @@ fun ToolboxScreen(
                     ToolRow("图片转换", "转换 JPG、PNG、WebP 或 BMP", onNavigateToImageConvert)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
                     ToolRow("奶蛙消消乐", "顺便玩一局，摸鱼必备", onNavigateToGame)
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
+                    ToolRow("文叔叔", "免登录大文件传输，手机电脑互传", onOpenWenshushu)
                 }
             }
             item {

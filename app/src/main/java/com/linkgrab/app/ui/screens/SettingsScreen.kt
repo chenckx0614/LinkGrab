@@ -194,6 +194,22 @@ fun SettingsScreen(
             item {
                 SectionLabel("通用")
                 IOS26Panel(Modifier.fillMaxWidth()) {
+                    // 工具箱网页类工具的打开方式：应用内 or 系统浏览器
+                    val toolboxBrowser by viewModel.toolboxOpenInBrowser.collectAsState()
+                    val switchHaptic = LocalHapticFeedback.current
+                    IOS26ListRow(
+                        "工具用浏览器打开",
+                        if (toolboxBrowser) "工具箱网页（含消消乐）用系统浏览器打开" else "工具箱网页在应用内打开",
+                    ) {
+                        IOS26Switch(
+                            checked = toolboxBrowser,
+                            onCheckedChange = { enabled ->
+                                switchHaptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                viewModel.setToolboxOpenInBrowser(enabled)
+                            },
+                        )
+                    }
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
                     // 检查更新挪进「更新设置」二级页，这里只留一行入口带版本号
                     IOS26ListRow(
                         "更新设置",

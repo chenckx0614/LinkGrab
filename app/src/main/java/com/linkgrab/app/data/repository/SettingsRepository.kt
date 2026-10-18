@@ -25,6 +25,7 @@ class SettingsRepository(private val context: Context) {
         private val DOWNLOAD_SOURCE_KEY = stringPreferencesKey("download_source")
         private val DOWNLOAD_CONCURRENCY_KEY = intPreferencesKey("download_concurrency")
         private val AUTO_ORGANIZE_KEY = intPreferencesKey("auto_organize")
+        private val TOOLBOX_BROWSER_KEY = intPreferencesKey("toolbox_open_in_browser")
     }
 
     val colorMode: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -73,6 +74,11 @@ class SettingsRepository(private val context: Context) {
     /** 下载完成按平台/日期自动归档子目录，默认开。 */
     val autoOrganize: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[AUTO_ORGANIZE_KEY] != 0 // 默认开
+    }
+
+    /** 工具箱网页类工具是否用系统浏览器打开；默认关（应用内打开）。 */
+    val toolboxOpenInBrowser: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[TOOLBOX_BROWSER_KEY] == 1
     }
 
     suspend fun setColorMode(mode: Int) {
@@ -132,6 +138,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAutoOrganize(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[AUTO_ORGANIZE_KEY] = if (enabled) 1 else 0
+        }
+    }
+
+    suspend fun setToolboxOpenInBrowser(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[TOOLBOX_BROWSER_KEY] = if (enabled) 1 else 0
         }
     }
 }

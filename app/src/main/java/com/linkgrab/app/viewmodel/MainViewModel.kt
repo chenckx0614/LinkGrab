@@ -96,6 +96,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** 下载完成按 平台/日期 自动归档子目录，默认开。 */
     private val _autoOrganize = MutableStateFlow(true)
     val autoOrganize: StateFlow<Boolean> = _autoOrganize.asStateFlow()
+    private val _toolboxOpenInBrowser = MutableStateFlow(false)
+    val toolboxOpenInBrowser: StateFlow<Boolean> = _toolboxOpenInBrowser.asStateFlow()
 
     /** 批量解析结果（3.0）。 */
     private val _batchResults = MutableStateFlow<List<BatchParseItem>>(emptyList())
@@ -180,6 +182,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.autoOrganize.collect { _autoOrganize.value = it }
         }
         viewModelScope.launch {
+            settingsRepository.toolboxOpenInBrowser.collect { _toolboxOpenInBrowser.value = it }
+        }
+        viewModelScope.launch {
             settingsRepository.guideNeeded.collect {
                 // 只在第一次安装（本地无任何记录）时展示欢迎页
                 _guideShown.value = !it
@@ -231,6 +236,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setAutoOrganize(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setAutoOrganize(enabled) }
+    }
+
+    fun setToolboxOpenInBrowser(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setToolboxOpenInBrowser(enabled) }
     }
 
     fun markGuideShown() {

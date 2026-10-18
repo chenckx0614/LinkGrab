@@ -124,6 +124,8 @@ import com.linkgrab.app.ui.screens.MusicScreen
 import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
+import com.linkgrab.app.ui.screens.GameUrl
+import com.linkgrab.app.ui.screens.ToolWebScreen
 import com.linkgrab.app.ui.screens.UpdateLogScreen
 import com.linkgrab.app.ui.screens.UpdateSettingsScreen
 import com.linkgrab.app.ui.liquid.HarmonyOS7BottomTabs
@@ -163,6 +165,7 @@ sealed class Screen(val route: String, val title: String) {
     data object About : Screen("about", "关于应用")
     data object Donate : Screen("donate", "捐赠支持")
     data object Game : Screen("game", "奶蛙消消乐")
+    data object ToolWeb : Screen("tool_web", "工具网页")
     data object History : Screen("history", "历史记录")
     data object VideoToAudio : Screen("video_to_audio", "视频转音频")
     data object ImageConvert : Screen("image_convert", "图片转格式")
@@ -201,6 +204,9 @@ private val currentRouteState = mutableStateOf<String?>(null)
 /** 被覆盖页的模糊半径上限与暗化强度。 */
 private val CoverBlurRadius = 18.dp
 private const val CoverDimAlpha = 0.28f
+
+/** 文叔叔：免登录大文件传输。 */
+const val WenshushuUrl = "https://www.wenshushu.cn/"
 
 /**
  * 引导页离场：淡出收尾，不做横向推移——引导页更像"一层"而不是"栈里的一页"。
@@ -387,6 +393,7 @@ private fun MainTabs(
     onNavigateToAbout: () -> Unit,
     onNavigateToGame: () -> Unit,
     onNavigateToBottomBarStyle: () -> Unit,
+    onOpenWenshushu: () -> Unit,
 ) {
     HorizontalPager(
         state = pagerState,
@@ -416,6 +423,7 @@ private fun MainTabs(
             onNavigateToImageConvert = onNavigateToImageConvert,
             onNavigateToMusic = onNavigateToMusic,
             onNavigateToGame = onNavigateToGame,
+            onOpenWenshushu = onOpenWenshushu,
         )
     }
     }
@@ -489,6 +497,8 @@ fun AppNavigation(
     var pendingGuide by remember { mutableStateOf(false) }
     // 从引导页过来时，底栏的出发位置（就是引导页里那根预览条的位置）。
     var barEntryFrom by remember { mutableStateOf<Rect?>(null) }
+    // 工具箱网页类工具的目标地址（路由不带参数，用状态传递）。
+    var toolWebUrl by remember { mutableStateOf<String?>(null) }
     val liquidBackdrop = rememberLayerBackdrop {
         drawRect(Color.White.copy(alpha = 0.08f))
         drawContent()
@@ -588,7 +598,32 @@ fun AppNavigation(
                         navController.navigate(Screen.Music.route)
                     },
                     onNavigateToGame = {
-                        navController.navigate(Screen.Game.route)
+                        if (viewModel.toolboxOpenInBrowser.value) {
+                            // 「我的」里开了开关：消消乐也交给系统浏览器
+                            context.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(GameUrl),
+                                )
+                            )
+                        } else {
+                            navController.navigate(Screen.Game.route)
+                        }
+                    },
+                    onOpenWenshushu = {
+                        if (viewModel.toolboxOpenInBrowser.value) {
+                            // 「我的」里开了开关：交给系统浏览器
+                            context.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(WenshushuUrl),
+                                )
+                            )
+                        } else {
+                            // 默认：应用内打开
+                            toolWebUrl = WenshushuUrl
+                            navController.navigate(Screen.ToolWeb.route)
+                        }
                     },
                     onNavigateToUpdateSettings = {
                         navController.navigate(Screen.UpdateSettings.route)
@@ -655,6 +690,14 @@ fun AppNavigation(
             }
             iosPage(Screen.Game.route) {
                 GameScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.ToolWeb.route) {
+                ToolWebScreen(
+                    url = toolWebUrl ?: WenshushuUrl,
+                    // 用户反馈文叔叔用手机页面更正常，不再强制桌面版 UA
+                    desktop = false,
                     onBack = { navController.popBackStack() },
                 )
             }
