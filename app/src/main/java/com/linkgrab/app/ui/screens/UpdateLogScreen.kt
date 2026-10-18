@@ -25,6 +25,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.21", "2026-10-18", listOf(
+            "「二维码」按钮彻底修好：加宽按钮、收窄内边距，末尾字符不再被裁掉",
+        )
+    ),
+    UpdateLogItem(
         "3.0.20", "2026-10-18", listOf(
             "修复「二维码」按钮文字换行：按钮文案强制单行显示",
         )

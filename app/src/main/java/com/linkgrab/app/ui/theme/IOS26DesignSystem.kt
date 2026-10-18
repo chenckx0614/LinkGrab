@@ -408,7 +408,7 @@ fun IOS26Button(
             }
             .then(interactiveHighlight.modifier)
             .then(if (enabled) interactiveHighlight.gestureModifier else Modifier)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -464,7 +464,7 @@ fun IOS26OutlinedButton(
             }
             .then(interactiveHighlight.modifier)
             .then(if (enabled) interactiveHighlight.gestureModifier else Modifier)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

@@ -175,8 +175,8 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
                     }
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        IOS26OutlinedButton("粘贴", { paste(context) { input = it } }, Modifier.weight(0.8f))
-                        IOS26OutlinedButton("二维码", { qrLauncher.launch("image/*") }, Modifier.weight(0.8f))
+                        IOS26OutlinedButton("粘贴", { paste(context) { input = it } }, Modifier.weight(0.7f))
+                        IOS26OutlinedButton("二维码", { qrLauncher.launch("image/*") }, Modifier.weight(0.9f))
                         IOS26Button("解析", { viewModel.parseUrl(input) }, Modifier.weight(1f), input.isNotBlank() && !state.isLoading)
                     }
                     if (state.isLoading) {
