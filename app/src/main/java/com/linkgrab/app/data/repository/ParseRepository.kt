@@ -1,10 +1,13 @@
 package com.linkgrab.app.data.repository
 
 import android.content.Context
+import com.linkgrab.app.data.api.BilibiliParser
 import com.linkgrab.app.data.api.CronetFetcher
 import com.linkgrab.app.data.api.CronetPage
 import com.linkgrab.app.data.api.DouyinParser
+import com.linkgrab.app.data.api.GenericWebParser
 import com.linkgrab.app.data.api.WebViewParser
+import com.linkgrab.app.data.api.WeiboParser
 import com.linkgrab.app.data.api.XhsParser
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.Platform
@@ -24,9 +27,14 @@ class ParseRepository(context: Context) {
     private companion object {
         val DOUYIN_HOST_PATTERN = """(douyin\.com|v\.douyin\.com|iesdouyin\.com)/""".toRegex()
         val XHS_HOST_PATTERN = """(xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)/""".toRegex()
+        val BILIBILI_HOST_PATTERN = """(bilibili\.com|b23\.tv|bili2233\.cn)/""".toRegex()
+        val WEIBO_HOST_PATTERN = """(weibo\.com|weibo\.cn|t\.cn)/""".toRegex()
+        val HTTP_PATTERN = """^https?://""".toRegex()
         val KNOWN_URL_PATTERNS = listOf(
             """https?://(?:v\.douyin\.com|(?:\w+\.)?douyin\.com|(?:\w+\.)?iesdouyin\.com)(?:/[^\s\u3000\"'<>()（）【】\[\]{}]*)?""".toRegex(),
             """https?://(?:(?:www\.)?xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)(?:/[^\s\u3000\"'<>()（）【】\[\]{}]*)?""".toRegex(),
+            """https?://(?:(?:www\.|m\.)?bilibili\.com|b23\.tv|bili2233\.cn)(?:/[^\s\u3000\"'<>()（）【】\[\]{}]*)?""".toRegex(),
+            """https?://(?:(?:www\.|m\.)?weibo\.com|m\.weibo\.cn|weibo\.cn|t\.cn)(?:/[^\s\u3000\"'<>()（）【】\[\]{}]*)?""".toRegex(),
         )
         val GENERIC_URL_PATTERN = """https?://[^\s\u3000\"'<>()（）【】\[\]{}]+""".toRegex()
 
@@ -39,11 +47,17 @@ class ParseRepository(context: Context) {
 
     private val douyinParser = DouyinParser()
     private val xhsParser = XhsParser()
+    private val bilibiliParser = BilibiliParser()
+    private val weiboParser = WeiboParser()
+    private val genericWebParser = GenericWebParser()
     private val legacyParser = WebViewParser(context)
     private val cronetFetcher = CronetFetcher(context)
 
     /**
      * Detect which platform the URL belongs to.
+     *
+     * 任何 http(s) 链接都会落到 [Platform.WEB]：通用网页抓取（og:video / <video> /
+     * 大图）本身就是一个功能，不再是「不支持的链接」。
      */
     fun detectPlatform(url: String): Platform {
         val cleanUrl = extractUrl(url).lowercase()
@@ -52,6 +66,9 @@ class ParseRepository(context: Context) {
             // 小红书域名必须覆盖短链变体：xhslink.com / xhslink.cn / xslink.com / xhs.link。
             // 缺少任一变体时，App 内复制的分享文案会被判成"不支持的链接"。
             XHS_HOST_PATTERN.containsMatchIn(cleanUrl) -> Platform.XIAOHONGSHU
+            BILIBILI_HOST_PATTERN.containsMatchIn(cleanUrl) -> Platform.BILIBILI
+            WEIBO_HOST_PATTERN.containsMatchIn(cleanUrl) -> Platform.WEIBO
+            HTTP_PATTERN.containsMatchIn(cleanUrl) -> Platform.WEB
             else -> Platform.UNKNOWN
         }
     }
@@ -153,7 +170,10 @@ class ParseRepository(context: Context) {
                     )
                 )
             }
-            Platform.UNKNOWN -> Result.failure(Exception("不支持的链接格式，请输入抖音或小红书链接"))
+            Platform.BILIBILI -> bilibiliParser.parse(cleanUrl)
+            Platform.WEIBO -> weiboParser.parse(cleanUrl)
+            Platform.WEB -> genericWebParser.parse(cleanUrl)
+            Platform.UNKNOWN -> Result.failure(Exception("没有识别到可解析的链接"))
         }
     }
 

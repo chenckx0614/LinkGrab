@@ -5,13 +5,15 @@ import kotlinx.serialization.Serializable
 /**
  * 音乐解析结果。
  *
- * 当前只接入酷我（kuwo）：它的 `anti.s` 直链转换接口不需要 token、
- * 防盗链也最松，是实测当下唯一稳定的来源。其它平台（网易云/QQ）
- * 的直链都带一次性时效签名，纯客户端基本下载不到。
+ * 2026-10 起从「只有酷我」扩成多源：酷我 / 网易云 / QQ 音乐。
+ * `source` 标明来源，`rid` 的语义变成「该平台的歌曲 id」：
+ *  - 酷我：纯数字 rid
+ *  - 网易云：纯数字歌曲 id
+ *  - QQ 音乐：songmid（字母数字混合）
  */
 @Serializable
 data class MusicResult(
-    /** 酷我歌曲 id（rid）。 */
+    /** 平台内的歌曲 id（酷我 rid / 网易云 id / QQ songmid）。 */
     val rid: String,
     /** 歌名。可能为空（歌词接口拿不到时）。 */
     val title: String = "",
@@ -25,6 +27,8 @@ data class MusicResult(
     val playUrl128k: String? = null,
     /** 320k MP3 直链（部分歌曲可能没有，解析失败时为 null）。 */
     val playUrl320k: String? = null,
-    /** 来源平台标识。 */
+    /** 来源平台标识："kuwo" / "netease" / "qq"。 */
     val source: String = "kuwo",
+    /** 实际拿到的码率标签（"320k"/"192k"/"128k"），仅用于展示。 */
+    val bitrateLabel: String = "",
 )

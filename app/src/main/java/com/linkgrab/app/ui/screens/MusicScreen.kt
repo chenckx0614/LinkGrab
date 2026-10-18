@@ -50,7 +50,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.linkgrab.app.data.api.KuwoMusicParser
+import com.linkgrab.app.data.api.MusicParser
 import com.linkgrab.app.data.model.MusicResult
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
@@ -84,7 +84,7 @@ private val qualityOptions = listOf(
 @Composable
 fun MusicScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val parser = remember { KuwoMusicParser() }
+    val parser = remember { MusicParser() }
 
     var input by remember { mutableStateOf("") }
     var parsing by remember { mutableStateOf(false) }
@@ -138,7 +138,7 @@ fun MusicScreen(onBack: () -> Unit) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "粘贴酷我音乐的分享链接",
+                    "粘贴酷我 / 网易云 / QQ 音乐的分享链接",
                     color = iosSecondaryLabel(),
                     fontSize = 14.sp,
                 )
@@ -149,8 +149,8 @@ fun MusicScreen(onBack: () -> Unit) {
                     IOS27TextField(
                         value = input,
                         onValueChange = { input = it },
-                        label = "酷我分享链接",
-                        placeholder = "https://kuwo.cn/play_detail/…",
+                        label = "音乐分享链接",
+                        placeholder = "https://kuwo.cn/…  /  music.163.com/…  /  y.qq.com/…",
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         singleLine = false,
                     )
@@ -205,7 +205,7 @@ fun MusicScreen(onBack: () -> Unit) {
                                     color = iosLabel(),
                                 )
                                 Text(
-                                    music.artist.ifEmpty { "酷我音乐" },
+                                    music.artist.ifEmpty { "未知歌手" },
                                     fontSize = 14.sp,
                                     color = iosSecondaryLabel(),
                                     modifier = Modifier.padding(top = 2.dp),
@@ -301,8 +301,8 @@ fun MusicScreen(onBack: () -> Unit) {
 
                 Spacer(Modifier.height(20.dp))
                 Text(
-                    "目前只支持酷我音乐链接。在酷我音乐 App 里找到歌曲，" +
-                        "点「分享 → 复制链接」，再粘贴到上面。",
+                    "支持酷我、网易云、QQ 音乐的单曲链接：在对应 App 里「分享 → 复制链接」，" +
+                        "再粘贴到上面。VIP / 数字专辑歌曲接口不给直链，会提示需要会员。",
                     color = iosSecondaryLabel(),
                     fontSize = 13.sp,
                     lineHeight = 19.sp,

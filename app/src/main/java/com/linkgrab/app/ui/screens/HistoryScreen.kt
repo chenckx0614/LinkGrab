@@ -103,6 +103,9 @@ import com.linkgrab.app.viewmodel.MainViewModel
 private fun platformName(raw: String): String = when (raw) {
     "douyin" -> "抖音"
     "xiaohongshu" -> "小红书"
+    "bilibili" -> "B站"
+    "weibo" -> "微博"
+    "web" -> "网页"
     else -> raw
 }
 

@@ -282,9 +282,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * 剪贴板提示专用：只认**专门适配过**的平台，不包含通用网页。
+     * 否则用户复制任何一条普通链接（新闻、地图）都会被弹一张「检测到网页链接」，
+     * 变成骚扰。通用抓取留给用户主动粘贴/分享。
+     */
+    fun clipboardLinkIn(text: String): String? =
+        extractUrls(text).firstOrNull {
+            val platform = parseRepository.detectPlatform(it)
+            platform != Platform.UNKNOWN && platform != Platform.WEB
+        }
+
     /** 平台显示名（给剪贴板提示卡片用）。 */
     fun platformLabelOf(url: String): String =
         parseRepository.detectPlatform(url).displayName
+
+    /**
+     * 输入框里这段文字的「已识别平台」标签；认不出链接就返回 null。
+     * 任何 http(s) 链接都会识别成「网页」（通用抓取），所以这里不再有"不支持"。
+     */
+    fun platformNameOfInput(text: String): String? {
+        val link = supportedLinkIn(text) ?: return null
+        val platform = parseRepository.detectPlatform(link)
+        return if (platform == Platform.UNKNOWN) null else platform.displayName
+    }
 
     fun markGuideShown() {
         viewModelScope.launch { settingsRepository.setGuideShown() }
@@ -301,7 +322,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // 批量解析：抽取出文本里的全部链接，只留支持的平台
         val urls = extractUrls(url).filter { parseRepository.detectPlatform(it) != Platform.UNKNOWN }
         if (urls.isEmpty()) {
-            _uiState.value = _uiState.value.copy(error = "不支持的链接，请输入抖音或小红书链接")
+            _uiState.value = _uiState.value.copy(error = "没有识别到链接，粘贴一条分享链接再试")
             return
         }
 
@@ -963,10 +984,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun buildMediaRequest(url: String, range: String?): Request {
         val builder = Request.Builder().url(url).header("User-Agent", BROWSER_UA)
-        // 小红书 CDN 对空 Referer 的请求更容易 403
-        if (url.contains("xhscdn.com") || url.contains("xiaohongshu.com")) {
-            builder.header("Referer", "https://www.xiaohongshu.com/")
+        // 各家 CDN 的防盗链规则不同：
+        //  - 小红书：空 Referer 更容易 403
+        //  - B 站 *.bilivideo.com / *.hdslb.com：必须带 bilibili.com 的 Referer
+        //  - 微博 sinaimg / weibocdn：带 weibo.com
+        //  - 网易云/QQ 音乐/酷我：带各自站点（部分直链会校验）
+        val referer = when {
+            url.contains("xhscdn.com") || url.contains("xiaohongshu.com") -> "https://www.xiaohongshu.com/"
+            url.contains("bilivideo.com") || url.contains("hdslb.com") || url.contains("bilibili.com") ->
+                "https://www.bilibili.com/"
+            url.contains("sinaimg.cn") || url.contains("weibo.com") || url.contains("weibocdn.com") ->
+                "https://weibo.com/"
+            url.contains("music.163.com") || url.contains("126.net") -> "https://music.163.com/"
+            url.contains("qq.com") || url.contains("qqmusic") -> "https://y.qq.com/"
+            url.contains("kuwo.cn") -> "https://www.kuwo.cn/"
+            else -> null
         }
+        referer?.let { builder.header("Referer", it) }
         if (range != null) builder.header("Range", range)
         return builder.build()
     }

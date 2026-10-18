@@ -82,5 +82,9 @@ enum class MediaType {
 enum class Platform(val displayName: String) {
     DOUYIN("抖音"),
     XIAOHONGSHU("小红书"),
-    UNKNOWN("未知")
+    BILIBILI("B站"),
+    WEIBO("微博"),
+    /** 通用网页：走 [com.linkgrab.app.data.api.GenericWebParser] 抓 og/video/img。 */
+    WEB("网页"),
+    UNKNOWN("未知"),
 }

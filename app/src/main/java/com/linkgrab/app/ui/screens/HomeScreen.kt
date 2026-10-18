@@ -3,6 +3,8 @@ package com.linkgrab.app.ui.screens
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -67,16 +69,28 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
     var clipboardLink by remember { mutableStateOf<String?>(null) }
     var dismissedLink by remember { mutableStateOf<String?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, clipboardDetect) {
-        if (!clipboardDetect) clipboardLink = null
+    DisposableEffect(lifecycleOwner, clipboardDetect) {        if (!clipboardDetect) clipboardLink = null
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME && clipboardDetect) {
-                val link = readClipboard(context)?.let { viewModel.supportedLinkIn(it) }
+                val link = readClipboard(context)?.let { viewModel.clipboardLinkIn(it) }
                 clipboardLink = if (link != null && link != dismissedLink && link != input) link else null
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    // 二维码：从相册选一张图，用 ZXing 解出里面的链接（不做相机预览，
+    // 这样不用申请 CAMERA 权限；截图/别人发来的分享码都能用）
+    val qrLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val decoded = decodeQrFromImage(context, uri)
+        if (decoded.isNullOrBlank()) {
+            Toast.makeText(context, "这张图里没读出二维码", Toast.LENGTH_SHORT).show()
+            return@rememberLauncherForActivityResult
+        }
+        val link = viewModel.supportedLinkIn(decoded) ?: decoded
+        input = link
+        viewModel.parseUrl(link)
     }
     // result 是持久状态（结果页返回后仍非空），据此跳转会造成「返回首页→
     // 立刻再跳回结果页」的死循环。跳转改由 MainViewModel.navigateToResult
@@ -161,8 +175,9 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
                     }
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        IOS26OutlinedButton("从剪贴板粘贴", { paste(context) { input = it } }, Modifier.weight(1f))
-                        IOS26Button("解析", { viewModel.parseUrl(input) }, Modifier.weight(0.72f), input.isNotBlank() && !state.isLoading)
+                        IOS26OutlinedButton("粘贴", { paste(context) { input = it } }, Modifier.weight(0.8f))
+                        IOS26OutlinedButton("二维码", { qrLauncher.launch("image/*") }, Modifier.weight(0.8f))
+                        IOS26Button("解析", { viewModel.parseUrl(input) }, Modifier.weight(1f), input.isNotBlank() && !state.isLoading)
                     }
                     if (state.isLoading) {
                         Spacer(Modifier.height(14.dp))
@@ -171,14 +186,11 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
                 }
             }
             item {
-                val platform = when {
-                    input.contains("douyin.com") -> Platform.DOUYIN
-                    input.contains("xiaohongshu.com") || input.contains("xhslink.com") || input.contains("xhslink.cn") -> Platform.XIAOHONGSHU
-                    else -> Platform.UNKNOWN
-                }
-                if (platform != Platform.UNKNOWN) {
+                // 平台识别标签：任何 http 链接都会显示「网页」（通用直链抓取）
+                val platformName = viewModel.platformNameOfInput(input)
+                if (platformName != null) {
                     Text(
-                        "已识别：${platform.displayName}",
+                        "已识别：$platformName",
                         color = iosBlue(),
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 4.dp),
@@ -224,3 +236,33 @@ private fun readClipboard(context: Context): String? {
         ?.toString()
         ?.takeIf { it.isNotBlank() }
 }
+
+/**
+ * 从相册图片里识别二维码（ZXing core，纯 Java，不需要相机权限）。
+ *
+ * 大图先做一次采样缩小：4000×3000 的原图直接 binarize 又慢又吃内存，
+ * 二维码识别只需要 1000px 左右就够。
+ */
+private fun decodeQrFromImage(context: Context, uri: android.net.Uri): String? = runCatching {
+    val bitmap = context.contentResolver.openInputStream(uri)?.use {
+        android.graphics.BitmapFactory.decodeStream(it)
+    } ?: return@runCatching null
+
+    val scaled = if (bitmap.width > 1200) {
+        val ratio = 1200f / bitmap.width
+        android.graphics.Bitmap.createScaledBitmap(
+            bitmap,
+            1200,
+            (bitmap.height * ratio).toInt().coerceAtLeast(1),
+            true,
+        )
+    } else {
+        bitmap
+    }
+
+    val pixels = IntArray(scaled.width * scaled.height)
+    scaled.getPixels(pixels, 0, scaled.width, 0, 0, scaled.width, scaled.height)
+    val source = com.google.zxing.RGBLuminanceSource(scaled.width, scaled.height, pixels)
+    val binary = com.google.zxing.BinaryBitmap(com.google.zxing.common.HybridBinarizer(source))
+    com.google.zxing.MultiFormatReader().decode(binary).text
+}.getOrNull()

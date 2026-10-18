@@ -13,8 +13,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 319
-        versionName = "3.0.18"
+        versionCode = 320
+        versionName = "3.0.19"
     }
 
     buildTypes {
@@ -105,4 +105,7 @@ dependencies {
 
     // FFmpeg Kit - Media processing (min variant for smaller size)
     implementation(libs.ffmpeg.kit.min)
+
+    // ZXing core：从相册图片里识别二维码（纯 Java，约 0.5MB，不需要相机权限）
+    implementation("com.google.zxing:core:3.5.3")
 }
