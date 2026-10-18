@@ -115,6 +115,7 @@ import com.linkgrab.app.ui.screens.BatchResultScreen
 import com.linkgrab.app.ui.screens.BottomBarStyleScreen
 import com.linkgrab.app.ui.screens.DonateScreen
 import com.linkgrab.app.ui.screens.DownloadsScreen
+import com.linkgrab.app.ui.screens.FileTransferScreen
 import com.linkgrab.app.ui.screens.GameScreen
 import com.linkgrab.app.ui.screens.GuideScreen
 import com.linkgrab.app.ui.screens.HistoryScreen
@@ -165,6 +166,7 @@ sealed class Screen(val route: String, val title: String) {
     data object About : Screen("about", "关于应用")
     data object Donate : Screen("donate", "捐赠支持")
     data object Game : Screen("game", "奶蛙消消乐")
+    data object FileTransfer : Screen("file_transfer", "文件传输")
     data object ToolWeb : Screen("tool_web", "工具网页")
     data object History : Screen("history", "历史记录")
     data object VideoToAudio : Screen("video_to_audio", "视频转音频")
@@ -408,7 +410,7 @@ private fun MainTabs(
     onNavigateToAbout: () -> Unit,
     onNavigateToGame: () -> Unit,
     onNavigateToBottomBarStyle: () -> Unit,
-    onOpenWenshushu: () -> Unit,
+    onNavigateToFileTransfer: () -> Unit,
 ) {
     HorizontalPager(
         state = pagerState,
@@ -438,7 +440,7 @@ private fun MainTabs(
             onNavigateToImageConvert = onNavigateToImageConvert,
             onNavigateToMusic = onNavigateToMusic,
             onNavigateToGame = onNavigateToGame,
-            onOpenWenshushu = onOpenWenshushu,
+            onNavigateToFileTransfer = onNavigateToFileTransfer,
         )
     }
     }
@@ -633,20 +635,8 @@ fun AppNavigation(
                             navController.navigate(Screen.Game.route)
                         }
                     },
-                    onOpenWenshushu = {
-                        if (viewModel.toolboxOpenInBrowser.value) {
-                            // 「我的」里开了开关：交给系统浏览器
-                            context.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse(WenshushuUrl),
-                                )
-                            )
-                        } else {
-                            // 默认：应用内打开
-                            toolWebUrl = WenshushuUrl
-                            navController.navigate(Screen.ToolWeb.route)
-                        }
+                    onNavigateToFileTransfer = {
+                        navController.navigate(Screen.FileTransfer.route)
                     },
                     onNavigateToUpdateSettings = {
                         navController.navigate(Screen.UpdateSettings.route)
@@ -714,6 +704,26 @@ fun AppNavigation(
             iosPage(Screen.Game.route) {
                 GameScreen(
                     onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.FileTransfer.route) {
+                FileTransferScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenUrl = { url ->
+                        if (viewModel.toolboxOpenInBrowser.value) {
+                            // 「我的 → 通用」里开了开关：所有中转站都交给系统浏览器
+                            context.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(url),
+                                )
+                            )
+                        } else {
+                            // 默认：应用内 WebView 打开（右上角菜单可随时改浏览器）
+                            toolWebUrl = url
+                            navController.navigate(Screen.ToolWeb.route)
+                        }
+                    },
                 )
             }
             iosPage(Screen.ToolWeb.route) {

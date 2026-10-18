@@ -42,7 +42,7 @@ fun ToolboxScreen(
     onNavigateToImageConvert: () -> Unit = {},
     onNavigateToMusic: () -> Unit = {},
     onNavigateToGame: () -> Unit = {},
-    onOpenWenshushu: () -> Unit = {},
+    onNavigateToFileTransfer: () -> Unit = {},
 ) {
     IOS26Canvas {
         IOS26StickyPage(title = "工具") {
@@ -59,7 +59,7 @@ fun ToolboxScreen(
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
                     ToolRow("奶蛙消消乐", "顺便玩一局，摸鱼必备", onNavigateToGame)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
-                    ToolRow("文叔叔", "免登录大文件传输，手机电脑互传", onOpenWenshushu)
+                    ToolRow("文件传输", "文叔叔 / AirPortal / 轻松传等 6 个中转站", onNavigateToFileTransfer)
                 }
             }
             item {
@@ -75,7 +75,7 @@ fun ToolboxScreen(
 }
 
 @Composable
-private fun ToolRow(title: String, subtitle: String, onClick: () -> Unit) {
+internal fun ToolRow(title: String, subtitle: String, onClick: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(

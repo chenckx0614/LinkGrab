@@ -31,13 +31,18 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material.icons.filled.Refresh
@@ -55,17 +60,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.linkgrab.app.ui.liquid.LiquidGlassBackButton
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenu
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenuItem
@@ -93,6 +102,88 @@ private const val DispatchResizeJs =
     "(function(){window.dispatchEvent(new Event('resize'));})();"
 
 /**
+ * 视口自愈脚本（每次按真实视图宽度生成）。
+ *
+ * 线上实测：文叔叔手机页是**响应式**的——`html` 的 font-size 由 JS 按
+ * `innerWidth / 10` 算出来（390 → 39px，800 → 54px，带 54 上限），
+ * 所以只要 WebView 报给页面的 `innerWidth` 是对的，整页就完整。
+ *
+ * 但 WebView 有两条独立的坑会毁掉这个前提：
+ *  1. **初始布局视口可能是宽视口**（980 或旧尺寸）。页面脚本在那时候算
+ *     rootFont，于是整页按错误宽度排版 —— 390 的屏里只画得下左半边，
+ *     就是用户看到的「显示不全 / 图片列表缺一半」。页面自己的 resize
+ *     监听能救，但只有真的发生 resize 才会重算。
+ *  2. **固定宽设计的站点**（内容比视口宽）在 WebView 里不会像手机浏览器
+ *     那样 shrink-to-fit，同样只显示左边一截。
+ *
+ * 对策：
+ *  - `innerWidth` 明显大于视图宽（>8%）→ 把 viewport meta 强制改成
+ *    `width=<视图宽>, initial-scale=1`，把布局视口拉回真实宽度；
+ *  - 内容比视口宽 → 按浏览器 shrink-to-fit 的算法缩放
+ *    （`width=<内容宽>, initial-scale=视口/内容宽`）；
+ *  - 改完补发一次 `resize`，让站点的 rootFont / --vh 重算。
+ * 两条都不成立（绝大多数正常页面）时脚本什么都不做。
+ */
+private fun buildFitViewportJs(cssWidth: Int): String = """
+    (function () {
+      try {
+        var d = document.documentElement;
+        var iw = window.innerWidth;
+        if (!iw) return;
+        var m = document.querySelector('meta[name="viewport"]');
+        if (!m) {
+          m = document.createElement('meta');
+          m.setAttribute('name', 'viewport');
+          document.head.appendChild(m);
+        }
+        if (iw > $cssWidth * 1.08) {
+          m.setAttribute('content', 'width=$cssWidth, initial-scale=1');
+        } else {
+          var cw = Math.max(d.scrollWidth || 0, (document.body && document.body.scrollWidth) || 0);
+          if (cw > iw + 8 && (window.__lgFitTries || 0) < 2) {
+            m.setAttribute('content', 'width=' + Math.round(cw) + ', initial-scale=' + (iw / cw).toFixed(4));
+            window.__lgFitTries = (window.__lgFitTries || 0) + 1;
+          } else {
+            return;
+          }
+        }
+        setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 120);
+      } catch (e) { }
+    })();
+""".trimIndent()
+
+/**
+ * 「页面诊断」注入的脚本：把网页**自己**量到的视口/文档尺寸、CSS 变量、
+ * 图片加载数、DOM 节点数一起回传。显示不全时凭这一屏就能判断是
+ * 被裁（文档宽 > 视口宽）、没加载（图片 ok 数少）、还是内核不支持。
+ */
+private val DiagnosticJs = """
+    (function () {
+      try {
+        var d = document.documentElement, b = document.body;
+        var imgs = Array.prototype.slice.call(document.images);
+        var ok = imgs.filter(function (i) { return i.complete && i.naturalWidth > 0; }).length;
+        var cs = getComputedStyle(d);
+        var vh = cs.getPropertyValue('--vh').trim();
+        var lines = [];
+        lines.push('url ' + location.href);
+        lines.push('viewport ' + window.innerWidth + ' x ' + window.innerHeight + ' @' + (window.devicePixelRatio || 1));
+        lines.push('doc ' + d.scrollWidth + ' x ' + d.scrollHeight);
+        lines.push('body ' + (b ? b.scrollWidth + ' x ' + b.scrollHeight : 'null'));
+        lines.push('root font ' + cs.fontSize + '   --vh ' + (vh || 'unset'));
+        lines.push('images ' + ok + '/' + imgs.length + ' loaded');
+        lines.push('nodes ' + d.getElementsByTagName('*').length +
+          '   #app children ' + ((document.querySelector('#app') || {}).childElementCount || 0));
+        lines.push('title ' + document.title);
+        lines.push('ua ' + navigator.userAgent);
+        return lines.join('\n');
+      } catch (e) {
+        return 'ERR ' + e;
+      }
+    })();
+""".trimIndent()
+
+/**
  * 奶蛙消消乐（工具箱 → 应用内 WebView 游戏页）。
  * 游戏页用原始配方（透明底、无 viewport 干预），实测最稳。
  */
@@ -116,18 +207,20 @@ fun ToolWebScreen(url: String, onBack: () -> Unit, desktop: Boolean = false) =
  * 覆盖层用 topInset 显式定位并减去菜单自带的 24dp 阴影内边距，
  * 保证收起态按钮与返回键在**同一条直线上**（对齐 ResultScreen 的配方）。
  *
- * 防白屏 / 防掉帧 / 防卡死：
+ * 防白屏 / 防掉帧 / 防卡死 / 防「显示不全」：
  * - WebView **延迟到转场结束后再挂载**（转场期间每帧 measure 全屏自绘大户必掉帧）。
  * - **等 WebView 量出尺寸再 loadUrl**：边长为 0 时开跑，站点按
- *   `window.innerHeight` 算出的 `--vh` 会是 0，整页高度塌陷（文叔叔就是这么
- *   表现的：只剩客服球 / ☰ / 打开App 横幅）。
- * - 页面加载完成后补发一次 `resize`，让站点用真实 innerHeight 重算一次
- *   `--vh`——命中缓存、首帧尺寸未定时也能自动纠正。
+ *   `window.innerHeight` 算出的 `--vh` 会是 0，整页高度塌陷。
+ * - **宽页面缩小适配**（[FitViewportJs]）：文叔叔这类固定 750px 设计的站点，
+ *   手机浏览器会 shrink-to-fit，WebView 只会显示左边一半 —— 实测 390 宽只
+ *   露出半屏。加载完注入 viewport meta 让整页缩进屏幕。
  * - 页面加载完成后整体淡入，首帧不闪；淡入结束摘掉 alpha 合成层。
  * - 主框架加载失败或 10 秒超时进入失败态（重试 / 浏览器打开），不再无限转圈。
  * - 工具页用标准手机 Chrome UA（去掉 WebView 标记），避免被站点识别为空壳/限制渲染。
  * - WebChromeClient + 三方 Cookie：缺了它们 alert/file/登录态会静默失效；
  *   文件选择器单独接 onShowFileChooser，否则「选择文件」点了没反应。
+ * - 右上角菜单的玻璃采样「打开菜单那一刻的页面截图」（CanvasBackdrop），
+ *   绝不把活的 WebView 录进采样层 —— 那会让网页闪、缺块。
  */
 @Composable
 fun WebPageScreen(
@@ -195,9 +288,31 @@ fun WebPageScreen(
     val topInset = WindowInsets.statusBars
         .asPaddingValues()
         .calculateTopPadding()
-    // 菜单的玻璃采样源：只采顶栏，不采 WebView。
-    // WebView 是硬件视图，把它录进 layerBackdrop 会导致画面闪 / 显示不全。
-    val headerBackdrop = rememberLayerBackdrop()
+    val density = LocalDensity.current
+    // 页面诊断（菜单 →「页面诊断」）：把网页自己报告的视口/文档/图片状态读出来，
+    // 显示不全时用户截一张图就能定位到底是「被裁」「没加载」还是「内核不支持」。
+    var diagnostics by remember { mutableStateOf<String?>(null) }
+    // WebView 在 root 里的顶边（菜单玻璃截图要按它对齐）
+    val webViewTopPx = remember { floatArrayOf(0f) }
+    val screenWidthPx = with(density) {
+        androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp.toPx()
+    }
+    // 菜单玻璃的采样源 = 打开菜单那一刻的**静态网页截图**。
+    //
+    // 绝不能采样活的 WebView：WebView 走 Chromium 自己的 functor 合成，
+    // 被录进 layerBackdrop / GraphicsLayer 时画面会闪、会缺块（3.0.6~3.0.13
+    // 反复踩的坑）。用截图做 CanvasBackdrop：玻璃里是真实的页面模糊，
+    // 而且截图是死图，永远不会干扰网页自身的绘制。
+    val menuShadow = remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    val glassFallback = iosBackground()
+    val menuBackdrop = rememberCanvasBackdrop {
+        val shot = menuShadow.value
+        if (shot != null) {
+            drawImage(shot, topLeft = Offset.Zero)
+        } else {
+            drawRect(glassFallback)
+        }
+    }
 
     LaunchedEffect(Unit) {
         delay(500) // 覆盖 push 转场窗口（440ms），转场画完才让 WebView 上场
@@ -226,6 +341,86 @@ fun WebPageScreen(
                 android.net.Uri.parse(url),
             )
         )
+    }
+
+    /**
+     * 截「菜单面板后面那一块」网页，给玻璃当采样源（见 [menuBackdrop]）。
+     *
+     * 面板固定贴在右上角：宽 200dp、右边距 16dp、顶边 topInset + 8dp；
+     * 面板上半截压在本应用顶栏上（网页从 topInset + 58dp 才开始），所以先把
+     * 顶栏底色铺满，再把网页内容按位移画进下半截。只截 200×380dp 的小图，
+     * 不做全屏截图，避免点开菜单时卡一下。
+     */
+    fun captureMenuShadow() {
+        val wv = webView ?: return
+        if (wv.width <= 0 || wv.height <= 0) return
+        try {
+            with(density) {
+                val wPx = 200.dp.toPx()
+                val hPx = 380.dp.toPx()
+                val left = screenWidthPx - 16.dp.toPx() - wPx
+                val top = topInset.toPx() + 8.dp.toPx()
+                val wvTop = if (webViewTopPx[0] > 0f) {
+                    webViewTopPx[0]
+                } else {
+                    top + 58.dp.toPx()
+                }
+
+                val bitmap = Bitmap.createBitmap(
+                    wPx.toInt().coerceAtLeast(1),
+                    hPx.toInt().coerceAtLeast(1),
+                    Bitmap.Config.ARGB_8888,
+                )
+                val canvas = Canvas(bitmap)
+                canvas.drawColor(glassFallback.toArgb())
+                canvas.save()
+                canvas.clipRect(0f, (wvTop - top).coerceAtLeast(0f), wPx, hPx)
+                canvas.translate(-left, wvTop - top)
+                wv.draw(canvas)
+                canvas.restore()
+                menuShadow.value = bitmap.asImageBitmap()
+            }
+        } catch (e: Exception) {
+            // 截图失败就退回纯底色玻璃，不影响菜单可用
+            android.util.Log.w("LinkGrabWeb", "menu glass snapshot failed: ${e.message}")
+        }
+    }
+
+    /**
+     * 对页面做两件「浏览器会做、WebView 不会做」的事（见 [buildFitViewportJs]）：
+     * 把布局视口拉回真实视图宽度，以及让超宽页面缩进屏幕。
+     * 之后补发 resize，让站点按新宽度重算 rootFont / --vh。
+     */
+    fun applyViewportFixes(target: WebView) {
+        if (target.width <= 0) return
+        val cssWidth = (target.width / density.density).toInt().coerceAtLeast(1)
+        target.evaluateJavascript(buildFitViewportJs(cssWidth), null)
+        target.evaluateJavascript(DispatchResizeJs, null)
+    }
+
+    /**
+     * 把网页自己报告的视口/文档/图片状态读出来。
+     * 用在「打开后显示不全」这类只能靠现场数据定位的问题上。
+     */
+    fun runDiagnostics() {
+        val wv = webView ?: return
+        diagnostics = "读取中…"
+        val engine = runCatching {
+            Regex("Chrome/[0-9.]+")
+                .find(WebSettings.getDefaultUserAgent(context))
+                ?.value
+        }.getOrNull() ?: "未知内核"
+        val cssWidth = if (wv.width > 0) {
+            (wv.width / density.density).toInt()
+        } else {
+            0
+        }
+        wv.evaluateJavascript(DiagnosticJs) { raw ->
+            val text = runCatching {
+                org.json.JSONTokener(raw).nextValue() as String
+            }.getOrNull() ?: raw
+            diagnostics = "内核 $engine\n视图 ${cssWidth}dp × ${wv.height}px\n$text"
+        }
     }
 
     /**
@@ -274,8 +469,7 @@ fun WebPageScreen(
                 Modifier
                     .fillMaxWidth()
                     .padding(top = topInset)
-                    .padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
-                    .layerBackdrop(headerBackdrop),
+                    .padding(start = 12.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 LiquidGlassBackButton(
@@ -361,7 +555,9 @@ fun WebPageScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 // 淡入期间才挂 alpha 层，稳定后摘掉（见 fadeFinished）
-                                .then(if (fadeFinished) Modifier else Modifier.alpha(webViewAlpha)),
+                                .then(if (fadeFinished) Modifier else Modifier.alpha(webViewAlpha))
+                                // WebView 在 root 里的顶边：菜单玻璃截图按它对齐网页内容
+                                .onGloballyPositioned { webViewTopPx[0] = it.positionInRoot().y },
                             factory = { ctx ->
                                 WebView(ctx).apply {
                                     settings.javaScriptEnabled = true
@@ -441,10 +637,10 @@ fun WebPageScreen(
                                                 " AppleWebKit/537.36 (KHTML, like Gecko)" +
                                                 " Chrome/124.0.0.0 Mobile Safari/537.36"
                                         settings.useWideViewPort = true
-                                        // 不跟 overviewMode：它会在内容比视口宽时把整页
-                                        // 缩到屏宽（文字变米粒、右边留白，像「显示不全」）。
-                                        // 站点自己带 width=device-width，按 1:1 排版最稳。
-                                        settings.loadWithOverviewMode = false
+                                        // 没有 viewport meta 的页面靠 overview 铺满宽度；
+                                        // 带 meta 的窄页面不受影响。固定宽设计的站点
+                                        // （文叔叔 750px）靠上面注入的 FitViewportJs 收尾。
+                                        settings.loadWithOverviewMode = true
                                         settings.setSupportZoom(true)
                                         settings.builtInZoomControls = true
                                         settings.displayZoomControls = false
@@ -484,20 +680,16 @@ fun WebPageScreen(
                                         ) {
                                             pageLoaded = true
                                             pageTitle = view.title ?: ""
-                                            // 站点按 window.innerHeight 算的 --vh 只算一次；
-                                            // 这里补发 resize，让它用真实视口高度重算。
-                                            // 首帧尺寸未定 / 命中缓存时算错的 --vh 会把
-                                            // 整页高度压成 0（只剩固定的客服球/横幅）。
-                                            view.evaluateJavascript(DispatchResizeJs, null)
+                                            // 视口自愈 + rootFont/--vh 重算，错峰多跑几次：
+                                            // SPA 是异步渲染的，晚一步画出来的内容也要覆盖到
+                                            applyViewportFixes(view)
                                             view.postDelayed(
-                                                {
-                                                    try {
-                                                        view.evaluateJavascript(DispatchResizeJs, null)
-                                                    } catch (_: Exception) {
-                                                        // WebView 已销毁，忽略
-                                                    }
-                                                },
-                                                350,
+                                                { runCatching { applyViewportFixes(view) } },
+                                                400,
+                                            )
+                                            view.postDelayed(
+                                                { runCatching { applyViewportFixes(view) } },
+                                                1200,
                                             )
                                         }
 
@@ -573,9 +765,8 @@ fun WebPageScreen(
                                                     h != oldBottom - oldTop
                                                 ) {
                                                     // 视口变了（旋屏 / 输入法 / 重新布局）：
-                                                    // 让站点重算 --vh 与整页高度
-                                                    (v as WebView)
-                                                        .evaluateJavascript(DispatchResizeJs, null)
+                                                    // 重新自愈视口并让站点重算 rootFont / --vh
+                                                    applyViewportFixes(v as WebView)
                                                 }
                                             }
                                         }
@@ -637,12 +828,17 @@ fun WebPageScreen(
             Box(Modifier.offset(x = 8.dp)) {
                 LiquidGlassDropdownMenu(
                     show = menuVisible,
-                    backdrop = headerBackdrop,
+                    // 采样「打开菜单那一刻的页面截图」，不采样活 WebView：
+                    // 玻璃里是真的页面模糊，网页自身完全不受影响（不闪、不缺块）
+                    backdrop = menuBackdrop,
                     fraction = menuFraction,
                     triggerIcon = Icons.Default.MoreVert,
                     triggerContentDescription = "更多",
                     onDismiss = { menuVisible = false },
-                    onExpand = { menuVisible = true },
+                    onExpand = {
+                        captureMenuShadow()
+                        menuVisible = true
+                    },
                 ) {
                     LiquidGlassDropdownMenuItem(
                         text = "刷新",
@@ -674,6 +870,86 @@ fun WebPageScreen(
                             )
                         },
                     )
+                    LiquidGlassDropdownMenuItem(
+                        text = "页面诊断",
+                        onClick = {
+                            menuVisible = false
+                            runDiagnostics()
+                        },
+                        icon = {
+                            Icon(
+                                Icons.Default.BugReport,
+                                contentDescription = null,
+                                tint = iosLabel(),
+                                modifier = Modifier.size(IOS26IconSize.MenuItem),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
+        // ---- 页面诊断面板：网页自己报的视口/文档尺寸，截图即可定位显示不全 ----
+        diagnostics?.let { report ->
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.28f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                    ) { diagnostics = null },
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth(0.92f)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(iosBackground())
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { MutableInteractionSource() },
+                        ) { /* 吃掉点击，避免点到面板就关掉 */ }
+                        .padding(16.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "页面诊断",
+                            color = iosLabel(),
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "关闭",
+                            color = iosBlue(),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable { diagnostics = null }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
+                    }
+                    Text(
+                        "doc 宽 > viewport 宽 = 页面被裁；images 未全加载 = 资源没下来",
+                        color = iosSecondaryLabel(),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    SelectionContainer {
+                        Text(
+                            report,
+                            color = iosLabel(),
+                            fontSize = 11.5.sp,
+                            lineHeight = 17.sp,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier
+                                .padding(top = 10.dp)
+                                .heightIn(max = 420.dp)
+                                .verticalScroll(rememberScrollState()),
+                        )
+                    }
                 }
             }
         }

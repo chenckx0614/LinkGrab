@@ -25,6 +25,14 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.15", "2026-10-18", listOf(
+            "工具箱新增「文件传输」二级页：文叔叔 / AirPortal 快传 / 轻松传 / file.kiwi / JiDrop / SendTomo",
+            "网页右上角菜单的毛玻璃改为采样「打开菜单那一刻的页面截图」，玻璃里是真的页面模糊，网页不再闪烁",
+            "文叔叔显示不全：新增视口自愈——布局视口比真实视图宽时强制拉回，内容超宽时按浏览器 shrink-to-fit 缩放",
+            "网页菜单新增「页面诊断」：一屏看清内核版本、视口/文档尺寸、图片加载数，方便定位显示不全",
+        )
+    ),
+    UpdateLogItem(
         "3.0.14", "2026-10-18", listOf(
             "修文叔叔「显示不全」：网页页不再被录进底栏玻璃采样层（WebView 被录制会丢图、大片灰块白块）",
             "网页页不再套模糊 + 投影外壳，WebView 直接渲染，图片与列表不再缺一半",
