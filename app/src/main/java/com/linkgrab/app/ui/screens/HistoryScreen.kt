@@ -43,20 +43,14 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxState
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -112,7 +106,7 @@ private fun platformName(raw: String): String = when (raw) {
     else -> raw
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (String) -> Unit) {
     val history by viewModel.allHistory.collectAsState(initial = emptyList())
@@ -266,51 +260,29 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                     }
                 }
             } else {
-                itemsIndexed(filtered, key = { _, item -> item.id }) { index, item ->
-                    // 左滑删除：滑过阈值不直接删，弹确认框（返回 false 卡片自己弹回）
-                    val currentItem by rememberUpdatedState(item)
-                    val dismissState = rememberSwipeToDismissBoxState(
-                        confirmValueChange = { value ->
-                            if (value == SwipeToDismissBoxValue.EndToStart) {
-                                pendingDelete = listOf(currentItem)
+                itemsIndexed(filtered, key = { _, item -> item.id }) { _, item ->
+                    HistoryCard(
+                        item = item,
+                        selectionMode = selectionMode,
+                        selected = item.id in selected,
+                        onClick = {
+                            if (selectionMode) {
+                                selected = if (item.id in selected) selected - item.id
+                                else selected + item.id
+                            } else {
+                                onParseUrl(item.url)
                             }
-                            false
                         },
-                        positionalThreshold = { distance -> distance * 0.35f },
+                        onLongClick = {
+                            if (selectionMode) {
+                                selected = if (item.id in selected) selected - item.id
+                                else selected + item.id
+                            } else {
+                                selectionMode = true
+                                selected = setOf(item.id)
+                            }
+                        },
                     )
-                    StaggeredAppear(index) {
-                        SwipeToDismissBox(
-                            state = dismissState,
-                            // 删除/新增时其余卡片弹簧跟随，而不是整列瞬间跳一下
-                            modifier = Modifier.animateItem(),
-                            enableDismissFromStartToEnd = false,
-                            enableDismissFromEndToStart = !selectionMode,
-                            backgroundContent = { SwipeDeleteBackground(dismissState) },
-                        ) {
-                            HistoryCard(
-                                item = item,
-                                selectionMode = selectionMode,
-                                selected = item.id in selected,
-                                onClick = {
-                                    if (selectionMode) {
-                                        selected = if (item.id in selected) selected - item.id
-                                        else selected + item.id
-                                    } else {
-                                        onParseUrl(item.url)
-                                    }
-                                },
-                                onLongClick = {
-                                    if (selectionMode) {
-                                        selected = if (item.id in selected) selected - item.id
-                                        else selected + item.id
-                                    } else {
-                                        selectionMode = true
-                                        selected = setOf(item.id)
-                                    }
-                                },
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -427,37 +399,6 @@ private fun HistoryCard(
                 modifier = Modifier.size(IOS26IconSize.Disclosure),
             )
         }
-    }
-}
-
-/**
- * 左滑时露出的红色删除底：随跟手进度加深、图标放大，松手未过阈值会自然收回。
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SwipeDeleteBackground(state: SwipeToDismissBoxState) {
-    val progress = state.progress
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .clip(IOSCornerMedium)
-            .background(IOSRed.copy(alpha = 0.10f + 0.18f * progress))
-            .padding(horizontal = 22.dp),
-        contentAlignment = Alignment.CenterEnd,
-    ) {
-        Icon(
-            Icons.Default.Delete,
-            contentDescription = "删除",
-            tint = IOSRed,
-            modifier = Modifier
-                .size(22.dp)
-                .graphicsLayer {
-                    alpha = 0.35f + 0.65f * progress
-                    val s = 0.85f + 0.15f * progress
-                    scaleX = s
-                    scaleY = s
-                },
-        )
     }
 }
 

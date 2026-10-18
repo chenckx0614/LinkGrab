@@ -134,39 +134,6 @@ fun animatedCounter(targetValue: Int): Int {
 }
 
 /**
- * 列表项错峰入场：前 [maxAnimated] 项依次「淡入 + 上浮 10dp」，间隔 26ms。
- *
- * 为什么只做前 N 项：LazyColumn 滚远再滚回来会重建 composition，
- * 如果每项都播，来回滑会一直重播，看起来像卡顿/闪烁。前 10 项盖住首屏即可，
- * 后面的直接出现（用户也不会注意）。
- */
-@Composable
-fun StaggeredAppear(
-    index: Int,
-    modifier: Modifier = Modifier,
-    maxAnimated: Int = 10,
-    content: @Composable () -> Unit,
-) {
-    val animated = index < maxAnimated
-    val progress = remember { Animatable(if (animated) 0f else 1f) }
-    LaunchedEffect(Unit) {
-        if (animated) {
-            delay(index * 26L)
-            progress.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
-        }
-    }
-    val rise = with(LocalDensity.current) { 10.dp.toPx() }
-    Box(
-        modifier.graphicsLayer {
-            alpha = progress.value
-            translationY = (1f - progress.value) * rise
-        }
-    ) {
-        content()
-    }
-}
-
-/**
  * 统一的「卡片展开」：头部点击 → chevron 弹簧旋转 90° + 内容高度弹簧展开 + 淡入。
  *
  * 以前各处各写一份 `AnimatedVisibility(expandVertically())`，曲线一致但手感

@@ -159,12 +159,6 @@ fun ResultScreen(
     val uiState by viewModel.uiState.collectAsState()
     val downloadState by viewModel.downloadState.collectAsState()
     val result = uiState.result
-    // 骨架 → 内容的交叉淡入进度（结果到达后 240ms 内从 0 到 1）
-    val contentFade by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (result != null) 1f else 0f,
-        animationSpec = androidx.compose.animation.core.tween(240),
-        label = "resultContentFade",
-    )
 
     var selectedImageIndex by remember { mutableIntStateOf(0) }
     var showPreview by remember { mutableStateOf(false) }
@@ -315,14 +309,7 @@ fun ResultScreen(
                         ResultLoadingSkeleton()
                     }
                 } else {
-                    // 骨架 → 内容交叉淡入：内容从 0 淡到 1 的同时骨架淡出，
-                    // 中间不会闪一帧纯背景（以前是硬切）
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { alpha = contentFade }
-                    ) {
-                        when (result.type) {
+                    when (result.type) {
                         MediaType.IMAGE -> ImageResultBody(
                             result = result,
                             gridState = gridState,
@@ -365,18 +352,6 @@ fun ResultScreen(
                         )
                         MediaType.UNKNOWN -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("无法识别的内容类型", color = iosSecondaryLabel(), fontSize = 15.sp)
-                        }
-                    }
-                    }
-                    // 内容淡入的过程中，骨架在下面同步淡出
-                    if (contentFade < 0.99f) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(top = topInset + IOS26HeaderHeight)
-                                .graphicsLayer { alpha = 1f - contentFade }
-                        ) {
-                            ResultLoadingSkeleton()
                         }
                     }
                 }

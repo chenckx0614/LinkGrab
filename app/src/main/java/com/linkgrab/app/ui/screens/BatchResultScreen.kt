@@ -84,18 +84,16 @@ fun BatchResultScreen(viewModel: MainViewModel, onBack: () -> Unit) {
 
             items(items.size, key = { items[it].url }) { index ->
                 val item = items[index]
-                StaggeredAppear(index, Modifier.animateItem()) {
-                    BatchCard(
-                        item = item,
-                        selected = selected[item.url] == true,
-                        onToggle = {
-                            if (item.isSuccess) {
-                                haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                                selected[item.url] = !(selected[item.url] ?: false)
-                            }
-                        },
-                    )
-                }
+                BatchCard(
+                    item = item,
+                    selected = selected[item.url] == true,
+                    onToggle = {
+                        if (item.isSuccess) {
+                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            selected[item.url] = !(selected[item.url] ?: false)
+                        }
+                    },
+                )
             }
 
             item {

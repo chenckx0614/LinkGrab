@@ -81,13 +81,11 @@ fun FileTransferScreen(
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     FileTransferServices.forEachIndexed { index, service ->
-                        StaggeredAppear(index) {
-                            ToolRow(
-                                title = service.name,
-                                subtitle = service.subtitle,
-                                onClick = { onOpenUrl(service.url) },
-                            )
-                        }
+                        ToolRow(
+                            title = service.name,
+                            subtitle = service.subtitle,
+                            onClick = { onOpenUrl(service.url) },
+                        )
                         if (index != FileTransferServices.lastIndex) {
                             IOS26Divider(Modifier.padding(vertical = 4.dp))
                         }

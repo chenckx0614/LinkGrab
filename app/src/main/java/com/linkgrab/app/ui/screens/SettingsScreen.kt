@@ -80,10 +80,8 @@ fun SettingsScreen(
             // 分组标题语言与二级页（更新设置/关于应用）统一：
             // panel 外 14sp 中性色小标题，panel 内不再放 20sp 大标题。
             item {
-                // 分组依次上浮入场（0/78/156ms 错峰），「我的」页不再一次性砸出来
-                StaggeredAppear(0) {
-                    SectionLabel("通知")
-                    IOS26Panel(Modifier.fillMaxWidth()) {
+                SectionLabel("通知")
+                IOS26Panel(Modifier.fillMaxWidth()) {
                     IOS26ListRow(
                         "实时状态通知",
                         "下载和解析时显示进度",
@@ -102,12 +100,10 @@ fun SettingsScreen(
                         Spacer(Modifier.padding(top = 8.dp))
                         IOS26Button("发送测试通知", { viewModel.testLiveUpdates() }, Modifier.fillMaxWidth())
                     }
-                    }
                 }
             }
 
             item {
-                StaggeredAppear(1) {
                 SectionLabel("外观")
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     // 深色模式：下载源同款下拉选择（点击展开、当前项打勾、选中即收起）
@@ -192,12 +188,10 @@ fun SettingsScreen(
                             modifier = Modifier.size(IOS26IconSize.Disclosure),
                         )
                     }
-                    }
                 }
             }
 
             item {
-                StaggeredAppear(2) {
                 SectionLabel("通用")
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     // 工具箱网页类工具的打开方式：应用内 or 系统浏览器
@@ -276,7 +270,6 @@ fun SettingsScreen(
                             tint = iosDisclosureColor(),
                             modifier = Modifier.size(IOS26IconSize.Disclosure),
                         )
-                    }
                     }
                 }
             }

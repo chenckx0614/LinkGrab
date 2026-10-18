@@ -137,23 +137,19 @@ fun DownloadsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
             } else {
                 items(tasks.size, key = { tasks[it].id }) { index ->
                     val task = tasks[index]
-                    StaggeredAppear(index, Modifier.animateItem()) {
-                        Column {
-                            TaskRow(
-                                task = task,
-                                onPause = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                                    viewModel.pauseTask(task.id)
-                                },
-                                onResume = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                                    viewModel.resumeTask(context, task.id)
-                                },
-                                onCancel = { viewModel.cancelTask(context, task.id) },
-                            )
-                            if (index != tasks.lastIndex) IOS26Divider(Modifier.padding(vertical = 4.dp))
-                        }
-                    }
+                    TaskRow(
+                        task = task,
+                        onPause = {
+                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            viewModel.pauseTask(task.id)
+                        },
+                        onResume = {
+                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            viewModel.resumeTask(context, task.id)
+                        },
+                        onCancel = { viewModel.cancelTask(context, task.id) },
+                    )
+                    if (index != tasks.lastIndex) IOS26Divider(Modifier.padding(vertical = 4.dp))
                 }
             }
 

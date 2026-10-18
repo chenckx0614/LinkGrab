@@ -51,18 +51,15 @@ fun ToolboxScreen(
             }
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
-                    // 行依次淡入上浮（26ms 间隔），比整块"啪"地出现更有层次
-                    StaggeredAppear(0) { ToolRow("音乐解析下载", "从酷我分享链接提取歌曲与歌词", onNavigateToMusic) }
+                    ToolRow("音乐解析下载", "从酷我分享链接提取歌曲与歌词", onNavigateToMusic)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
-                    StaggeredAppear(1) { ToolRow("视频转音频", "提取音频并保存到音乐资料库", onNavigateToVideoToAudio) }
+                    ToolRow("视频转音频", "提取音频并保存到音乐资料库", onNavigateToVideoToAudio)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
-                    StaggeredAppear(2) { ToolRow("图片转换", "转换 JPG、PNG、WebP 或 BMP", onNavigateToImageConvert) }
+                    ToolRow("图片转换", "转换 JPG、PNG、WebP 或 BMP", onNavigateToImageConvert)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
-                    StaggeredAppear(3) { ToolRow("奶蛙消消乐", "顺便玩一局，摸鱼必备", onNavigateToGame) }
+                    ToolRow("奶蛙消消乐", "顺便玩一局，摸鱼必备", onNavigateToGame)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
-                    StaggeredAppear(4) {
-                        ToolRow("文件传输", "文叔叔 / AirPortal / 轻松传等 6 个中转站", onNavigateToFileTransfer)
-                    }
+                    ToolRow("文件传输", "文叔叔 / AirPortal / 轻松传等 6 个中转站", onNavigateToFileTransfer)
                 }
             }
             item {

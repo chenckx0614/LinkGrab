@@ -24,7 +24,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,18 +78,6 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    // 错误时抖一下：fadeIn 太平，抖动 + 触觉才让人注意到"这条不行"
-    var errorTick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(state.error) {
-        if (!state.error.isNullOrBlank()) errorTick++
-    }
-    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-    LaunchedEffect(errorTick) {
-        if (errorTick > 0) {
-            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-        }
-    }
-
     // result 是持久状态（结果页返回后仍非空），据此跳转会造成「返回首页→
     // 立刻再跳回结果页」的死循环。跳转改由 MainViewModel.navigateToResult
     // 这个一次性事件驱动，统一在 AppNavigation 里处理。
@@ -142,11 +129,7 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
                 }
             }
             item {
-                IOS26Panel(
-                    Modifier
-                        .fillMaxWidth()
-                        .shakeOnTrigger(errorTick)
-                ) {
+                IOS26Panel(Modifier.fillMaxWidth()) {
                     Text(
                         "粘贴一个分享链接",
                         fontSize = 20.sp,
