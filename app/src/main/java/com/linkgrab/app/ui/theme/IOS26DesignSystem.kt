@@ -577,10 +577,9 @@ fun IOS26Choice(
 
 /**
  * iOS 26 风格开关，移植自 Nexio 课程表所用的 miuix [Switch]（Apache-2.0）。
- * 特性动画：① 滑块弹簧位移（damping 0.7 / stiffness 987，k 值高、回弹干脆）；
- * ② 按压/拖拽/悬停时滑块放大到 1.127× 的「挤缩」手感；③ 轨道颜色用
- * damping 0.99 / stiffness 438.6 的弹簧，开启瞬间会略微过冲再回落；④ 支持
- * 横向拖拽，拖到阈值翻状态，并在两端触发 ToggleOn/Off 触觉；⑤ 点击翻状态也带
+ * 特性动画：① 滑块弹簧位移（NoBouncy / stiffness 987，k 值高、到位干脆不回弹）；
+ * ② 按压/拖拽/悬停时滑块放大到 1.127× 的「挤缩」手感；③ 轨道颜色随状态淡变；
+ * ④ 支持横向拖拽，拖到阈值翻状态，并在两端触发 ToggleOn/Off 触觉；⑤ 点击翻状态也带
  * ToggleOn/Off 触觉。capsule 用 RoundedCornerShape(50) 等价（项目未引入 kyant capsule 库）。
  */
 @Composable
@@ -602,8 +601,8 @@ fun IOS26Switch(
     var hasVibratedOnce by remember { mutableStateOf(false) }
     var currentDragInteraction by remember { mutableStateOf<DragInteraction.Start?>(null) }
 
-    val thumbOffsetSpring = remember { spring<Dp>(dampingRatio = 0.7f, stiffness = 987f) }
-    val thumbScaleSpring = remember { spring<Float>(dampingRatio = 0.6f, stiffness = 987f) }
+    val thumbOffsetSpring = remember { spring<Dp>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 987f) }
+    val thumbScaleSpring = remember { spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 987f) }
 
     val thumbOffset by animateDpAsState(
         targetValue = (if (checked) 25.dp else 4.dp) + dragOffset.dp,

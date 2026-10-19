@@ -12,6 +12,11 @@
 - 按钮样式：白底胶囊 + iosBlue 蓝字（用户否掉了磨砂色团效果）。
 - 卡片列表要有间距（14dp 节奏），引导页与设置页排列方式保持一致（竖排大图）。
 
+## 动画规范（长期有效，写进 CLAUDE.md）
+- 所有动画默认：**弹簧动画（spring）**，且默认不回弹（`Spring.DampingRatioNoBouncy`）。
+- 拖动过程必须 1:1 跟手（直接用手势位移驱动），松手后用弹簧接住手指速度（把速度传给 spring，如 `initialVelocity`）。
+- 颜色 / 透明度等不挪位置的属性照常淡入淡出（tween / animate*AsState）。
+
 ## 引导页（GuideScreen）
 - 四页推进式：欢迎「3」→ 解析（guide_parse.png）→ 历史记录（guide_history.png）→ 底栏样式选择。
 - 页间推进：旧页左移半屏渐隐 + 新页右滑入；完成时背景模糊 + 白纱展开 + 样式卡落位衔接真底栏（barEntryFrom Rect）。

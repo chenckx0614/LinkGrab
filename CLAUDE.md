@@ -30,6 +30,12 @@
 
 **不允许跳过此步骤。**
 
+## 动画规范（所有动画必须遵守）
+
+- **弹簧动画（spring animation）**：位移类动画一律用 `spring`，默认不回弹（`dampingRatio = Spring.DampingRatioNoBouncy`）。
+- **拖动 1:1 跟手**：拖动过程中不要用动画插值，直接用手势位移驱动目标；松手后用弹簧接住手指的速度（把速度传给 `spring`，如 `initialVelocity`）。
+- **颜色 / 透明度照常淡入淡出**：不挪位置的属性（color、alpha、blur 等）用 `tween` / `animate*AsState` 正常淡入淡出即可。
+
 ## 技术栈
 
 - Kotlin 2.3.20 + Jetpack Compose
