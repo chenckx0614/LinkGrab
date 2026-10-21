@@ -534,6 +534,8 @@ fun AppNavigation(
     var barEntryFrom by remember { mutableStateOf<Rect?>(null) }
     // 工具箱网页类工具的目标地址（路由不带参数，用状态传递）。
     var toolWebUrl by remember { mutableStateOf<String?>(null) }
+    // 网盘直链等需要桌面版网页登录的站点：按入口切换 UA
+    var toolWebDesktop by remember { mutableStateOf(false) }
     val liquidBackdrop = rememberLayerBackdrop {
         drawRect(Color.White.copy(alpha = 0.08f))
         drawContent()
@@ -742,6 +744,7 @@ fun AppNavigation(
                         } else {
                             // 默认：应用内 WebView 打开（右上角菜单可随时改浏览器）
                             toolWebUrl = url
+                            toolWebDesktop = false
                             navController.navigate(Screen.ToolWeb.route)
                         }
                     },
@@ -750,8 +753,8 @@ fun AppNavigation(
             iosPage(Screen.ToolWeb.route) {
                 ToolWebScreen(
                     url = toolWebUrl ?: WenshushuUrl,
-                    // 用户反馈文叔叔用手机页面更正常，不再强制桌面版 UA
-                    desktop = false,
+                    // 用户反馈文叔叔用手机页面更正常，不再强制桌面版 UA；网盘登录走桌面版
+                    desktop = toolWebDesktop,
                     onBack = { navController.popBackStack() },
                 )
             }
@@ -768,7 +771,9 @@ fun AppNavigation(
                 PanDirectScreen(
                     onBack = { navController.popBackStack() },
                     onOpenQuarkLogin = {
+                        // 夸克手机网页强制引导下载 App，必须用桌面版 UA 才有网页登录
                         toolWebUrl = QuarkPan.HOME_URL
+                        toolWebDesktop = true
                         navController.navigate(Screen.ToolWeb.route)
                     },
                 )
