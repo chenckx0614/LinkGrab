@@ -8,9 +8,12 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -229,8 +232,8 @@ class BilibiliParser {
         val title = data["title"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { "B站视频" }
         val cover = data["pic"]?.jsonPrimitive?.contentOrNull
         val author = data["owner"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull.orEmpty()
-        val pages = data["pages"]?.jsonArray
-        val page = pages?.firstOrNull()?.jsonObject
+        val pages = data["pages"].jsonArraySafe()
+        val page = pages.firstOrNull()
         val cid = page?.get("cid")?.jsonPrimitive?.longOrNull
         val partName = page?.get("part")?.jsonPrimitive?.contentOrNull.orEmpty()
         require(cid != null) { "没拿到 cid，无法取播放地址" }
@@ -280,14 +283,13 @@ class BilibiliParser {
         val quality = data["quality"]?.jsonPrimitive?.longOrNull ?: 0L
         val label = qualityLabel(quality)
 
-        val durl = data["durl"]?.jsonArray
+        val durl = data["durl"].jsonArraySafe()
         val urls = buildList {
-            durl?.forEach { entry ->
-                val obj = entry.jsonObject
-                obj["url"]?.jsonPrimitive?.contentOrNull?.let { add(it) }
-                obj["backup_url"]?.jsonArray?.forEach { backup ->
-                    backup.jsonPrimitive.contentOrNull?.let { add(it) }
-                }
+            durl.forEach { obj ->
+                obj.strField("url")?.let { add(it) }
+                // backup_url 可能缺省、可能是数组、也可能是显式 null（JsonNull 不是 Kotlin null！）
+                obj.strField("backup_url")?.let { add(it) }
+                obj.strList("backup_url").forEach { add(it) }
             }
         }.distinct()
 
@@ -319,10 +321,9 @@ class BilibiliParser {
         val result = season["result"]?.jsonObject ?: error(season["message"]?.jsonPrimitive?.contentOrNull ?: "番剧信息为空")
         val title = result["title"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { "番剧" }
         val cover = result["cover"]?.jsonPrimitive?.contentOrNull
-        val episodes = result["episodes"]?.jsonArray
-        val ep = episodes?.map { it.jsonObject }
-            ?.firstOrNull { it["id"]?.jsonPrimitive?.longOrNull == epId.toLongOrNull() }
-            ?: episodes?.firstOrNull()?.jsonObject ?: error("没找到这一集")
+        val episodes = result["episodes"].jsonArraySafe()
+        val ep = episodes.firstOrNull { it["id"]?.jsonPrimitive?.longOrNull == epId.toLongOrNull() }
+            ?: episodes.firstOrNull() ?: error("没找到这一集")
         val epTitle = ep["title"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val longTitle = ep["long_title"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val cid = ep["cid"]?.jsonPrimitive?.longOrNull
@@ -340,10 +341,11 @@ class BilibiliParser {
             ?: error("番剧播放地址获取失败")
         val data = play["result"]?.jsonObject ?: play["data"]?.jsonObject
             ?: error("番剧需要登录才能取播放地址（B 站限制）")
-        val durl = data["durl"]?.jsonArray
-            ?: data["video"]?.jsonObject?.get("durl")?.jsonArray
-            ?: error("该集没有可下载的 progressive 流（可能仅提供 DASH 或需要登录）")
-        val url0 = durl.firstOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
+        val durl = data["durl"].jsonArraySafe().ifEmpty {
+            data["video"]?.jsonObject?.get("durl").jsonArraySafe()
+        }
+        if (durl.isEmpty()) error("该集没有可下载的 progressive 流（可能仅提供 DASH 或需要登录）")
+        val url0 = durl.firstOrNull()?.strField("url")
             ?: error("该集没有可下载的直链")
 
         return MediaResult(
@@ -362,7 +364,33 @@ class BilibiliParser {
         return when {
             "412" in msg || "风控" in msg -> "B 站风控拦截了这次请求，稍后重试或换个网络"
             "登录" in msg -> "该内容需要登录 B 站才能获取"
+            "not a JsonArray" in msg || "reflection" in msg ->
+                "B 站返回了未知的数据结构，请更新到最新版本"
             else -> msg
         }
+    }
+
+    // ==================== 宽容 JSON 取值 ====================
+    // B 站字段形状不稳定：同名字段可能是数组、单值字符串或显式 null。
+    // kotlinx 里 JSON null 是 JsonNull 对象而非 Kotlin null，直接 ?.jsonArray
+    // 会炸出 "is not a JsonArray"，所以这里全部软取。
+
+    /** 数组安全取值：数组→元素列表；单对象→包一层；null/JsonNull/其它→空列表。 */
+    private fun JsonElement?.jsonArraySafe(): List<JsonObject> = when (this) {
+        is JsonArray -> mapNotNull { it as? JsonObject }
+        is JsonObject -> listOf(this)
+        else -> emptyList()
+    }
+
+    private fun JsonObject.strField(key: String): String? = when (val el = this[key]) {
+        is JsonPrimitive -> if (el is JsonNull) null else el.contentOrNull
+        else -> null
+    }
+
+    private fun JsonObject.strList(key: String): List<String> = when (val el = this[key]) {
+        is JsonArray -> el.mapNotNull { item ->
+            (item as? JsonPrimitive)?.takeIf { it !is JsonNull }?.contentOrNull
+        }
+        else -> emptyList()
     }
 }
