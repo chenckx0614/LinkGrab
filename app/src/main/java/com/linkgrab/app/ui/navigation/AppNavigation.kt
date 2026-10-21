@@ -122,6 +122,8 @@ import com.linkgrab.app.ui.screens.HistoryScreen
 import com.linkgrab.app.ui.screens.HomeScreen
 import com.linkgrab.app.ui.screens.ImageConvertScreen
 import com.linkgrab.app.ui.screens.MusicScreen
+import com.linkgrab.app.ui.screens.PanDirectScreen
+import com.linkgrab.app.data.api.QuarkPan
 import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
@@ -172,6 +174,7 @@ sealed class Screen(val route: String, val title: String) {
     data object VideoToAudio : Screen("video_to_audio", "视频转音频")
     data object ImageConvert : Screen("image_convert", "图片转格式")
     data object Music : Screen("music", "音乐解析下载")
+    data object PanDirect : Screen("pan_direct", "网盘直链")
 }
 
 // MARK: - Page transitions (iOS 26 push / pop)
@@ -411,6 +414,7 @@ private fun MainTabs(
     onNavigateToGame: () -> Unit,
     onNavigateToBottomBarStyle: () -> Unit,
     onNavigateToFileTransfer: () -> Unit,
+    onNavigateToPanDirect: () -> Unit = {},
 ) {
     HorizontalPager(
         state = pagerState,
@@ -441,6 +445,7 @@ private fun MainTabs(
             onNavigateToMusic = onNavigateToMusic,
             onNavigateToGame = onNavigateToGame,
             onNavigateToFileTransfer = onNavigateToFileTransfer,
+            onNavigateToPanDirect = onNavigateToPanDirect,
         )
     }
     }
@@ -651,6 +656,9 @@ fun AppNavigation(
                     onNavigateToFileTransfer = {
                         navController.navigate(Screen.FileTransfer.route)
                     },
+                    onNavigateToPanDirect = {
+                        navController.navigate(Screen.PanDirect.route)
+                    },
                     onNavigateToUpdateSettings = {
                         navController.navigate(Screen.UpdateSettings.route)
                     },
@@ -755,6 +763,15 @@ fun AppNavigation(
             }
             iosPage(Screen.Music.route) {
                 MusicScreen(onBack = { navController.popBackStack() })
+            }
+            iosPage(Screen.PanDirect.route) {
+                PanDirectScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenQuarkLogin = {
+                        toolWebUrl = QuarkPan.HOME_URL
+                        navController.navigate(Screen.ToolWeb.route)
+                    },
+                )
             }
             iosPage(Screen.History.route) {
                 HistoryScreen(

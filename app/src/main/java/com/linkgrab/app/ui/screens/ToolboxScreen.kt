@@ -43,6 +43,7 @@ fun ToolboxScreen(
     onNavigateToMusic: () -> Unit = {},
     onNavigateToGame: () -> Unit = {},
     onNavigateToFileTransfer: () -> Unit = {},
+    onNavigateToPanDirect: () -> Unit = {},
 ) {
     IOS26Canvas {
         IOS26StickyPage(title = "工具") {
@@ -60,6 +61,8 @@ fun ToolboxScreen(
                     ToolRow("奶蛙消消乐", "顺便玩一局，摸鱼必备", onNavigateToGame)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
                     ToolRow("文件传输", "文叔叔 / AirPortal / 轻松传等 6 个中转站", onNavigateToFileTransfer)
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
+                    ToolRow("网盘直链", "夸克网盘文件一键取下载直链", onNavigateToPanDirect)
                 }
             }
             item {
