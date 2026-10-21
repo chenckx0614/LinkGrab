@@ -4,6 +4,8 @@ import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.VideoQuality
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -14,8 +16,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.net.URLEncoder
 
 /**
  * B 站（bilibili）解析。
@@ -24,6 +28,14 @@ import java.util.concurrent.TimeUnit
  *  - `bilibili.com/video/BV…` / `av123` / 分享文本里的 BV 号
  *  - `b23.tv/xxxx` 短链（先跟一次重定向拿到真地址）
  *  - `bilibili.com/bangumi/play/ep123` 番剧单集（尽力而为：多数需要登录）
+ *
+ * ## WBI 签名（2026 起必须）
+ *
+ * `x/web-interface/view` 等核心接口已强制 WBI 签名（`wts` + `w_rid`），
+ * 裸调会返回 -403/412。签名算法与社区一致（参考 BiliFlow，MIT）：
+ * nav 接口拿 `img_key`/`sub_key` → 打乱表映射出 32 位 `mixin_key` →
+ * 参数清洗（去 `!'()*`）、按 key 排序、urlencode 后拼 `mixin_key` 取 MD5。
+ * key 会轮换，缓存 24h，签名失败自动刷新重试一次。
  *
  * ## 为什么用 progressive（durl）而不是 DASH
  *
@@ -40,6 +52,22 @@ import java.util.concurrent.TimeUnit
  */
 class BilibiliParser {
 
+    companion object {
+        /** WBI 混淆表：把 img_key+sub_key 按这个顺序重排取前 32 位。 */
+        private val MIXIN_KEY_ENC_TAB = intArrayOf(
+            46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
+            27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
+            37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
+            22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
+        )
+
+        private const val WBI_TTL_MS = 24 * 3600_000L
+
+        @Volatile private var cachedMixinKey: String? = null
+        @Volatile private var cachedKeyAt = 0L
+        private val wbiMutex = Mutex()
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     private val client = OkHttpClient.Builder()
@@ -51,13 +79,74 @@ class BilibiliParser {
 
     private val desktopUa =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
     /**
      * 匿名接口也会看 cookie：没有 `buvid3` 时部分接口返回 412（风控）。
      * 随机生成一个即可满足校验，不需要真实浏览器指纹。
      */
     private val buvidCookie = "buvid3=${UUID.randomUUID()}-${System.currentTimeMillis() % 100000}infoc"
+
+    // ==================== WBI 签名 ====================
+
+    /** 从 nav 接口取 wbi key 并算出 mixin_key（带 24h 缓存）。 */
+    private suspend fun mixinKey(): String {
+        cachedMixinKey?.takeIf { System.currentTimeMillis() - cachedKeyAt < WBI_TTL_MS }?.let { return it }
+        return wbiMutex.withLock {
+            cachedMixinKey?.takeIf { System.currentTimeMillis() - cachedKeyAt < WBI_TTL_MS }?.let { return it }
+            val root = api("https://api.bilibili.com/x/web-interface/nav")
+                ?: error("拿不到 B 站签名密钥（nav 接口无响应）")
+            val wbi = root["data"]?.jsonObject?.get("wbi_img")?.jsonObject
+                ?: error("拿不到 B 站签名密钥（nav 数据异常）")
+            val imgKey = wbi["img_url"]?.jsonPrimitive?.contentOrNull
+                ?.substringAfterLast('/')?.substringBefore('.')
+                ?: error("WBI img_key 为空")
+            val subKey = wbi["sub_url"]?.jsonPrimitive?.contentOrNull
+                ?.substringAfterLast('/')?.substringBefore('.')
+                ?: error("WBI sub_key 为空")
+            val raw = imgKey + subKey
+            val mixin = buildString { MIXIN_KEY_ENC_TAB.forEach { if (it < raw.length) append(raw[it]) } }.take(32)
+            cachedMixinKey = mixin
+            cachedKeyAt = System.currentTimeMillis()
+            mixin
+        }
+    }
+
+    private fun invalidateWbi() {
+        cachedMixinKey = null
+        cachedKeyAt = 0L
+    }
+
+    /** 对参数做 WBI 签名并拼成完整 URL。失败（key 过期）自动刷新重签一次。 */
+    private suspend fun signedUrl(endpoint: String, params: Map<String, String>): String {
+        val signed = signParams(params, mixinKey())
+        return "https://api.bilibili.com$endpoint?" + signed.entries.joinToString("&") { (k, v) ->
+            "${urlEncode(k)}=${urlEncode(v)}"
+        }
+    }
+
+    private fun signParams(params: Map<String, String>, mixin: String): Map<String, String> {
+        val withTs = LinkedHashMap<String, String>(params)
+        withTs["wts"] = (System.currentTimeMillis() / 1000).toString()
+        // 清洗 B 站拒绝的字符，按 key 排序后参与签名
+        val sanitized = withTs.mapValues { (_, v) ->
+            buildString { v.forEach { c -> if (c !in "!'()*") append(c) } }
+        }.toSortedMap()
+        val query = sanitized.entries.joinToString("&") { (k, v) ->
+            "${urlEncode(k)}=${urlEncode(v)}"
+        }
+        val wRid = md5Hex(query + mixin)
+        return sanitized + mapOf("w_rid" to wRid)
+    }
+
+    private fun urlEncode(s: String): String =
+        URLEncoder.encode(s, Charsets.UTF_8.name()).replace("+", "%20")
+
+    private fun md5Hex(s: String): String =
+        MessageDigest.getInstance("MD5").digest(s.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+
+    // ==================== 请求 ====================
 
     private fun api(url: String): JsonObject? = runCatching {
         val request = Request.Builder()
@@ -72,6 +161,17 @@ class BilibiliParser {
             json.parseToJsonElement(resp.body?.string().orEmpty()).jsonObject
         }
     }.getOrNull()
+
+    /** 带签名的 API 调用；-403（签名失效）自动刷新 key 重试一次。 */
+    private suspend fun signedApi(endpoint: String, params: Map<String, String>): JsonObject? {
+        val first = api(signedUrl(endpoint, params))
+        val code = first?.get("code")?.jsonPrimitive?.longOrNull
+        if (code == -403L || code == 412L) {
+            invalidateWbi()
+            return api(signedUrl(endpoint, params))
+        }
+        return first
+    }
 
     /** 这段文本是不是 B 站链接（含 b23 短链）。 */
     fun canParse(text: String): Boolean =
@@ -109,19 +209,17 @@ class BilibiliParser {
 
     // ==================== 普通视频 ====================
 
-    private fun parseVideo(url: String): MediaResult {
+    private suspend fun parseVideo(url: String): MediaResult {
         val bvid = Regex("""(BV[0-9A-Za-z]{10})""").find(url)?.groupValues?.get(1)
         val aid = Regex("""/av(\d+)""", RegexOption.IGNORE_CASE).find(url)?.groupValues?.get(1)
             ?: Regex("""[?&]aid=(\d+)""").find(url)?.groupValues?.get(1)
 
         require(bvid != null || aid != null) { "链接里没找到 BV 号，可能是番剧或动态，暂不支持" }
 
-        val viewUrl = if (bvid != null) {
-            "https://api.bilibili.com/x/web-interface/view?bvid=$bvid"
-        } else {
-            "https://api.bilibili.com/x/web-interface/view?aid=$aid"
-        }
-        val view = api(viewUrl) ?: error("B 站接口无响应（可能被风控），稍后重试")
+        val view = signedApi(
+            "/x/web-interface/view",
+            if (bvid != null) mapOf("bvid" to bvid) else mapOf("aid" to aid!!),
+        ) ?: error("B 站接口无响应（可能被风控），稍后重试")
         val code = view["code"]?.jsonPrimitive?.longOrNull ?: -1
         if (code != 0L) {
             val msg = view["message"]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -156,15 +254,23 @@ class BilibiliParser {
      * （返回体 `quality` 会告诉你实际给了多少）。`durl` 里通常只有一条，
      * 但多 P / 部分视频会给备份地址，一并收进候选。
      */
-    private fun fetchProgressive(
+    private suspend fun fetchProgressive(
         bvid: String?,
         aid: String?,
         cid: Long,
     ): Pair<String, List<VideoQuality>> {
-        val idParam = if (bvid != null) "bvid=$bvid" else "avid=$aid"
-        val url = "https://api.bilibili.com/x/player/playurl?" +
-            "$idParam&cid=$cid&qn=64&fnval=1&fnver=0&fourk=0&platform=html5&high_quality=1"
-        val root = api(url) ?: error("取播放地址失败（B 站无响应）")
+        val params = buildMap {
+            if (bvid != null) put("bvid", bvid) else put("avid", aid.orEmpty())
+            put("cid", cid.toString())
+            put("qn", "64")
+            put("fnval", "1")
+            put("fnver", "0")
+            put("fourk", "0")
+            // html5 平台 + high_quality：匿名也能给到 720P progressive mp4
+            put("platform", "html5")
+            put("high_quality", "1")
+        }
+        val root = signedApi("/x/player/playurl", params) ?: error("取播放地址失败（B 站无响应）")
         val code = root["code"]?.jsonPrimitive?.longOrNull ?: -1
         if (code != 0L) {
             val msg = root["message"]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -205,7 +311,7 @@ class BilibiliParser {
 
     // ==================== 番剧 ====================
 
-    private fun parseBangumi(url: String): MediaResult {
+    private suspend fun parseBangumi(url: String): MediaResult {
         val epId = Regex("""/bangumi/play/ep(\d+)""").find(url)?.groupValues?.get(1)
             ?: error("番剧链接里没找到 ep 号")
         val season = api("https://api.bilibili.com/pgc/view/web/season?ep_id=$epId")
@@ -219,13 +325,24 @@ class BilibiliParser {
             ?: episodes?.firstOrNull()?.jsonObject ?: error("没找到这一集")
         val epTitle = ep["title"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val longTitle = ep["long_title"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val cid = ep["cid"]?.jsonPrimitive?.longOrNull
 
-        val play = api(
-            "https://api.bilibili.com/pgc/player/web/playurl?ep_id=$epId&qn=64&fnval=1&fourk=0"
-        ) ?: error("番剧播放地址获取失败")
+        // v2 播放端点：旧 /pgc/player/web/playurl 已不稳定，v2 返回结构与
+        // 旧的兼容层不同——durl 在 result.durl（旧格式兜底）或 result.video.durl
+        val playParams = buildMap {
+            put("ep_id", epId)
+            if (cid != null) put("cid", cid.toString())
+            put("qn", "64")
+            put("fnval", "1")
+            put("fourk", "1")
+        }
+        val play = signedApi("/pgc/player/web/v2/playurl", playParams)
+            ?: error("番剧播放地址获取失败")
         val data = play["result"]?.jsonObject ?: play["data"]?.jsonObject
             ?: error("番剧需要登录才能取播放地址（B 站限制）")
-        val durl = data["durl"]?.jsonArray ?: error("该集没有可下载的 progressive 流（可能仅提供 DASH）")
+        val durl = data["durl"]?.jsonArray
+            ?: data["video"]?.jsonObject?.get("durl")?.jsonArray
+            ?: error("该集没有可下载的 progressive 流（可能仅提供 DASH 或需要登录）")
         val url0 = durl.firstOrNull()?.jsonObject?.get("url")?.jsonPrimitive?.contentOrNull
             ?: error("该集没有可下载的直链")
 

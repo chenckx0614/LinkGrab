@@ -25,6 +25,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.26", "2026-10-21", listOf(
+            "修复 B 站解析失效：接口升级为 WBI 签名请求，番剧端点换 v2",
+        )
+    ),
+    UpdateLogItem(
         "3.0.25", "2026-10-21", listOf(
             "工具箱新增「网盘直链」：登录夸克网盘即可浏览并获取文件直链",
         )
