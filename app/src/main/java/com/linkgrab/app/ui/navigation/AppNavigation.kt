@@ -123,7 +123,6 @@ import com.linkgrab.app.ui.screens.HomeScreen
 import com.linkgrab.app.ui.screens.ImageConvertScreen
 import com.linkgrab.app.ui.screens.MusicScreen
 import com.linkgrab.app.ui.screens.PanDirectScreen
-import com.linkgrab.app.data.api.QuarkPan
 import com.linkgrab.app.ui.screens.ResultScreen
 import com.linkgrab.app.ui.screens.SettingsScreen
 import com.linkgrab.app.ui.screens.ToolboxScreen
@@ -770,9 +769,9 @@ fun AppNavigation(
             iosPage(Screen.PanDirect.route) {
                 PanDirectScreen(
                     onBack = { navController.popBackStack() },
-                    onOpenQuarkLogin = {
-                        // 夸克手机网页强制引导下载 App，必须用桌面版 UA 才有网页登录
-                        toolWebUrl = QuarkPan.HOME_URL
+                    onOpenLogin = { homeUrl ->
+                        // 夸克/UC 手机网页都强制引导下载 App，必须用桌面版 UA 才有网页登录
+                        toolWebUrl = homeUrl
                         toolWebDesktop = true
                         navController.navigate(Screen.ToolWeb.route)
                     },

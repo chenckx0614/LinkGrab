@@ -4,10 +4,15 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -16,16 +21,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,9 +40,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,9 +58,6 @@ import com.linkgrab.app.data.api.QuarkPan
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26HeaderHeight
-import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.background
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
@@ -61,6 +66,7 @@ import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosError
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
+import com.linkgrab.app.ui.theme.iosSeparator
 import com.linkgrab.app.ui.theme.iosTertiaryBackground
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -68,18 +74,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * 网盘直链（夸克 MVP）：应用内 WebView 登录 → 浏览「我的网盘」→ 点文件拿直链 →
- * 复制 / 保存到系统下载目录。仅调公开接口，凭证只留在本机 WebView Cookie 里。
+ * 网盘直链：应用内 WebView 登录 → 浏览「我的网盘」→ 点文件拿直链 →
+ * 复制 / 保存到系统下载目录。顶部切换网盘；仅调公开接口，
+ * 凭证只留在本机 WebView Cookie 里。
  */
 @Composable
 fun PanDirectScreen(
     onBack: () -> Unit,
-    onOpenQuarkLogin: () -> Unit,
+    onOpenLogin: (homeUrl: String) -> Unit,
 ) {
     val context = LocalContext.current
-    val pan = remember { QuarkPan() }
 
-    var loggedIn by remember { mutableStateOf(QuarkPan.isLoggedIn()) }
+    var driveIndex by remember { mutableStateOf(0) }
+    val config = QuarkPan.SUPPORTED[driveIndex]
+    val pan = remember(config) { QuarkPan(config) }
+
+    var loggedIn by remember { mutableStateOf(false) }
     // 路径栈：空 = 根目录；每项 (fid, 名称)
     var pathStack by remember { mutableStateOf(listOf<Pair<String, String>>()) }
     var files by remember { mutableStateOf(listOf<QuarkFile>()) }
@@ -123,27 +133,6 @@ fun PanDirectScreen(
         return true
     }
 
-    // 登录态：进入页面 & 从 WebView 登录回来（ON_RESUME）时刷新
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                val nowLoggedIn = QuarkPan.isLoggedIn()
-                if (nowLoggedIn && !loggedIn && files.isEmpty()) {
-                    load("", 1, replace = true)
-                }
-                loggedIn = nowLoggedIn
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    // 首次进入已登录：直接拉根目录
-    androidx.compose.runtime.LaunchedEffect(loggedIn) {
-        if (loggedIn && files.isEmpty() && error == null) load("", 1, replace = true)
-    }
-
     fun fetchLink(file: QuarkFile) {
         if (fetchingLink) return
         fetchingLink = true
@@ -156,6 +145,34 @@ fun PanDirectScreen(
             }
             fetchingLink = false
         }
+    }
+
+    // 切换网盘：清空状态并重新拉根目录
+    LaunchedEffect(driveIndex) {
+        pathStack = emptyList()
+        files = emptyList()
+        page = 1
+        hasMore = false
+        error = null
+        link = null
+        loggedIn = pan.isLoggedIn()
+        if (loggedIn) load("", 1, replace = true)
+    }
+
+    // 登录态：从 WebView 登录回来（ON_RESUME）时刷新
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, config) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val nowLoggedIn = pan.isLoggedIn()
+                if (nowLoggedIn && !loggedIn && files.isEmpty() && error == null && page == 1) {
+                    load("", 1, replace = true)
+                }
+                loggedIn = nowLoggedIn
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     fun copyLink() {
@@ -188,7 +205,7 @@ fun PanDirectScreen(
     val headerBackdrop = rememberLayerBackdrop()
     val listState = rememberLazyListState()
     val headerScrolled by remember {
-        androidx.compose.runtime.derivedStateOf { listState.firstVisibleItemIndex > 0 }
+        derivedStateOf { listState.firstVisibleItemIndex > 0 }
     }
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val currentDir = pathStack.lastOrNull()?.first ?: ""
@@ -204,7 +221,7 @@ fun PanDirectScreen(
                     .fillMaxSize()
                     .padding(top = topInset + IOS26HeaderHeight)
                     .layerBackdrop(headerBackdrop),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                contentPadding = PaddingValues(
                     start = 20.dp, end = 20.dp, top = 20.dp, bottom = 60.dp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -214,7 +231,7 @@ fun PanDirectScreen(
                         IOS26IconCapsule("☁️", iosBlue())
                         Spacer(Modifier.height(14.dp))
                         Text(
-                            "网盘直链 · 夸克",
+                            "网盘直链",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = iosLabel(),
@@ -229,11 +246,25 @@ fun PanDirectScreen(
                     }
                 }
 
+                // 网盘切换 chips
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QuarkPan.SUPPORTED.forEachIndexed { index, drive ->
+                            PanDriveChip(
+                                label = "${drive.emoji} ${drive.name}",
+                                selected = index == driveIndex,
+                                onClick = { driveIndex = index },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+
                 if (!loggedIn) {
                     item {
                         IOS26Panel(Modifier.fillMaxWidth()) {
                             Text(
-                                "还没登录夸克网盘",
+                                "还没登录${config.name}网盘",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = iosLabel(),
@@ -248,8 +279,8 @@ fun PanDirectScreen(
                             )
                             Spacer(Modifier.height(14.dp))
                             IOS26Button(
-                                text = "打开夸克网盘登录",
-                                onClick = onOpenQuarkLogin,
+                                text = "打开${config.name}网盘登录",
+                                onClick = { onOpenLogin(config.homeUrl) },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -317,7 +348,7 @@ fun PanDirectScreen(
                                 color = iosSecondaryLabel(),
                                 fontSize = 14.sp,
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                textAlign = TextAlign.Center,
                             )
                         }
                     }
@@ -329,7 +360,7 @@ fun PanDirectScreen(
                                 color = iosError(),
                                 fontSize = 13.sp,
                                 modifier = Modifier.fillMaxWidth(),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                textAlign = TextAlign.Center,
                             )
                         }
                     }
@@ -411,6 +442,40 @@ fun PanDirectScreen(
 }
 
 @Composable
+private fun PanDriveChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val background by animateColorAsState(
+        if (selected) iosBlue() else iosTertiaryBackground(),
+        animationSpec = tween(180),
+        label = "panDriveChipBg",
+    )
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .border(
+                width = 0.5.dp,
+                color = if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            color = if (selected) Color.White else iosLabel(),
+        )
+    }
+}
+
+@Composable
 private fun QuarkFileRow(file: QuarkFile, busy: Boolean, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -461,5 +526,5 @@ private fun formatSize(bytes: Long): String {
         value /= 1024.0
         unit++
     }
-    return if (unit == 0) "${bytes} B" else String.format("%.1f %s", value, units[unit])
+    return if (unit == 0) "$bytes B" else String.format("%.1f %s", value, units[unit])
 }

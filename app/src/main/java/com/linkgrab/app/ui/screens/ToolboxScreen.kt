@@ -62,7 +62,7 @@ fun ToolboxScreen(
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
                     ToolRow("文件传输", "文叔叔 / AirPortal / 轻松传等 6 个中转站", onNavigateToFileTransfer)
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
-                    ToolRow("网盘直链", "夸克网盘文件一键取下载直链", onNavigateToPanDirect)
+                    ToolRow("网盘直链", "夸克 / UC 网盘文件一键取下载直链", onNavigateToPanDirect)
                 }
             }
             item {

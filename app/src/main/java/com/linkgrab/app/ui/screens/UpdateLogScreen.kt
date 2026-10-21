@@ -25,6 +25,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.29", "2026-10-21", listOf(
+            "网盘直链支持 UC 网盘：顶部可切换夸克 / UC",
+        )
+    ),
+    UpdateLogItem(
         "3.0.28", "2026-10-21", listOf(
             "修复夸克登录被引导下载 App：改用桌面版网页登录",
         )

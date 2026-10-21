@@ -44,29 +44,65 @@ data class QuarkDirectLink(
 
 class QuarkPanException(message: String) : Exception(message)
 
-class QuarkPan {
+/**
+ * 网盘站点配置。夸克 / UC 同属阿里 UC 系，API 路径、Cookie 体系一致，
+ * 只差域名、pr 参数和客户端 UA。
+ */
+data class PanConfig(
+    val name: String,
+    val emoji: String,
+    /** 网页端首页（WebView 登录页 + Cookie 域）。 */
+    val homeUrl: String,
+    /** API 根，如 https://drive-pc.quark.cn/1/clouddrive */
+    val apiBase: String,
+    /** download 接口的 pr 参数（ucpro / UCBrowser）。 */
+    val pr: String,
+    /** PC 客户端 UA：直链下载与列表接口都认这个。 */
+    val clientUa: String,
+)
+
+class QuarkPan(private val config: PanConfig) {
 
     companion object {
-        const val HOME_URL = "https://pan.quark.cn/"
-        private const val API_BASE = "https://drive-pc.quark.cn/1/clouddrive"
         private const val PAGE_SIZE = 50L
 
-        /** 夸克 PC 客户端 UA：直链下载与列表接口都吃这一套。 */
-        const val QUARK_UA =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-                "(KHTML, like Gecko) quark-cloud-drive/3.20.0 Chrome/112.0.5615.165 " +
-                "Electron/24.1.3.8 Safari/537.36 Channel/pckk_other_ch"
+        val QUARK = PanConfig(
+            name = "夸克",
+            emoji = "🪐",
+            homeUrl = "https://pan.quark.cn/",
+            apiBase = "https://drive-pc.quark.cn/1/clouddrive",
+            pr = "ucpro",
+            clientUa =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) quark-cloud-drive/3.20.0 Chrome/112.0.5615.165 " +
+                    "Electron/24.1.3.8 Safari/537.36 Channel/pckk_other_ch",
+        )
 
-        /** 判断用户是否已在应用内 WebView 登录夸克（看关键会话 Cookie）。 */
-        fun isLoggedIn(): Boolean {
-            val cookie = CookieManager.getInstance().getCookie(HOME_URL) ?: return false
-            return cookie.contains("__puus=") || cookie.contains("__pus=")
-        }
+        val UC = PanConfig(
+            name = "UC",
+            emoji = "🐿️",
+            homeUrl = "https://drive.uc.cn/",
+            apiBase = "https://pc-api.uc.cn/1/clouddrive",
+            pr = "UCBrowser",
+            clientUa =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) uc-cloud-drive/2.5.20 Chrome/100.0.4896.160 " +
+                    "Electron/18.3.5.4-b478491100 Safari/537.36 Channel/pckk_other_ch",
+        )
 
-        /** 取 pan.quark.cn 域下的全部 Cookie（.quark.cn 通配会一并带出）。 */
-        fun currentCookie(): String? =
-            CookieManager.getInstance().getCookie(HOME_URL)
+        /** 支持的网盘（新盘在这里加）。 */
+        val SUPPORTED = listOf(QUARK, UC)
     }
+
+    /** 判断用户是否已在应用内 WebView 登录该盘（看关键会话 Cookie）。 */
+    fun isLoggedIn(): Boolean {
+        val cookie = CookieManager.getInstance().getCookie(config.homeUrl) ?: return false
+        return cookie.contains("__puus=") || cookie.contains("__pus=")
+    }
+
+    /** 取该盘域下的全部 Cookie。 */
+    private fun currentCookie(): String? =
+        CookieManager.getInstance().getCookie(config.homeUrl)
 
     private val json = Json { ignoreUnknownKeys = true }
     private val client = OkHttpClient.Builder()
@@ -77,9 +113,9 @@ class QuarkPan {
     /** 列目录。fid 传 "" 表示根目录。 */
     suspend fun listFiles(fid: String, page: Int): Pair<List<QuarkFile>, Boolean> =
         withContext(Dispatchers.IO) {
-            val cookie = currentCookie() ?: throw QuarkPanException("未登录夸克网盘")
+            val cookie = currentCookie() ?: throw QuarkPanException("未登录${config.name}网盘")
             val url = buildString {
-                append("$API_BASE/file/sort?pr=ucpro&fr=pc")
+                append("${config.apiBase}/file/sort?pr=${config.pr}&fr=pc")
                 append("&pdir_fid=").append(if (fid.isEmpty()) "" else fid)
                 append("&_page=").append(page)
                 append("&_size=").append(PAGE_SIZE)
@@ -89,8 +125,8 @@ class QuarkPan {
             }
             val request = Request.Builder()
                 .url(url)
-                .header("User-Agent", QUARK_UA)
-                .header("Referer", HOME_URL)
+                .header("User-Agent", config.clientUa)
+                .header("Referer", config.homeUrl)
                 .header("Cookie", cookie)
                 .build()
 
@@ -123,16 +159,16 @@ class QuarkPan {
 
     /** 取一批文件（fid）的直链。夸克单次最多 15 个，MVP 只支持单文件调用。 */
     suspend fun getDirectLink(fid: String): QuarkDirectLink = withContext(Dispatchers.IO) {
-        val cookie = currentCookie() ?: throw QuarkPanException("未登录夸克网盘")
+        val cookie = currentCookie() ?: throw QuarkPanException("未登录${config.name}网盘")
         val body = json.encodeToString(
             kotlinx.serialization.json.JsonObject.serializer(),
             JsonObject(mapOf("fids" to kotlinx.serialization.json.JsonPrimitive(fid))),
         ).toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
-            .url("$API_BASE/file/download?entry=ft&fr=pc&pr=ucpro")
+            .url("${config.apiBase}/file/download?entry=ft&fr=pc&pr=${config.pr}")
             .post(body)
-            .header("User-Agent", QUARK_UA)
-            .header("Referer", HOME_URL)
+            .header("User-Agent", config.clientUa)
+            .header("Referer", config.homeUrl)
             .header("Cookie", cookie)
             .build()
 
@@ -164,8 +200,8 @@ class QuarkPan {
                 .build()
             val request = Request.Builder()
                 .url(link.url)
-                .header("User-Agent", QUARK_UA)
-                .header("Referer", HOME_URL)
+                .header("User-Agent", config.clientUa)
+                .header("Referer", config.homeUrl)
                 .header("Cookie", cookie)
                 .build()
 
@@ -206,9 +242,9 @@ class QuarkPan {
         }
 
     private fun codeToException(code: Long): QuarkPanException = when (code) {
-        31001L -> QuarkPanException("登录已过期，请重新登录夸克网盘")
+        31001L -> QuarkPanException("登录已过期，请重新登录${config.name}网盘")
         23018L -> QuarkPanException("超出游客可获取的大小限制，请先登录网盘")
-        else -> QuarkPanException("夸克返回错误（代码 $code）")
+        else -> QuarkPanException("${config.name}返回错误（代码 $code）")
     }
 
     // ---- 宽容解析：夸克返回字段时变，全部软取 ----
