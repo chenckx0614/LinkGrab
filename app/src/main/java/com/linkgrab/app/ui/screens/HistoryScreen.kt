@@ -15,7 +15,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -43,6 +45,8 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -80,6 +84,7 @@ import com.linkgrab.app.ui.theme.IOS26Choice
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.IOS26IconSize
+import com.linkgrab.app.ui.theme.IOS27TextField
 import com.linkgrab.app.ui.theme.IOSCornerMedium
 import com.linkgrab.app.ui.theme.IOSCornerSmall
 import com.linkgrab.app.ui.theme.IOSRed
@@ -114,6 +119,7 @@ private fun platformName(raw: String): String = when (raw) {
 fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (String) -> Unit) {
     val history by viewModel.allHistory.collectAsState(initial = emptyList())
     var filter by remember { mutableStateOf("all") }
+    var searchQuery by remember { mutableStateOf("") }
     var selectionMode by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(setOf<Long>()) }
     var pendingDelete by remember { mutableStateOf<List<HistoryItem>?>(null) }
@@ -123,7 +129,21 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     // 菜单玻璃要采样页面内容才有模糊：页面停在顶部时图层默认不录，这里强制录
     val menuVisible = showMenu || menuFraction.value > 0.01f
 
-    val filtered = history.filter { filter == "all" || it.platform == filter }
+    // 筛选（平台 / 收藏）+ 搜索（标题、链接），收藏置顶（稳定排序保住时间序）
+    val query = searchQuery.trim()
+    val filtered = history
+        .filter { item ->
+            val platformOk = when {
+                filter == "all" -> true
+                filter == "fav" -> item.favorite
+                else -> item.platform == filter
+            }
+            val searchOk = query.isEmpty() ||
+                item.title.contains(query, ignoreCase = true) ||
+                item.url.contains(query, ignoreCase = true)
+            platformOk && searchOk
+        }
+        .sortedByDescending { it.favorite }
     // 菜单要对齐到吸顶栏里那颗按钮的基线（状态栏下方）
     val headerTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -193,6 +213,25 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                                 },
                             )
                             if (selected.isNotEmpty()) {
+                                val favTargets = filtered.filter { it.id in selected }
+                                val makeFav = favTargets.any { !it.favorite }
+                                LiquidGlassDropdownMenuItem(
+                                    text = if (makeFav) "收藏(${selected.size})" else "取消收藏(${selected.size})",
+                                    onClick = {
+                                        showMenu = false
+                                        favTargets.forEach {
+                                            viewModel.toggleFavorite(it.id, makeFav)
+                                        }
+                                    },
+                                    icon = {
+                                        Icon(
+                                            if (makeFav) Icons.Default.Star else Icons.Outlined.StarOutline,
+                                            contentDescription = null,
+                                            tint = iosLabel(),
+                                            modifier = Modifier.size(IOS26IconSize.MenuItem),
+                                        )
+                                    },
+                                )
                                 LiquidGlassDropdownMenuItem(
                                     text = "删除(${selected.size})",
                                     onClick = {
@@ -233,16 +272,32 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
         ) {
             item { IOS26PageHeader("历史记录", "查看和继续处理已解析的内容", topPadding = 0.dp) }
             item {
+                IOS27TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = "搜索",
+                    placeholder = "按标题或链接搜索",
+                    singleLine = true,
+                )
+            }
+            item {
                 Row(
-                    Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     IOS26Choice("全部", filter == "all", onClick = { filter = "all" })
+                    IOS26Choice("★ 收藏", filter == "fav", onClick = { filter = "fav" })
                     IOS26Choice("抖音", filter == "douyin", onClick = { filter = "douyin" })
                     IOS26Choice("小红书", filter == "xiaohongshu", onClick = { filter = "xiaohongshu" })
+                    IOS26Choice("B站", filter == "bilibili", onClick = { filter = "bilibili" })
+                    IOS26Choice("微博", filter == "weibo", onClick = { filter = "weibo" })
+                    IOS26Choice("网页", filter == "web", onClick = { filter = "web" })
                 }
             }
-            if (filtered.isEmpty()) {
+            if (history.isEmpty()) {
                 item {
                     Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -255,6 +310,26 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                             )
                             Text(
                                 "解析一个链接后，它会出现在这里",
+                                color = iosSecondaryLabel(),
+                                modifier = Modifier.padding(top = 8.dp),
+                                fontSize = 14.sp,
+                            )
+                        }
+                    }
+                }
+            } else if (filtered.isEmpty()) {
+                item {
+                    Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "没有匹配的记录",
+                                color = iosLabel(),
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.3).sp,
+                            )
+                            Text(
+                                "换个关键词或筛选条件试试",
                                 color = iosSecondaryLabel(),
                                 modifier = Modifier.padding(top = 8.dp),
                                 fontSize = 14.sp,
@@ -369,15 +444,35 @@ private fun HistoryCard(
             }
             Spacer(modifier = Modifier.width(12.dp))
         }
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current).data(item.cover).crossfade(true).build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(60.dp)
-                .clip(IOSCornerSmall)
-                .background(iosTertiaryBackground()),
-        )
+        Box(Modifier.size(60.dp)) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(item.cover).crossfade(true).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(IOSCornerSmall)
+                    .background(iosTertiaryBackground()),
+            )
+            if (item.favorite) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(3.dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Star,
+                        contentDescription = "已收藏",
+                        tint = Color(0xFFFFD60A),
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
+            }
+        }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(
                 item.title,
