@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -17,13 +19,36 @@ android {
         versionName = "3.0.31"
     }
 
+    // 永久签名：密钥在 app/linkgrab-sign.jks（已 gitignore），密码在 local.properties
+    // （已 gitignore）。debug.keystore 会被工具链自动重建导致签名漂移，禁用之；
+    // 本地属性缺失时兜底回 debug 签名，保证别人 clone 也能构建。
+    val localProps = Properties().apply {
+        val f = rootProject.file("local.properties")
+        if (f.exists()) f.inputStream().use { load(it) }
+    }
+    val keystoreFile = file(localProps.getProperty("LINKGRAB_KEYSTORE", ""))
+    signingConfigs {
+        create("linkgrab") {
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = localProps.getProperty("LINKGRAB_STORE_PASS")
+                keyAlias = "linkgrab"
+                keyPassword = localProps.getProperty("LINKGRAB_KEY_PASS")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // 3.0 交付链路切换：release + debug keystore 签名 = R8 混淆 + 可直接安装。
+            // release + 固定签名 = R8 混淆 + 可直接安装。
             // debug 包（93MB 未混淆）仅保留作开发用。
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (keystoreFile.exists()) {
+                signingConfigs.getByName("linkgrab")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
