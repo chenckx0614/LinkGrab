@@ -25,3 +25,4 @@
 ## 已知教训
 - 不要尝试引入 miuix 整体替换 UI（fork 深度耦合课程表项目，已回退）。
 - ResultScreen 底栏 backdrop 必须用独立的 contentBackdrop，不能采样整个 NavHost（循环引用会崩溃）。
+## 发布约定\n- Gitee 仓库附件配额 1GB：Release 附件只保留最近两个版本，发新包前删旧附件（本地 dist/ 有全量备份）。
