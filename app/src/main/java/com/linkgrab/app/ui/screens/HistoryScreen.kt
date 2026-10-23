@@ -42,8 +42,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
@@ -51,6 +53,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +63,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -100,6 +105,12 @@ import com.linkgrab.app.ui.liquid.IOS26GlassDialog
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenu
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenuItem
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownShadowPadding
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.shapes.RoundedCornerStyle
+import com.kyant.shapes.RoundedRectangle
 import com.linkgrab.app.ui.theme.IOS26HeaderHeight
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosTertiaryBackground
@@ -120,6 +131,8 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     val history by viewModel.allHistory.collectAsState(initial = emptyList())
     var filter by remember { mutableStateOf("all") }
     var searchQuery by remember { mutableStateOf("") }
+    var searchMode by remember { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
     var selectionMode by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(setOf<Long>()) }
     var pendingDelete by remember { mutableStateOf<List<HistoryItem>?>(null) }
@@ -156,6 +169,16 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     BackHandler(enabled = selectionMode) { exitSelection() }
     // 菜单展开时返回键先收菜单
     BackHandler(enabled = showMenu) { showMenu = false }
+    // 搜索模式下返回键先收搜索（并清掉关键词）
+    BackHandler(enabled = searchMode) {
+        searchMode = false
+        searchQuery = ""
+    }
+
+    // 搜索框展开后自动聚焦
+    LaunchedEffect(searchMode) {
+        if (searchMode) searchFocus.requestFocus()
+    }
 
     IOS26Canvas {
         IOS26StickyPage(
@@ -186,7 +209,38 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                         .offset(x = 4.dp),
                     contentAlignment = Alignment.TopEnd,
                 ) {
-                    LiquidGlassDropdownMenu(
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // 搜索玻璃圆钮：与菜单触发钮同尺寸同材质，点开在列表顶部展开搜索框
+                        Box(
+                            Modifier
+                                .padding(LiquidGlassDropdownShadowPadding)
+                                // 菜单触发钮左缘内缩 24dp，右移 12dp 让两个圆的间距是 12dp
+                                .offset(x = 12.dp)
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .drawBackdrop(
+                                    backdrop = backdrop,
+                                    shape = { RoundedRectangle(21.dp, RoundedCornerStyle.Continuous) },
+                                    effects = {
+                                        vibrancy()
+                                        blur(8.dp.toPx())
+                                        lens(8.dp.toPx(), 24.dp.toPx())
+                                    },
+                                )
+                                .clickable {
+                                    searchMode = !searchMode
+                                    if (!searchMode) searchQuery = ""
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                if (searchMode) Icons.Default.Close else Icons.Default.Search,
+                                contentDescription = if (searchMode) "关闭搜索" else "搜索",
+                                modifier = Modifier.size(23.dp),
+                                tint = if (isInDarkTheme()) Color.White.copy(0.85f) else Color.Black.copy(0.85f),
+                            )
+                        }
+                        LiquidGlassDropdownMenu(
                         show = showMenu,
                         backdrop = backdrop,
                         fraction = menuFraction,
@@ -267,18 +321,21 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                             )
                         }
                     }
+                    }
                 }
             },
         ) {
             item { IOS26PageHeader("历史记录", "查看和继续处理已解析的内容", topPadding = 0.dp) }
-            item {
-                IOS27TextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    label = "搜索",
-                    placeholder = "按标题或链接搜索",
-                    singleLine = true,
-                )
+            if (searchMode) {
+                item {
+                    IOS27TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = "按标题或链接搜索",
+                        singleLine = true,
+                        modifier = Modifier.focusRequester(searchFocus),
+                    )
+                }
             }
             item {
                 Row(

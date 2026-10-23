@@ -25,6 +25,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.31", "2026-10-23", listOf(
+            "历史记录搜索改为吸顶栏玻璃按钮，页面更清爽",
+        )
+    ),
+    UpdateLogItem(
         "3.0.30", "2026-10-23", listOf(
             "历史记录支持搜索、按平台筛选和收藏置顶",
         )
