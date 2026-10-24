@@ -99,6 +99,88 @@ private const val ShadowExtend = 2f
 /** ARGB 里的 alpha 会被放大这么多倍 —— 环形路径重复描边会累积浓度 */
 private const val ShadowAlphaGain = 3.2f
 
+/** 两颗圆钮与展开面板共用同一套玻璃材质，避免底色、模糊或透明度实现各自漂移。 */
+@Composable
+private fun LiquidGlassMaterial(
+    backdrop: Backdrop,
+    cornerRadius: Dp,
+    materialVisible: Float,
+    blurStep: Int,
+    containerBase: Color,
+    surfaceAlpha: Float,
+    modifier: Modifier = Modifier,
+) {
+    val blurDp = 8f + 16f * (blurStep / 8f)
+    val glassEffects: com.kyant.backdrop.BackdropEffectScope.() -> Unit =
+        remember(blurStep) {
+            {
+                vibrancy()
+                blur(blurDp.dp.toPx())
+                lens(8.dp.toPx(), 24.dp.toPx())
+            }
+        }
+    val onDrawSurface: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit =
+        remember(containerBase, surfaceAlpha) {
+            { drawRect(containerBase.copy(alpha = surfaceAlpha)) }
+        }
+
+    Box(
+        modifier = modifier
+            .graphicsLayer { alpha = materialVisible }
+            .drawBackdrop(
+                backdrop = backdrop,
+                shape = { RoundedRectangle(cornerRadius, RoundedCornerStyle.Continuous) },
+                effects = glassEffects,
+                highlight = null,
+                shadow = null,
+                onDrawSurface = onDrawSurface,
+            ),
+    )
+}
+
+/** 与液态玻璃材质配套的原生柔影；收起圆钮和展开菜单必须走同一实现。 */
+private fun Modifier.liquidGlassShadow(
+    isLightTheme: Boolean,
+    materialVisible: Float,
+    cornerRadius: Dp,
+): Modifier = drawBehind {
+    val spread = materialVisible
+    if (spread > 0.01f) {
+        val shadowArgb = if (isLightTheme) ShadowArgbLight else ShadowArgbDark
+        val blurRadius = ShadowBlur * density * spread
+        val shadowSpread = ShadowExtend * density * spread
+        val r = cornerRadius.toPx()
+        val nativePath = android.graphics.Path().apply {
+            addRoundRect(
+                -shadowSpread, -shadowSpread,
+                size.width + shadowSpread, size.height + shadowSpread,
+                r + shadowSpread, r + shadowSpread,
+                android.graphics.Path.Direction.CW,
+            )
+            addRoundRect(
+                0f, 0f, size.width, size.height, r, r,
+                android.graphics.Path.Direction.CCW,
+            )
+        }
+        val paint = Paint().apply {
+            color = android.graphics.Color.argb(
+                (android.graphics.Color.alpha(shadowArgb) * ShadowAlphaGain)
+                    .coerceAtMost(255f).toInt(),
+                android.graphics.Color.red(shadowArgb),
+                android.graphics.Color.green(shadowArgb),
+                android.graphics.Color.blue(shadowArgb),
+            )
+            maskFilter = BlurMaskFilter(
+                blurRadius.coerceAtLeast(0.1f),
+                BlurMaskFilter.Blur.NORMAL,
+            )
+        }
+        drawIntoCanvas { canvas ->
+            canvas.nativeCanvas.drawPath(nativePath, paint)
+        }
+    }
+}
+
 @Composable
 fun LiquidGlassDropdownMenu(
     show: Boolean,
@@ -195,12 +277,9 @@ fun LiquidGlassDropdownMenu(
     // 量化成 8 档再喂给 effects：每帧换 lambda 引用会让节点每帧重建 RenderEffect
     // 并重录采样层，而不换引用则 blur uniform 不更新。
     val blurStep = (f.coerceIn(0f, 1f) * 8f).roundToInt()
-    val blurDp = 8f + 16f * (blurStep / 8f)
     // 底色不透明度复用同一档量化：与 blur 同步过渡（收起档 → 展开档），
     // 且 8 档内 lambda 引用不变，避免每帧重建 RenderEffect。
     val surfaceAlpha = collapsedAlpha + (expandedAlpha - collapsedAlpha) * (blurStep / 8f)
-    val onDrawSurface: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit =
-        remember(containerBase, surfaceAlpha) { { drawRect(containerBase.copy(alpha = surfaceAlpha)) } }
     // 面板自然高度：由内容以全尺寸测量得到，作为高度插值终点
     var panelHeightPx by remember { mutableIntStateOf(0) }
     val targetHeight = if (panelHeightPx > 0) {
@@ -255,66 +334,18 @@ fun LiquidGlassDropdownMenu(
                 )
                 // 拖动手势放在 clip 之前，不受圆角裁剪影响
                 .then(interactiveHighlight.gestureModifier)
-                .drawBehind {
-                    val spread = materialVisible
-                    if (spread > 0.01f) {
-                        val shadowArgb = if (isLightTheme) ShadowArgbLight else ShadowArgbDark
-                        val blurRadius = ShadowBlur * density * spread
-                        val shadowSpread = ShadowExtend * density * spread
-                        val r = PanelCornerRadius.toPx()
-                        val nativePath = android.graphics.Path().apply {
-                            addRoundRect(
-                                -shadowSpread, -shadowSpread,
-                                size.width + shadowSpread, size.height + shadowSpread,
-                                r + shadowSpread, r + shadowSpread,
-                                android.graphics.Path.Direction.CW,
-                            )
-                            addRoundRect(
-                                0f, 0f, size.width, size.height, r, r,
-                                android.graphics.Path.Direction.CCW,
-                            )
-                        }
-                        val paint = Paint().apply {
-                            color = android.graphics.Color.argb(
-                                (android.graphics.Color.alpha(shadowArgb) * ShadowAlphaGain)
-                                    .coerceAtMost(255f).toInt(),
-                                android.graphics.Color.red(shadowArgb),
-                                android.graphics.Color.green(shadowArgb),
-                                android.graphics.Color.blue(shadowArgb),
-                            )
-                            maskFilter = BlurMaskFilter(
-                                blurRadius.coerceAtLeast(0.1f),
-                                BlurMaskFilter.Blur.NORMAL,
-                            )
-                        }
-                        drawIntoCanvas { canvas ->
-                            canvas.nativeCanvas.drawPath(nativePath, paint)
-                        }
-                    }
-                }
+                .liquidGlassShadow(isLightTheme, materialVisible, PanelCornerRadius)
                 .clip(RoundedRectangle(PanelCornerRadius, RoundedCornerStyle.Continuous)),
         ) {
-            val glassEffects: com.kyant.backdrop.BackdropEffectScope.() -> Unit =
-                remember(blurStep) {
-                    {
-                        vibrancy()
-                        blur(blurDp.dp.toPx())
-                        lens(8.dp.toPx(), 24.dp.toPx())
-                    }
-                }
             // 玻璃单独一层：只有它跟材质 alpha（layerBlock 挂容器上会连图标一起透明）
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .graphicsLayer { alpha = materialVisible }
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { RoundedRectangle(PanelCornerRadius, RoundedCornerStyle.Continuous) },
-                        effects = glassEffects,
-                        highlight = null,
-                        shadow = null,
-                        onDrawSurface = onDrawSurface,
-                    ),
+            LiquidGlassMaterial(
+                backdrop = backdrop,
+                cornerRadius = PanelCornerRadius,
+                materialVisible = materialVisible,
+                blurStep = blurStep,
+                containerBase = containerBase,
+                surfaceAlpha = surfaceAlpha,
+                modifier = Modifier.matchParentSize(),
             )
 
             // 按压高光：必须在玻璃壳之上、菜单内容之下 —— 前者否则被材质盖住，
@@ -383,7 +414,7 @@ fun LiquidGlassDropdownMenu(
 
 /**
  * 独立的液态玻璃圆钮：与 [LiquidGlassDropdownMenu] 收起态（42dp 触发钮）
- * 同尺寸、同材质、同按压跟手缩放与光晕，供吸顶栏并排放置其它操作。
+ * 共用同一套阴影、玻璃材质、表面底色、按压光晕与跟手缩放实现。
  */
 @Composable
 fun LiquidGlassCircleButton(
@@ -392,6 +423,7 @@ fun LiquidGlassCircleButton(
     onClick: () -> Unit,
     backdrop: Backdrop,
     modifier: Modifier = Modifier,
+    materialAlpha: Float = 1f,
 ) {
     val isLightTheme = !isInDarkTheme()
     val containerBase = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242424)
@@ -424,41 +456,42 @@ fun LiquidGlassCircleButton(
                 translationY = drag.translationY
             }
             .size(ButtonDiameter)
-            .clickable {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                onClick()
-            }
             .then(interactiveHighlight.gestureModifier)
-            .drawBehind { drawRect(containerBase.copy(alpha = collapsedAlpha)) }
-            .clip(RoundedRectangle(ButtonDiameter / 2, RoundedCornerStyle.Continuous)),
-        contentAlignment = Alignment.Center,
+            .liquidGlassShadow(isLightTheme, materialAlpha, PanelCornerRadius)
+            .clip(RoundedRectangle(PanelCornerRadius, RoundedCornerStyle.Continuous)),
     ) {
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { RoundedRectangle(ButtonDiameter / 2, RoundedCornerStyle.Continuous) },
-                    effects = {
-                        vibrancy()
-                        blur(8.dp.toPx())
-                        lens(8.dp.toPx(), 24.dp.toPx())
-                    },
-                    highlight = null,
-                    shadow = null,
-                ),
+        LiquidGlassMaterial(
+            backdrop = backdrop,
+            cornerRadius = PanelCornerRadius,
+            materialVisible = materialAlpha,
+            blurStep = 0,
+            containerBase = containerBase,
+            surfaceAlpha = collapsedAlpha,
+            modifier = Modifier.matchParentSize(),
         )
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .then(interactiveHighlight.modifier),
         )
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(23.dp),
-            tint = triggerIconTint,
-        )
+        // 点击层与菜单触发图标一致：圆形裁剪，避免两颗按钮的涟漪/按压反馈不同。
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(CircleShape)
+                .clickable {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onClick()
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(23.dp),
+                tint = triggerIconTint,
+            )
+        }
     }
 }
 
