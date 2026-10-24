@@ -105,12 +105,7 @@ import com.linkgrab.app.ui.liquid.IOS26GlassDialog
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenu
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenuItem
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownShadowPadding
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
-import com.kyant.shapes.RoundedCornerStyle
-import com.kyant.shapes.RoundedRectangle
+import com.linkgrab.app.ui.liquid.LiquidGlassCircleButton
 import com.linkgrab.app.ui.theme.IOS26HeaderHeight
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosTertiaryBackground
@@ -210,36 +205,20 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                     contentAlignment = Alignment.TopEnd,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // 搜索玻璃圆钮：与菜单触发钮同尺寸同材质，点开在列表顶部展开搜索框
-                        Box(
-                            Modifier
+                        // 搜索玻璃圆钮：与菜单触发钮同尺寸同材质同按压手感
+                        LiquidGlassCircleButton(
+                            icon = if (searchMode) Icons.Default.Close else Icons.Default.Search,
+                            contentDescription = if (searchMode) "关闭搜索" else "搜索",
+                            onClick = {
+                                searchMode = !searchMode
+                                if (!searchMode) searchQuery = ""
+                            },
+                            backdrop = backdrop,
+                            // 菜单触发钮左缘内缩 24dp，右移 12dp 让两个圆的间距是 12dp
+                            modifier = Modifier
                                 .padding(LiquidGlassDropdownShadowPadding)
-                                // 菜单触发钮左缘内缩 24dp，右移 12dp 让两个圆的间距是 12dp
-                                .offset(x = 12.dp)
-                                .size(42.dp)
-                                .clip(CircleShape)
-                                .drawBackdrop(
-                                    backdrop = backdrop,
-                                    shape = { RoundedRectangle(21.dp, RoundedCornerStyle.Continuous) },
-                                    effects = {
-                                        vibrancy()
-                                        blur(8.dp.toPx())
-                                        lens(8.dp.toPx(), 24.dp.toPx())
-                                    },
-                                )
-                                .clickable {
-                                    searchMode = !searchMode
-                                    if (!searchMode) searchQuery = ""
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                if (searchMode) Icons.Default.Close else Icons.Default.Search,
-                                contentDescription = if (searchMode) "关闭搜索" else "搜索",
-                                modifier = Modifier.size(23.dp),
-                                tint = if (isInDarkTheme()) Color.White.copy(0.85f) else Color.Black.copy(0.85f),
-                            )
-                        }
+                                .offset(x = 12.dp),
+                        )
                         LiquidGlassDropdownMenu(
                         show = showMenu,
                         backdrop = backdrop,

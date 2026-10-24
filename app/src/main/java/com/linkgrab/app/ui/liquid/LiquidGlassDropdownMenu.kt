@@ -381,6 +381,87 @@ fun LiquidGlassDropdownMenu(
     }
 }
 
+/**
+ * 独立的液态玻璃圆钮：与 [LiquidGlassDropdownMenu] 收起态（42dp 触发钮）
+ * 同尺寸、同材质、同按压跟手缩放与光晕，供吸顶栏并排放置其它操作。
+ */
+@Composable
+fun LiquidGlassCircleButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    backdrop: Backdrop,
+    modifier: Modifier = Modifier,
+) {
+    val isLightTheme = !isInDarkTheme()
+    val containerBase = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242424)
+    val collapsedAlpha = if (isLightTheme) 0.76f else 0.84f
+    val triggerIconTint = if (isLightTheme) Color.Black.copy(0.85f) else Color.White.copy(0.85f)
+    val hapticFeedback = LocalHapticFeedback.current
+    val coroutineScope = rememberCoroutineScope()
+    val interactiveHighlight = remember(coroutineScope) {
+        InteractiveHighlight(
+            animationScope = coroutineScope,
+            radiusScale = { 1f },
+            radiusBaseDp = 150.dp,
+        )
+    }
+
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                val drag = computeLiquidDragTransform(
+                    width = size.width,
+                    height = size.height,
+                    pressProgress = interactiveHighlight.pressProgress,
+                    offset = interactiveHighlight.offset,
+                    density = this,
+                    fraction = 0f,
+                )
+                scaleX = drag.scaleX
+                scaleY = drag.scaleY
+                translationX = drag.translationX
+                translationY = drag.translationY
+            }
+            .size(ButtonDiameter)
+            .clickable {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            }
+            .then(interactiveHighlight.gestureModifier)
+            .drawBehind { drawRect(containerBase.copy(alpha = collapsedAlpha)) }
+            .clip(RoundedRectangle(ButtonDiameter / 2, RoundedCornerStyle.Continuous)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { RoundedRectangle(ButtonDiameter / 2, RoundedCornerStyle.Continuous) },
+                    effects = {
+                        vibrancy()
+                        blur(8.dp.toPx())
+                        lens(8.dp.toPx(), 24.dp.toPx())
+                    },
+                    highlight = null,
+                    shadow = null,
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .then(interactiveHighlight.modifier),
+        )
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(23.dp),
+            tint = triggerIconTint,
+        )
+    }
+}
+
 @Composable
 fun LiquidGlassDropdownMenuItem(
     text: String,
