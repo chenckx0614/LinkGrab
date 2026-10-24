@@ -26,7 +26,9 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 val recentLogs = listOf(
     UpdateLogItem(
         "3.0.31", "2026-10-23", listOf(
+            "⚠️ 重要：本版本更换了签名，安装前请先卸载旧版本（历史记录会清空，重要内容先记下来）",
             "历史记录搜索改为吸顶栏玻璃按钮，页面更清爽",
+            "全新固定签名：以后升级恢复正常覆盖安装，不再需要卸载",
         )
     ),
     UpdateLogItem(
