@@ -25,6 +25,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.36", "2026-10-25", listOf(
+            "桌面图标改用原设计卡片本体完整展示，不再缩放裁切，背景透出壁纸",
+        )
+    ),
+    UpdateLogItem(
         "3.0.35", "2026-10-25", listOf(
             "彻底修复桌面图标裁切：logo 缩放至系统安全区内，任何启动器形状都完整显示",
         )
