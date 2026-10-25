@@ -25,6 +25,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.34", "2026-10-25", listOf(
+            "修复桌面启动图标被圆形/圆角裁切：改为标准自适应图标（渐变背景层 + 透明底 logo 前景层）",
+        )
+    ),
+    UpdateLogItem(
         "3.0.33", "2026-10-25", listOf(
             "全应用统一按压震动：底栏、卡片、筛选、工具页按钮点击都有触感反馈",
         )
