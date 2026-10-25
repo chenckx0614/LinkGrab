@@ -19,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,12 +88,16 @@ internal fun ToolRow(title: String, subtitle: String, onClick: () -> Unit) {
         spring(dampingRatio = 0.78f, stiffness = 680f),
         label = "toolRowScale",
     )
+    val haptic = LocalHapticFeedback.current
     Row(
         Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(IOSCornerXSmall)
-            .clickable(interactionSource = source, indication = null, onClick = onClick)
+            .clickable(interactionSource = source, indication = null) {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            }
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

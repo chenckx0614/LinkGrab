@@ -68,6 +68,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -229,6 +231,7 @@ fun WebPageScreen(
     transparentBackground: Boolean = false,
     onBack: () -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
     var webView by remember { mutableStateOf<WebView?>(null) }
     // 转场（约 320ms）结束后才真正挂载 WebView
     var ready by remember { mutableStateOf(false) }
@@ -528,26 +531,32 @@ fun WebPageScreen(
                             modifier = Modifier.padding(top = 6.dp),
                         )
                         Row(Modifier.padding(top = 18.dp)) {
-                            Text(
-                                "重试",
-                                color = iosBlue(),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .clickable { retry() }
-                                    .padding(horizontal = 28.dp, vertical = 10.dp),
-                            )
-                            Text(
-                                "浏览器打开",
-                                color = iosBlue(),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
-                                    .clickable { openInBrowser() }
-                                    .padding(horizontal = 28.dp, vertical = 10.dp),
-                            )
+                        Text(
+                            "重试",
+                            color = iosBlue(),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    retry()
+                                }
+                                .padding(horizontal = 28.dp, vertical = 10.dp),
+                        )
+                        Text(
+                            "浏览器打开",
+                            color = iosBlue(),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    openInBrowser()
+                                }
+                                .padding(horizontal = 28.dp, vertical = 10.dp),
+                        )
                         }
                     }
                     ready -> key(reloadKey) {
@@ -927,7 +936,10 @@ fun WebPageScreen(
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(50))
-                                .clickable { diagnostics = null }
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    diagnostics = null
+                                }
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                         )
                     }

@@ -5,6 +5,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -292,6 +294,7 @@ fun HarmonyOS7TabItem(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     LaunchedEffect(isPressed) { onPress(isPressed) }
+    val haptic = LocalHapticFeedback.current
 
     Box(
         modifier = modifier
@@ -300,8 +303,14 @@ fun HarmonyOS7TabItem(
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick,
-                onLongClick = onClick,
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onClick()
+                },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onClick()
+                },
             ),
         contentAlignment = Alignment.Center,
     ) {

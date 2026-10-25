@@ -14,6 +14,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -95,6 +97,7 @@ fun LiquidBottomTabs(
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
+        val haptic = LocalHapticFeedback.current
         // NOTE: do NOT key this remember on the `selectedTabIndex` lambda — the
         // lambda is recreated on every recomposition, which would orphan the
         // state object observed by the snapshotFlow below and silently break
@@ -118,6 +121,7 @@ fun LiquidBottomTabs(
                 },
                 onDragStopped = {
                     val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
+                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                     currentIndex = targetIndex
                     // 拖拽收尾的 snap 仍属于拖拽驱动，保留 chromaticAberration。
                     animateToValue(targetIndex.toFloat(), fromDrag = true)
@@ -144,6 +148,7 @@ fun LiquidBottomTabs(
         // 才会走 animateToValue 滑过去。之前标签的 onClick 直接调导航，
         // 绕过了这里，所以点击没有滑动动画（只有拖拽有）。
         val selectTab: (Int) -> Unit = { index ->
+            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
             currentIndex = index.fastCoerceIn(0, tabsCount - 1)
         }
         val tabContent = content

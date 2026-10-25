@@ -39,6 +39,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -234,6 +236,7 @@ private fun FormatChip(
         animationSpec = androidx.compose.animation.core.tween(180),
         label = "audioChipBg",
     )
+    val haptic = LocalHapticFeedback.current
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -243,7 +246,10 @@ private fun FormatChip(
                 color = if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
                 shape = RoundedCornerShape(12.dp),
             )
-            .clickable(onClick = onClick)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            }
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

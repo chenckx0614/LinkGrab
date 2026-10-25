@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -175,6 +177,7 @@ fun Md3TabItem(
     val activeLabelColor = if (isLightTheme) Color(0xFF1D1B20) else Color(0xFFE6E1E5)
 
     val interactionSource = remember { MutableInteractionSource() }
+    val haptic = LocalHapticFeedback.current
 
     Column(
         modifier = modifier
@@ -182,8 +185,10 @@ fun Md3TabItem(
             .clickable(
                 interactionSource = interactionSource,
                 indication = ripple(bounded = true),
-                onClick = onClick,
-            ),
+            ) {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         // 图标区：32dp 高，与容器内的药丸指示器对齐（顶部 8dp 偏移相同）

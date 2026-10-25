@@ -68,8 +68,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -442,13 +444,23 @@ private fun HistoryCard(
         animationSpec = tween(140),
         label = "historyCheckBg",
     )
+    val haptic = LocalHapticFeedback.current
     Row(
         Modifier
             .fillMaxWidth()
             .clip(IOSCornerMedium)
             .background(cardBg)
             .border(0.5.dp, cardBorder, IOSCornerMedium)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onClick()
+                },
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onLongClick()
+                },
+            )
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -42,6 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +86,7 @@ fun PanDirectScreen(
     onOpenLogin: (homeUrl: String) -> Unit,
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
 
     var driveIndex by remember { mutableStateOf(0) }
     val config = QuarkPan.SUPPORTED[driveIndex]
@@ -303,7 +306,10 @@ fun PanDirectScreen(
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
                                     modifier = Modifier
-                                        .clickable { goUp() }
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                            goUp()
+                                        }
                                         .padding(end = 10.dp),
                                 )
                             }
@@ -409,7 +415,10 @@ fun PanDirectScreen(
                                 color = iosSecondaryLabel(),
                                 fontSize = 14.sp,
                                 modifier = Modifier
-                                    .clickable { link = null }
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        link = null
+                                    }
                                     .padding(start = 12.dp),
                             )
                         }
@@ -453,6 +462,7 @@ private fun PanDriveChip(
         animationSpec = tween(180),
         label = "panDriveChipBg",
     )
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -462,7 +472,10 @@ private fun PanDriveChip(
                 color = if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
                 shape = RoundedCornerShape(12.dp),
             )
-            .clickable(onClick = onClick)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -477,13 +490,17 @@ private fun PanDriveChip(
 
 @Composable
 private fun QuarkFileRow(file: QuarkFile, busy: Boolean, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(iosTertiaryBackground().copy(alpha = 0.55f))
-            .clickable(enabled = !busy, onClick = onClick)
+            .clickable(enabled = !busy) {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            }
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Text(

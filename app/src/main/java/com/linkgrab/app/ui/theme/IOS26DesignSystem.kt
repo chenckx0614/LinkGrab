@@ -289,11 +289,15 @@ fun IOS26ListRow(
         spring(dampingRatio = 0.78f, stiffness = 680f),
         label = "ios26ListRowScale",
     )
+    val haptic = LocalHapticFeedback.current
     val rowModifier = if (onClick != null) {
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(IOSCornerXSmall)
-            .clickable(interactionSource = source, indication = null, onClick = onClick)
+            .clickable(interactionSource = source, indication = null) {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            }
     } else {
         modifier
     }
@@ -550,6 +554,7 @@ fun IOS26Choice(
         tween(180),
         label = "ios26ChoiceBg",
     )
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = modifier
             .clip(IOSCornerSmall)
@@ -559,7 +564,10 @@ fun IOS26Choice(
                 if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
                 IOSCornerSmall,
             )
-            .clickable(onClick = onClick)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            }
             .padding(horizontal = 14.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {

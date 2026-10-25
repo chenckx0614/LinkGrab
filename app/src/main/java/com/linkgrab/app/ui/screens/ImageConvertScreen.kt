@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -257,6 +259,7 @@ private fun FormatChipSmall(
         animationSpec = androidx.compose.animation.core.tween(180),
         label = "formatChipBg",
     )
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
@@ -266,7 +269,10 @@ private fun FormatChipSmall(
                 color = if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
                 shape = RoundedCornerShape(12.dp),
             )
-            .clickable(onClick = onClick)
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                onClick()
+            }
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {

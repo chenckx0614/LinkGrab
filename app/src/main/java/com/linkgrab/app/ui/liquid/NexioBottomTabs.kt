@@ -31,6 +31,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -210,6 +212,7 @@ fun NexioBottomTabs(
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val ltrSign = if (isLtr) 1f else -1f
         val animationScope = rememberCoroutineScope()
+        val haptic = LocalHapticFeedback.current
         // 不能用 selectedTabIndex lambda 做 remember key：每次重组都是新实例，
         // currentIndex 会被冲掉导致点 tab 无效
         var currentIndex by remember { mutableIntStateOf(selectedTabIndex()) }
@@ -460,6 +463,7 @@ fun NexioBottomTabs(
                                 // 只有宿主确实会变时才上锁 —— 目标就是宿主当前页的话
                                 // 它不会发出新值，锁就永远解不开了。
                                 if (target != latestSelectedTabIndex()) pendingTarget = target
+                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                                 currentIndex = target
                                 dampedDragAnimation.animateToValue(target.toFloat())
                                 dampedDragAnimation.release()
