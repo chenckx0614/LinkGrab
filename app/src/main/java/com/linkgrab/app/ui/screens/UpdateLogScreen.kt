@@ -25,6 +25,12 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.38", "2026-10-26", listOf(
+            "修复抖音图文被误判成视频（结果页只能看一张封面），现按图集完整展示",
+            "修复图片预览无法左右滑动翻页的问题",
+        )
+    ),
+    UpdateLogItem(
         "3.0.37", "2026-10-25", listOf(
             "桌面图标恢复为原始样式",
         )

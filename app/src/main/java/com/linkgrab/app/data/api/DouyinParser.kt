@@ -143,6 +143,14 @@ class DouyinParser {
                 )
             }
 
+            // 图文（note）作品的 detail 即使被风控打薄，也会带 images 字段
+            // （可能为 null / 空数组）。这种情况绝不能落到视频分支 —— note 自带的
+            // video 只是图集预览流，返回 VIDEO 会让用户在结果页以视频方式
+            // “预览”，且只能看到一张封面。
+            if (images.isEmpty() && data.containsKey("images")) {
+                return@withContext Result.failure(Exception("抖音图集未取到图片（接口被风控过滤）"))
+            }
+
             // ---- video (视频) ----
             // 全量画质档位（高→低）：UI 让用户选，默认用最高档。
             val qualities = videoQualities(data)
@@ -325,7 +333,9 @@ class DouyinParser {
      */
     private fun fetchAwemeDetailFromHtml(videoId: String): JsonObject? {
         return try {
-            for (path in listOf("share/video", "share/note")) {
+            // 图文作品的分享路径是 /share/note/，必须先试 —— /share/video/{noteId}
+            // 会返回图集的预览视频变体，导致图集被当成视频解析。
+            for (path in listOf("share/note", "share/video")) {
                 val pageUrl = "https://www.iesdouyin.com/$path/$videoId/"
                 for (followRedirects in listOf(false, true)) {
                     val html = fetchShareHtml(pageUrl, followRedirects) ?: continue
@@ -335,7 +345,7 @@ class DouyinParser {
             // 全部落空 → ttwid 可能已被风控标记，刷新后再试一轮
             if (cachedTtwid != null) {
                 cachedTtwid = null
-                for (path in listOf("share/video", "share/note")) {
+                for (path in listOf("share/note", "share/video")) {
                     val pageUrl = "https://www.iesdouyin.com/$path/$videoId/"
                     val html = fetchShareHtml(pageUrl, followRedirects = false) ?: continue
                     parseShareHtmlRouterData(html)?.let { return it }

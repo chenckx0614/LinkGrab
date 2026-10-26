@@ -415,6 +415,33 @@ class WebViewParser(private val context: Context) {
             val response = httpClient.newCall(request).execute()
             val html = response.body?.string() ?: throw Exception("空响应")
 
+            // 图文（note）页优先提取图集：`download_url_list` 只出现在图集的
+            // images[] 里，视频页没有这个字段。不先拦下来的话，图集里实况/
+            // 预览视频的 mp4 / playAddr 会被下面的正则误判成视频，
+            // 用户在结果页就只能以视频方式看到一张封面。
+            run {
+                val albumPattern = Pattern.compile("\"download_url_list\"\\s*:\\s*\\[\"(https?://[^\"]+)\"")
+                val albumMatcher = albumPattern.matcher(html)
+                val images = mutableListOf<String>()
+                while (albumMatcher.find()) {
+                    var imageUrl = albumMatcher.group(1) ?: continue
+                    imageUrl = imageUrl.replace("\\u002F", "/").replace("\\/", "/").replace("\\u0026", "&")
+                    images.add(imageUrl)
+                }
+                if (images.isNotEmpty()) {
+                    val distinct = images.distinct()
+                    return@withContext Result.success(
+                        MediaResult(
+                            type = MediaType.IMAGE,
+                            title = "抖音图文",
+                            images = distinct,
+                            coverUrl = distinct.first(),
+                            source = "douyin",
+                        ).withSecureUrls()
+                    )
+                }
+            }
+
             val patterns = listOf(
                 Pattern.compile("""playAddr.*?"url_list":\s*\["(https?://[^"]+)""""),
                 Pattern.compile("""https?://[^\s"'<>]+\.mp4[^\s"'<>]*"""),

@@ -18,9 +18,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -465,7 +468,12 @@ fun ResultScreen(
             images = result.images,
             livePhotos = result.livePhotos,
             initialIndex = selectedImageIndex,
-            onDismiss = { showPreview = false },
+            onDismiss = {
+                // 清掉上一轮预览遗留的缩放状态，否则放大过的页
+                // 会让下次打开的 Pager 一直处于 userScrollEnabled=false
+                previewScaleRegistry.clear()
+                showPreview = false
+            },
             onDownload = { index ->
                 viewModel.downloadImage(context, result.images[index], "LinkGrab_${System.currentTimeMillis()}_$index.jpg")
             },
@@ -1565,18 +1573,34 @@ private fun ZoomablePreviewImage(
                     )
                 }
                 .pointerInput(url) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        val newScale = (scale * zoom).coerceIn(1f, 5f)
-                        scale = newScale
-                        if (newScale <= 1f) {
-                            offsetX = 0f; offsetY = 0f
-                        } else {
-                            // 拖动边界：放大后最大可拖出 (scale-1) * 半屏（近似值，
-                            // ContentScale.Fit 的实际图幅更小，留边无妨）
-                            val maxX = (newScale - 1f) * containerSize.width / 2f
-                            val maxY = (newScale - 1f) * containerSize.height / 2f
-                            offsetX = (offsetX + pan.x).coerceIn(-maxX, maxX)
-                            offsetY = (offsetY + pan.y).coerceIn(-maxY, maxY)
+                    // 不能用 detectTransformGestures：它会把 1x 下的单指拖动也
+                    // 消费掉，HorizontalPager 永远收不到横向滑动（预览无法翻页）。
+                    // 这里手动处理：只有双指捏合、或已处于放大态时才接管并消费；
+                    // 1x 的单指拖动不消费，透给 Pager 翻页。
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        var multiTouch = false
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val pressed = event.changes.count { it.pressed }
+                            if (pressed == 0) break
+                            if (pressed >= 2) multiTouch = true
+                            if (multiTouch || scale > 1f) {
+                                val newScale = (scale * event.calculateZoom()).coerceIn(1f, 5f)
+                                scale = newScale
+                                if (newScale <= 1f) {
+                                    offsetX = 0f; offsetY = 0f
+                                } else {
+                                    // 拖动边界：放大后最大可拖出 (scale-1) * 半屏（近似值，
+                                    // ContentScale.Fit 的实际图幅更小，留边无妨）
+                                    val maxX = (newScale - 1f) * containerSize.width / 2f
+                                    val maxY = (newScale - 1f) * containerSize.height / 2f
+                                    val pan = event.calculatePan()
+                                    offsetX = (offsetX + pan.x).coerceIn(-maxX, maxX)
+                                    offsetY = (offsetY + pan.y).coerceIn(-maxY, maxY)
+                                }
+                                event.changes.forEach { if (it.pressed) it.consume() }
+                            }
                         }
                     }
                 }
