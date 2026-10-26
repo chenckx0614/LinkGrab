@@ -84,6 +84,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
@@ -173,6 +174,15 @@ fun ResultScreen(
     var showPreview by remember { mutableStateOf(false) }
     // 点击的缩略图在窗口里的位置：预览从它展开、关闭时收回原位
     var previewOriginBounds by remember { mutableStateOf(Rect.Zero) }
+    // 预览打开时把背后的页面整体糊掉（毛玻璃遮罩：blur + 半透明着色），
+    // 关闭时随收回动画解除。直接对真实内容做 blur，而不是靠遮罩层自己猜。
+    val previewBlur = remember { Animatable(0f) }
+    LaunchedEffect(showPreview) {
+        previewBlur.animateTo(
+            if (showPreview) 1f else 0f,
+            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        )
+    }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedImages by remember { mutableStateOf(setOf<Int>()) }
     // 右上角菜单（液态玻璃容器变换：42dp 圆按钮 ↔ 200dp 面板）
@@ -252,6 +262,13 @@ fun ResultScreen(
     val backdropLayerActive = rememberBackdropLayerActive(headerScrolled || menuVisible)
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
+    // 预览毛玻璃：把 Scaffold 整体（内容 + 吸顶栏 + 底栏）实时模糊，
+    // 预览层的半透明着色透出来的就是真正被糊掉的页面
+    Box(
+        Modifier
+            .fillMaxSize()
+            .then(if (previewBlur.value > 0.01f) Modifier.blur(18.dp * previewBlur.value) else Modifier),
+    ) {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = iosBackground(),
@@ -470,6 +487,7 @@ fun ResultScreen(
                 }
             }
         }
+    }
     }
 
     if (showPreview && result?.type == MediaType.IMAGE) {
@@ -1334,7 +1352,9 @@ private fun ImagePreviewOverlay(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { screenSize = it }
-            .drawBehind { drawRect(Color.Black.copy(alpha = p.coerceIn(0f, 1f))) },
+            // 半透明着色而非纯黑：背后页面已做实时 blur，透出毛玻璃质感；
+            // 转场展开时随 p 同步加深
+            .drawBehind { drawRect(Color.Black.copy(alpha = 0.42f * p.coerceIn(0f, 1f))) },
     ) {
         // ---- hero 转场层：动画期间承载当前图，展开完成后交给 Pager ----
         if (!pagerReady && targetRect != Rect.Zero && originBounds != Rect.Zero) {
