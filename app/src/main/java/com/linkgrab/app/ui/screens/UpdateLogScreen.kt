@@ -25,6 +25,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem(
+        "3.0.41", "2026-10-26", listOf(
+            "修复预览操作栏和页码叠到顶部的问题，单击任意位置即可退出预览，双击放大不再跳位",
+        )
+    ),
+    UpdateLogItem(
         "3.0.40", "2026-10-26", listOf(
             "图片预览背景改为真正的毛玻璃：背后的页面整体实时模糊 + 半透明着色",
         )

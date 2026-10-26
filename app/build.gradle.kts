@@ -15,8 +15,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 341
-        versionName = "3.0.40"
+        versionCode = 342
+        versionName = "3.0.41"
     }
 
     // 永久签名：密钥在 app/linkgrab-sign.jks（已 gitignore），密码在 local.properties

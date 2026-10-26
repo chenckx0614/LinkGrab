@@ -1403,7 +1403,7 @@ private fun ImagePreviewOverlay(
                         contentDescription = "预览 ${page + 1}/${images.size}",
                         scaleRegistry = previewScaleRegistry,
                         pageKey = page,
-                        onTap = { controlsVisible = !controlsVisible },
+                        onTap = { close() },
                         onImageLoaded = { aspect ->
                             if (page == pagerState.currentPage) imageAspect = aspect
                         },
@@ -1429,7 +1429,9 @@ private fun ImagePreviewOverlay(
         // ---- 控件层：转场尾部淡入，收起时随整体淡出 ----
         val controlsAlpha = ((p - 0.85f) / 0.15f).coerceIn(0f, 1f)
         if (controlsAlpha > 0f && controlsVisible) {
-            Box(modifier = Modifier.graphicsLayer { alpha = controlsAlpha }) {
+            // 必须 fillMaxSize：BottomCenter 对齐的页码/操作栏才有全屏参照，
+            // 否则容器只有顶部渐变 132dp 高，底栏会被叠进顶部区域
+            Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = controlsAlpha }) {
                 // 顶部渐变只负责承托控件，不遮住图片主体。
                 Box(
                     modifier = Modifier
@@ -1679,13 +1681,20 @@ private fun ZoomablePreviewImage(
                     detectTapGestures(
                         onTap = { onTap() },
                         onDoubleTap = { tap ->
-                            if (scale > 1.5f) {
+                            if (scale > 1.05f) {
                                 scale = 1f; offsetX = 0f; offsetY = 0f
                             } else {
                                 val newScale = 2.5f
-                                // 以点击点为中心放大：保持点击点下的图像内容原位不动
-                                offsetX = tap.x - (tap.x - offsetX) * (newScale / scale)
-                                offsetY = tap.y - (tap.y - offsetY) * (newScale / scale)
+                                val r = newScale / scale
+                                val cx = containerSize.width / 2f
+                                val cy = containerSize.height / 2f
+                                // graphicsLayer 以中心为支点缩放：保持点击点下的内容
+                                // 原位必须以中心换算（之前的公式少了中心项，双击会跳位），
+                                // 再夹进可拖范围，避免把图甩出屏幕
+                                val maxX = (newScale - 1f) * containerSize.width / 2f
+                                val maxY = (newScale - 1f) * containerSize.height / 2f
+                                offsetX = ((tap.x - cx) * (1f - r) + offsetX * r).coerceIn(-maxX, maxX)
+                                offsetY = ((tap.y - cy) * (1f - r) + offsetY * r).coerceIn(-maxY, maxY)
                                 scale = newScale
                             }
                         },
