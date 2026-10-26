@@ -10,6 +10,7 @@ import com.linkgrab.app.data.api.WebViewParser
 import com.linkgrab.app.data.api.WeiboParser
 import com.linkgrab.app.data.api.XhsParser
 import com.linkgrab.app.data.model.MediaResult
+import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.Platform
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -81,7 +82,19 @@ class ParseRepository(context: Context) {
         return when (detectPlatform(cleanUrl)) {
             Platform.DOUYIN -> {
                 val native = douyinParser.parse(cleanUrl)
-                if (native.isSuccess) native else parseWithFallback(native) { legacyParser.parse(cleanUrl) }
+                if (native.isSuccess) native
+                else {
+                    val nativeMessage = native.exceptionOrNull()?.message.orEmpty()
+                    val fallback = legacyParser.parse(cleanUrl)
+                    val fallbackResult = fallback.getOrNull()
+                    if (fallback.isSuccess && fallbackResult?.type == MediaType.VIDEO && "图集" in nativeMessage) {
+                        // 原生解析已确认这是图集（接口被风控打薄）——降级链拿到的
+                        // 只可能是图集自带的预览视频。以 VIDEO 返回的话结果页只能
+                        // 看一张封面（用户反馈的「抖音解析后只显示封面」就是这条
+                        // 路径），宁可失败也别给假结果。
+                        native
+                    } else if (fallback.isSuccess) fallback else native
+                }
             }
             Platform.XIAOHONGSHU -> withContext(Dispatchers.IO) {
                 // 注意：整个 XHS 分支必须在 IO 线程 —— expandShareLink 是阻塞
@@ -175,19 +188,6 @@ class ParseRepository(context: Context) {
             Platform.WEB -> genericWebParser.parse(cleanUrl)
             Platform.UNKNOWN -> Result.failure(Exception("没有识别到可解析的链接"))
         }
-    }
-
-    /**
-     * 降级链的失败信息往往更含糊（例如它自己的平台识别不认识某个短链变体时，
-     * 会报「不支持的链接格式」），而原生解析的错误才是真实原因。
-     * 降级也失败时优先回传原生错误，别让它被盖掉。
-     */
-    private inline fun parseWithFallback(
-        native: Result<MediaResult>,
-        legacy: () -> Result<MediaResult>,
-    ): Result<MediaResult> {
-        val fallback = legacy()
-        return if (fallback.isSuccess) fallback else native
     }
 
     /**

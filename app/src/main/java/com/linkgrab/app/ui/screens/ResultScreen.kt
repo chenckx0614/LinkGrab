@@ -8,10 +8,10 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.widget.Toast
-import android.view.WindowManager
 import kotlin.math.roundToInt
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -88,6 +88,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.isSpecified
+import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -95,6 +98,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -104,17 +110,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogWindowProvider
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.kyant.backdrop.Backdrop
@@ -165,6 +171,8 @@ fun ResultScreen(
 
     var selectedImageIndex by remember { mutableIntStateOf(0) }
     var showPreview by remember { mutableStateOf(false) }
+    // 点击的缩略图在窗口里的位置：预览从它展开、关闭时收回原位
+    var previewOriginBounds by remember { mutableStateOf(Rect.Zero) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedImages by remember { mutableStateOf(setOf<Int>()) }
     // 右上角菜单（液态玻璃容器变换：42dp 圆按钮 ↔ 200dp 面板）
@@ -320,11 +328,12 @@ fun ResultScreen(
                             selectionMode = selectionMode,
                             selectedImages = selectedImages,
                             onToggleSelection = { selectionMode = !selectionMode; selectedImages = emptySet() },
-                            onImageClick = { index ->
+                            onImageClick = { index, bounds ->
                                 if (selectionMode) {
                                     selectedImages = if (selectedImages.contains(index)) selectedImages - index else selectedImages + index
                                 } else {
                                     selectedImageIndex = index
+                                    previewOriginBounds = bounds
                                     showPreview = true
                                 }
                             },
@@ -464,16 +473,12 @@ fun ResultScreen(
     }
 
     if (showPreview && result?.type == MediaType.IMAGE) {
-        ImagePreviewDialog(
+        ImagePreviewOverlay(
             images = result.images,
             livePhotos = result.livePhotos,
             initialIndex = selectedImageIndex,
-            onDismiss = {
-                // 清掉上一轮预览遗留的缩放状态，否则放大过的页
-                // 会让下次打开的 Pager 一直处于 userScrollEnabled=false
-                previewScaleRegistry.clear()
-                showPreview = false
-            },
+            originBounds = previewOriginBounds,
+            onClose = { showPreview = false },
             onDownload = { index ->
                 viewModel.downloadImage(context, result.images[index], "LinkGrab_${System.currentTimeMillis()}_$index.jpg")
             },
@@ -495,7 +500,7 @@ private fun ImageResultBody(
     selectionMode: Boolean,
     selectedImages: Set<Int>,
     onToggleSelection: () -> Unit,
-    onImageClick: (Int) -> Unit,
+    onImageClick: (Int, Rect) -> Unit,
     onDownloadLive: (Int) -> Unit,
     onDownloadImage: (Int, String) -> Unit,
     bottomPadding: androidx.compose.ui.unit.Dp,
@@ -521,13 +526,16 @@ private fun ImageResultBody(
         ) {
             itemsIndexed(result.images, key = { _, imageUrl -> imageUrl }) { index, imageUrl ->
                 val isLive = result.isLivePhoto(index)
+                // 记录缩略图在窗口里的边界，供预览页做「从缩略图展开」转场
+                var itemBounds by remember { mutableStateOf(Rect.Zero) }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(1f)
                         .clip(IOSCornerSmall)
                         .background(iosTertiaryBackground())
-                        .clickable { onImageClick(index) },
+                        .onGloballyPositioned { itemBounds = it.boundsInRoot() }
+                        .clickable { onImageClick(index, itemBounds) },
                 ) {
                     if (heavyContentReady) {
                         AsyncImage(
@@ -715,30 +723,6 @@ private fun VideoResultBody(
         }
 
         Spacer(modifier = Modifier.height(bottomPadding + 16.dp))
-    }
-}
-
-/**
- * 给当前 Dialog 窗口开启系统级背景模糊（FLAG_BLUR_BEHIND，minSdk 31 全设备可用）。
- * Dialog 是独立窗口，backdrop 库的录制层采样不到主窗口内容，跨窗口模糊只能走系统。
- * 抽出来是为了让「需要模糊背景的弹窗」统一处理，不用各写一遍窗口配置。
- */
-@Composable
-private fun EnableDialogBlurBehind() {
-    val view = LocalView.current
-    val density = LocalDensity.current
-    DisposableEffect(view) {
-        val window = (view.parent as? DialogWindowProvider)?.window
-        if (window != null) {
-            val blurEnabled = window.windowManager.isCrossWindowBlurEnabled
-            window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-            window.attributes = window.attributes.apply {
-                blurBehindRadius = with(density) { 24.dp.toPx().roundToInt() }
-                // 系统关掉跨窗口模糊（省电模式）时加深压暗兜底
-                dimAmount = if (blurEnabled) 0f else 0.55f
-            }
-        }
-        onDispose { }
     }
 }
 
@@ -1246,12 +1230,19 @@ private fun PlayOverlay(modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * 全屏图片预览层（不是 Dialog：直接叠在 ResultScreen 最上层，盖住底栏）。
+ * - 转场：打开时从点击的缩略图原位展开到全屏，关闭时收回原位（hero morph）
+ * - 背景是整块纯黑遮罩，随转场淡入淡出（用户明确要求纯黑覆盖，不要模糊）
+ * - 翻页 HorizontalPager + 双指缩放/双击放大，控件随转场尾部淡入
+ */
 @Composable
-private fun ImagePreviewDialog(
+private fun ImagePreviewOverlay(
     images: List<String>,
     livePhotos: Map<Int, List<String>>,
     initialIndex: Int,
-    onDismiss: () -> Unit,
+    originBounds: Rect,
+    onClose: () -> Unit,
     onDownload: (Int) -> Unit,
     onDownloadLive: (Int) -> Unit,
 ) {
@@ -1264,8 +1255,12 @@ private fun ImagePreviewDialog(
     var controlsVisible by remember { mutableStateOf(true) }
     val liveUrl = livePhotos[pagerState.currentPage]?.firstOrNull()
 
-    // 翻页/关闭预览时停掉实况播放
-    LaunchedEffect(pagerState.currentPage) { playingLive = false }
+    // 翻页/关闭预览时停掉实况播放；同步记录「当前页」，收回转场用
+    val heroIndex = remember { mutableIntStateOf(initialIndex) }
+    LaunchedEffect(pagerState.currentPage) {
+        playingLive = false
+        heroIndex.intValue = pagerState.currentPage
+    }
 
     val exoPlayer = remember(pagerState.currentPage, playingLive) {
         if (playingLive && liveUrl != null) {
@@ -1281,20 +1276,93 @@ private fun ImagePreviewDialog(
         onDispose { exoPlayer?.pause(); exoPlayer?.release() }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        // 背景不再是一整块死黑。
-        // 参考 Nexio 的 BlurBottomSheet：弹窗遮罩用「系统级模糊 + 半透明压暗」，
-        // 而不是 opaque 纯色 —— 纯黑全屏就是那块「大黑片」。这里给窗口开
-        // FLAG_BLUR_BEHIND（minSdk 31 全设备可用），再压一层半透明的暗色，
-        // 于是背景是"被虚化且压暗的上一页"，而不是一块黑板。
-        EnableDialogBlurBehind()
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                // 遮罩透明度在**绘制期**读取（drawBehind），不在组合期用
-                // Modifier.background —— 后者会在打开动画期间引发重组（Nexio 的做法）
-                .drawBehind { drawRect(Color.Black.copy(alpha = 0.82f)) },
-        ) {
+    // ---- 转场进度：0 = 缩略图原位，1 = 全屏展开 ----
+    val progress = remember { Animatable(0f) }
+    var dismissing by remember { mutableStateOf(false) }
+    var screenSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    // 当前图的真实宽高比（加载成功后回填），决定全屏态的 Fit 矩形
+    var imageAspect by remember { mutableStateOf<Float?>(null) }
+
+    val scope = rememberCoroutineScope()
+    fun close() {
+        if (dismissing) return
+        dismissing = true
+        controlsVisible = true
+        // 清掉上一轮预览遗留的缩放状态，否则放大过的页
+        // 会让下次打开的 Pager 一直处于 userScrollEnabled=false
+        previewScaleRegistry.clear()
+        scope.launch {
+            progress.animateTo(
+                0f,
+                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+            )
+            onClose()
+        }
+    }
+    LaunchedEffect(Unit) {
+        progress.animateTo(
+            1f,
+            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        )
+    }
+    // 后注册的 BackHandler 优先：预览期间系统返回走带转场的 close()
+    BackHandler { close() }
+
+    val p = progress.value
+    val pagerReady = p >= 1f
+    // 全屏 Fit 矩形：按图片比例在屏幕内居中；比例未知时先按整屏算
+    val targetRect = remember(imageAspect, screenSize) {
+        val w = screenSize.width.toFloat()
+        val h = screenSize.height.toFloat()
+        if (w <= 0f || h <= 0f) Rect.Zero
+        else {
+            val a = imageAspect ?: w / h
+            val iw: Float
+            val ih: Float
+            if (a >= w / h) {
+                iw = w; ih = w / a
+            } else {
+                ih = h; iw = h * a
+            }
+            Rect((w - iw) / 2f, (h - ih) / 2f, (w + iw) / 2f, (h + ih) / 2f)
+        }
+    }
+    // 用户翻到了别的页时，收回动画对不准原缩略图 —— 整层淡出代替收回
+    val fadeDismiss = dismissing && heroIndex.intValue != initialIndex
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { screenSize = it }
+            .drawBehind { drawRect(Color.Black.copy(alpha = p.coerceIn(0f, 1f))) },
+    ) {
+        // ---- hero 转场层：动画期间承载当前图，展开完成后交给 Pager ----
+        if (!pagerReady && targetRect != Rect.Zero && originBounds != Rect.Zero) {
+            val heroRect = lerp(originBounds, targetRect, p)
+            AsyncImage(
+                model = ImageRequest.Builder(context).data(images[heroIndex.intValue]).crossfade(false).build(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                onState = { state ->
+                    if (state is AsyncImagePainter.State.Success) {
+                        val s = state.painter.intrinsicSize
+                        if (s.isSpecified && s.width > 0f && s.height > 0f) {
+                            imageAspect = s.width / s.height
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .morphRect(heroRect)
+                    .graphicsLayer { if (fadeDismiss) alpha = p.coerceIn(0f, 1f) }
+                    // 起点圆角对齐网格缩略图（IOSCornerSmall=16dp），随展开收平
+                    .clip(RoundedCornerShape(16.dp * (1f - p)))
+                    .clipToBounds(),
+            )
+        }
+
+        // ---- 展开完成后的正式预览层：翻页 + 缩放 + 实况 ----
+        if (pagerReady && !dismissing) {
             // 被录进 backdrop 的内容层：只有图片/视频本体。
             // 玻璃控件本身不放进录制层，避免「玻璃采样玻璃」。
             // 控件隐藏时不录，省一次全屏离屏合成。
@@ -1316,6 +1384,9 @@ private fun ImagePreviewDialog(
                         scaleRegistry = previewScaleRegistry,
                         pageKey = page,
                         onTap = { controlsVisible = !controlsVisible },
+                        onImageLoaded = { aspect ->
+                            if (page == pagerState.currentPage) imageAspect = aspect
+                        },
                     )
                 }
 
@@ -1333,8 +1404,12 @@ private fun ImagePreviewDialog(
                     )
                 }
             }
+        }
 
-            if (controlsVisible) {
+        // ---- 控件层：转场尾部淡入，收起时随整体淡出 ----
+        val controlsAlpha = ((p - 0.85f) / 0.15f).coerceIn(0f, 1f)
+        if (controlsAlpha > 0f && controlsVisible) {
+            Box(modifier = Modifier.graphicsLayer { alpha = controlsAlpha }) {
                 // 顶部渐变只负责承托控件，不遮住图片主体。
                 Box(
                     modifier = Modifier
@@ -1359,7 +1434,7 @@ private fun ImagePreviewDialog(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     LiquidGlassBackButton(
-                        onClick = onDismiss,
+                        onClick = { close() },
                         backdrop = previewBackdrop,
                         buttonSize = 42.dp,
                         darkBackground = true,
@@ -1443,6 +1518,21 @@ private fun ImagePreviewDialog(
         }
     }
 }
+
+/**
+ * 转场布局：把内容测量并放置到指定矩形里（每帧重组驱动，尺寸位置精确对齐
+ * 缩略图 → 全屏 Fit 矩形的插值路径）。
+ */
+private fun Modifier.morphRect(rect: Rect): Modifier = this.then(
+    Modifier.layout { measurable, constraints ->
+        val w = rect.width.roundToInt().coerceAtLeast(1)
+        val h = rect.height.roundToInt().coerceAtLeast(1)
+        val placeable = measurable.measure(Constraints.fixed(w, h))
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            placeable.placeRelative(rect.left.roundToInt(), rect.top.roundToInt())
+        }
+    },
+)
 
 @Composable
 private fun PreviewAction(
@@ -1529,6 +1619,7 @@ private fun ZoomablePreviewImage(
     scaleRegistry: androidx.compose.runtime.snapshots.SnapshotStateMap<Int, Float>,
     pageKey: Int,
     onTap: () -> Unit,
+    onImageLoaded: (Float) -> Unit = {},
 ) {
     var scale by remember(url) { mutableFloatStateOf(1f) }
     var offsetX by remember(url) { mutableFloatStateOf(0f) }
@@ -1554,6 +1645,14 @@ private fun ZoomablePreviewImage(
             model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(true).build(),
             contentDescription = contentDescription,
             contentScale = ContentScale.Fit,
+            onState = { state ->
+                if (state is AsyncImagePainter.State.Success) {
+                    val s = state.painter.intrinsicSize
+                    if (s.isSpecified && s.width > 0f && s.height > 0f) {
+                        onImageLoaded(s.width / s.height)
+                    }
+                }
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(url) {

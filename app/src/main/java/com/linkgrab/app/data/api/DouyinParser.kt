@@ -15,8 +15,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 /**
@@ -78,6 +80,24 @@ class DouyinParser {
 
     private fun ttwidCookie(): String {
         cachedTtwid?.let { return "ttwid=$it" }
+        // 通道 1：访问分享主页，读响应 Set-Cookie。部分网络环境主页不下发
+        // ttwid（2026-10 实测），此时走通道 2。
+        bootstrapTtwidFromHomepage()?.let {
+            cachedTtwid = it
+            return "ttwid=$it"
+        }
+        // 通道 2：字节的 union register 接口主动注册一个 —— POST 拿
+        // redirect_url(ticket)，再 GET 回调地址读 Set-Cookie。实测（2026-10）
+        // 桌面与移动网络均可用，拿到 ttwid 后 SSR 分享页能带出完整图集数据。
+        bootstrapTtwidFromRegister()?.let {
+            cachedTtwid = it
+            return "ttwid=$it"
+        }
+        // 两条通道都失败不阻断解析：不带 cookie 直连仍有一定概率成功
+        return ""
+    }
+
+    private fun bootstrapTtwidFromHomepage(): String? {
         return try {
             val request = Request.Builder().url("https://www.iesdouyin.com/")
                 .header("User-Agent", mobileUa)
@@ -85,10 +105,32 @@ class DouyinParser {
             client.newCall(request).execute().use { resp ->
                 Cookie.parseAll("https://www.iesdouyin.com/".toHttpUrl(), resp.headers)
                     .firstOrNull { it.name == "ttwid" }?.value
-            }?.also { cachedTtwid = it }?.let { "ttwid=$it" } ?: ""
+            }
         } catch (_: Exception) {
-            // 引导失败不阻断解析：不带 cookie 直连仍有一定概率成功
-            ""
+            null
+        }
+    }
+
+    private fun bootstrapTtwidFromRegister(): String? {
+        return try {
+            val body = """{"region":"cn","aid":6383,"needFid":false,"service":"www.douyin.com",""" +
+                """"migrate_info":{"ticket":"","source":"node"},"cbUrlProtocol":"https","union":true}"""
+            val request = Request.Builder().url("https://ttwid.bytedance.com/ttwid/union/register/")
+                .header("User-Agent", defaultUa)
+                .post(body.toRequestBody("application/json".toMediaType()))
+                .build()
+            val callback = client.newCall(request).execute().use { resp ->
+                json.parseToJsonElement(resp.body?.string() ?: return null)
+                    .jsonObject["redirect_url"]?.let { it as? JsonPrimitive }?.contentOrNull
+            } ?: return null
+            noRedirectClient.newCall(
+                Request.Builder().url(callback).header("User-Agent", defaultUa).build()
+            ).execute().use { resp ->
+                Cookie.parseAll(callback.toHttpUrl(), resp.headers)
+                    .firstOrNull { it.name == "ttwid" }?.value
+            }
+        } catch (_: Exception) {
+            null
         }
     }
     // endregion
