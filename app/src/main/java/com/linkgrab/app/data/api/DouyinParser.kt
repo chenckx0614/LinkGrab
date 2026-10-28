@@ -49,6 +49,18 @@ import java.util.concurrent.TimeUnit
  */
 class DouyinParser {
 
+    companion object {
+        // ttwid 跨实例共享：WebView 通道拿到真浏览器会话后回填到这里，
+        // 之后所有 DouyinParser 实例的原生请求都带上这个 cookie。
+        @Volatile
+        private var cachedTtwid: String? = null
+
+        /** WebView 真页面拿到 ttwid 后回填（原生解析从此风控概率大降）。 */
+        fun injectTtwid(value: String) {
+            if (value.isNotBlank()) cachedTtwid = value
+        }
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     private val client = OkHttpClient.Builder()
@@ -73,10 +85,8 @@ class DouyinParser {
     //
     // 抖音 web 接口的风控：不带 ttwid cookie 时，slidesinfo / iteminfo 会**间歇性**
     // 返回空 aweme_details（这正是「偶尔解析失败」的主因）。浏览器访问任意
-    // iesdouyin 页面都会下发 ttwid，这里引导一次并缓存复用。
-
-    @Volatile
-    private var cachedTtwid: String? = null
+    // iesdouyin 页面都会下发 ttwid，这里引导一次并缓存复用（缓存移至 companion，
+    // 供 WebView 通道回填共享）。
 
     private fun ttwidCookie(): String {
         cachedTtwid?.let { return "ttwid=$it" }

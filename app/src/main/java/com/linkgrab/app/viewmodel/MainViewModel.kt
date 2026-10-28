@@ -103,6 +103,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _clipboardDetect = MutableStateFlow(true)
     val clipboardDetect: StateFlow<Boolean> = _clipboardDetect.asStateFlow()
 
+    /** 主界面左右滑动手势是否切换页面（默认开）。 */
+    private val _swipeSwitchPages = MutableStateFlow(true)
+    val swipeSwitchPages: StateFlow<Boolean> = _swipeSwitchPages.asStateFlow()
+
     /** 上次选的保存清晰度 label（"1080P" 之类；空 = 用最高档）。 */
     private val _preferredQuality = MutableStateFlow("")
     val preferredQuality: StateFlow<String> = _preferredQuality.asStateFlow()
@@ -203,6 +207,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.clipboardDetect.collect { _clipboardDetect.value = it }
         }
         viewModelScope.launch {
+            settingsRepository.swipeSwitchPages.collect { _swipeSwitchPages.value = it }
+        }
+        viewModelScope.launch {
             settingsRepository.preferredQuality.collect { _preferredQuality.value = it }
         }
         viewModelScope.launch {
@@ -265,6 +272,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setClipboardDetect(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setClipboardDetect(enabled) }
+    }
+
+    fun setSwipeSwitchPages(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setSwipeSwitchPages(enabled) }
     }
 
     fun setPreferredQuality(label: String) {
@@ -347,6 +358,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         HistoryItem(
                             platform = platform.name.lowercase(),
                             title = parsed.title.ifEmpty { "未命名" },
+                            author = parsed.author,
                             cover = parsed.coverUrl ?: parsed.images.firstOrNull() ?: "",
                             url = url,
                             type = if (parsed.type == com.linkgrab.app.data.model.MediaType.VIDEO) "video" else "image",
@@ -457,6 +469,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             HistoryItem(
                 platform = platformKey,
                 title = title,
+                author = result.author,
                 cover = result.coverUrl ?: result.images.firstOrNull() ?: "",
                 url = url,
                 type = if (result.type == com.linkgrab.app.data.model.MediaType.VIDEO) "video" else "image",
@@ -557,15 +570,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         images: List<Pair<String, String>> = emptyList(),
         videos: List<Pair<List<String>, String>> = emptyList(),
         platformLabel: String? = currentPlatformLabel,
+        motionPhotos: List<MotionPhotoDownload> = emptyList(),
+        historyUrls: List<String> = listOf(_uiState.value.url),
     ) {
         val imageItems = images.filter { it.first.isNotBlank() }
         val videoItems = videos.map { (candidates, name) ->
             candidates.filter { it.isNotBlank() }.distinct() to name
         }.filter { it.first.isNotEmpty() }
-        if (imageItems.isEmpty() && videoItems.isEmpty()) return
+        val motionItems = motionPhotos.filter { it.imageUrl.isNotBlank() && it.videoUrls.isNotEmpty() }
+        if (imageItems.isEmpty() && videoItems.isEmpty() && motionItems.isEmpty()) return
 
-        val total = imageItems.size + videoItems.size
+        val total = imageItems.size + videoItems.size + motionItems.size
         val platform = platformLabel
+        val ownerUrls = historyUrls.filter { it.isNotBlank() }.distinct()
 
         viewModelScope.launch {
             val batchIds = mutableListOf<Long>()
@@ -573,9 +590,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // 列表上限 100：超出时先丢最老的已完结任务
                 val finished = _downloadTasks.value.filter { it.status.isFinished }
                 var kept = _downloadTasks.value
-                while (kept.size + total > 100 && finished.isNotEmpty()) {
-                    kept = kept - finished.first()
-                }
+                val removeIds = finished.take((kept.size + total - 100).coerceAtLeast(0)).map { it.id }.toSet()
+                kept = kept.filterNot { it.id in removeIds }
                 _downloadTasks.value = kept
                 imageItems.forEach { (url, filename) ->
                     val id = ++taskIdSeed
@@ -589,6 +605,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     batchIds.add(id)
                     _downloadTasks.value = _downloadTasks.value + DownloadTaskItem(
                         id = id, isVideo = true, urls = candidates, filename = filename, platform = platform,
+                    )
+                }
+                motionItems.forEach { item ->
+                    val id = ++taskIdSeed
+                    batchIds.add(id)
+                    _downloadTasks.value = _downloadTasks.value + DownloadTaskItem(
+                        id = id, isVideo = false, urls = item.videoUrls, filename = item.filename,
+                        platform = platform, motionImageUrl = item.imageUrl,
                     )
                 }
             }
@@ -621,14 +645,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val firstFile = snapshot
                         .firstOrNull { it.status == DownloadStatus.Success }
                         ?.filename.orEmpty()
-                    runCatching {
-                        historyRepository.markDownloaded(
-                            currentPlatformKey,
-                            currentTitle,
-                            firstFile,
-                        )
+                    ownerUrls.forEach { ownerUrl ->
+                        historyRepository.markDownloadedByUrl(ownerUrl, firstFile)
                     }
-                    _uiState.value = _uiState.value.copy(alreadyDownloaded = true)
+                    if (_uiState.value.url in ownerUrls) {
+                        _uiState.value = _uiState.value.copy(alreadyDownloaded = true)
+                    }
                 }
                 succeeded > 0 -> {
                     val pauseHint = if (pausedCount > 0) "；$pausedCount 个已暂停，可在下载管理继续" else ""
@@ -655,6 +677,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun downloadVideo(context: Context, urls: List<String>, filename: String) =
         downloadBatch(context, videos = listOf(urls to filename))
+
+    /** A live image is one queue item, published only after both parts have been packaged. */
+    fun downloadLivePhoto(context: Context, imageUrl: String, videoUrls: List<String>, filename: String) =
+        downloadBatch(context, motionPhotos = listOf(MotionPhotoDownload(imageUrl, videoUrls, filename)))
+
+    fun downloadImageSelection(context: Context, result: MediaResult, indices: List<Int>, asMotionPhoto: Boolean) {
+        val stamp = System.currentTimeMillis()
+        val images = mutableListOf<Pair<String, String>>()
+        val videos = mutableListOf<Pair<List<String>, String>>()
+        val motion = mutableListOf<MotionPhotoDownload>()
+        indices.distinct().filter { it in result.images.indices }.forEach { i ->
+            val live = result.livePhotoCandidates(i)
+            if (asMotionPhoto && live.isNotEmpty()) {
+                motion.add(MotionPhotoDownload(result.images[i], live, "MVIMG_LinkGrab_${stamp}_$i.jpg"))
+            } else {
+                images.add(result.images[i] to "LinkGrab_${stamp}_$i.jpg")
+                if (live.isNotEmpty()) videos.add(live to "LinkGrab_Live_${stamp}_$i.mp4")
+            }
+        }
+        downloadBatch(context, images = images, videos = videos, motionPhotos = motion)
+    }
 
     // ---- 下载管理页操作 ----
 
@@ -725,13 +768,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         updateTask(taskId) { it.copy(status = DownloadStatus.Downloading, error = null) }
         try {
-            if (task.isVideo) runVideoTask(context, task, fileIndex, fileTotal)
+            if (task.motionImageUrl != null) runMotionPhotoTask(context, task)
+            else if (task.isVideo) runVideoTask(context, task, fileIndex, fileTotal)
             else runImageTask(context, task, fileIndex, fileTotal)
         } catch (e: TaskPausedSignal) {
             // 半成品保留（IS_PENDING=1 不会出现在相册），续传从这里开始
             updateTask(taskId) { it.copy(status = DownloadStatus.Paused) }
         } catch (e: TaskCanceledSignal) {
             updateTask(taskId) { it.copy(partialUri = null, status = DownloadStatus.Canceled) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             // 失败时丢弃半成品（与旧版行为一致），Failed 可手动重试
             task.partialUri?.let { uri ->
@@ -741,6 +787,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 it.copy(status = DownloadStatus.Failed, partialUri = null, error = e.message ?: "下载失败")
             }
         }
+    }
+
+    private suspend fun runMotionPhotoTask(context: Context, task: DownloadTaskItem) {
+        val saver = com.linkgrab.app.data.media.MotionPhotoSaver(httpClient) { buildMediaRequest(it, null) }
+        saver.save(context, requireNotNull(task.motionImageUrl), task.urls, task.filename,
+            organizeRelativePath(false, task.platform),
+            checkpoint = { checkPauseCancel(task.id) },
+            onProgress = { progress ->
+                updateTask(task.id) { it.copy(progress = progress) }
+                _downloadState.value = DownloadState.Downloading(progress)
+            })
+        updateTask(task.id) { it.copy(status = DownloadStatus.Success, progress = 100, partialUri = null) }
     }
 
     /**
@@ -1125,7 +1183,11 @@ data class DownloadTaskItem(
     /** 视频多候选时当前进行到的候选下标。 */
     val candidateIndex: Int = 0,
     val error: String? = null,
+    /** Non-null for a JPEG + MP4 Motion Photo task. Pause/retry restarts packaging. */
+    val motionImageUrl: String? = null,
 )
+
+data class MotionPhotoDownload(val imageUrl: String, val videoUrls: List<String>, val filename: String)
 
 /** worker 内部控制流信号：不是错误，上层据此转成 Paused/Canceled 状态。 */
 private class TaskPausedSignal : Exception()

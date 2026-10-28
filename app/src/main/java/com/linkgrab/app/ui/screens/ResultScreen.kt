@@ -167,6 +167,7 @@ fun ResultScreen(
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
+    var pendingLiveSave by remember { mutableStateOf<List<Int>?>(null) }
     val downloadState by viewModel.downloadState.collectAsState()
     val result = uiState.result
 
@@ -291,16 +292,9 @@ fun ResultScreen(
                         val timestamp = System.currentTimeMillis()
                         when (safeResult.type) {
                             MediaType.IMAGE -> {
-                                // 批量走统一队列：串行下载 + 跨文件聚合进度，
-                                // 不再 N 个协程并发互相覆盖进度条
-                                val imageJobs = indices.map { i ->
-                                    safeResult.images[i] to "LinkGrab_${timestamp}_$i.jpg"
-                                }
-                                val liveJobs = indices.mapNotNull { i ->
-                                    val liveCandidates = safeResult.livePhotoCandidates(i)
-                                    if (liveCandidates.isNotEmpty()) liveCandidates to "LinkGrab_Live_${timestamp}_$i.mp4" else null
-                                }
-                                viewModel.downloadBatch(context, images = imageJobs, videos = liveJobs)
+                                if (indices.any { safeResult.livePhotoCandidates(it).isNotEmpty() }) {
+                                    pendingLiveSave = indices
+                                } else viewModel.downloadImageSelection(context, safeResult, indices, false)
                             }
                             MediaType.VIDEO -> {
                                 val quality = safeResult.videoQualities.getOrNull(selectedQualityIndex)
@@ -355,10 +349,7 @@ fun ResultScreen(
                                 }
                             },
                             onDownloadLive = { index ->
-                                val liveCandidates = result.livePhotoCandidates(index)
-                                if (liveCandidates.isNotEmpty()) {
-                                    viewModel.downloadVideo(context, liveCandidates, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
-                                }
+                                pendingLiveSave = listOf(index)
                             },
                             onDownloadImage = { index, imageUrl ->
                                 viewModel.downloadImage(context, imageUrl, "LinkGrab_${System.currentTimeMillis()}_$index.jpg")
@@ -501,12 +492,21 @@ fun ResultScreen(
                 viewModel.downloadImage(context, result.images[index], "LinkGrab_${System.currentTimeMillis()}_$index.jpg")
             },
             onDownloadLive = { index ->
-                val liveCandidates = result.livePhotoCandidates(index)
-                if (liveCandidates.isNotEmpty()) {
-                    viewModel.downloadVideo(context, liveCandidates, "LinkGrab_Live_${System.currentTimeMillis()}_$index.mp4")
-                }
+                pendingLiveSave = listOf(index)
             },
         )
+    }
+    pendingLiveSave?.let { indices ->
+        result?.let { media ->
+            LivePhotoSaveDialog(
+                count = indices.count { media.livePhotoCandidates(it).isNotEmpty() },
+                onDismiss = { pendingLiveSave = null },
+                onSave = { motion ->
+                    viewModel.downloadImageSelection(context, media, indices, motion)
+                    pendingLiveSave = null
+                },
+            )
+        }
     }
 }
 

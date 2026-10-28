@@ -27,6 +27,7 @@ class SettingsRepository(private val context: Context) {
         private val AUTO_ORGANIZE_KEY = intPreferencesKey("auto_organize")
         private val TOOLBOX_BROWSER_KEY = intPreferencesKey("toolbox_open_in_browser")
         private val CLIPBOARD_DETECT_KEY = intPreferencesKey("clipboard_auto_detect")
+        private val SWIPE_SWITCH_KEY = intPreferencesKey("swipe_switch_pages")
         private val QUALITY_LABEL_KEY = stringPreferencesKey("preferred_quality_label")
     }
 
@@ -157,6 +158,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun setClipboardDetect(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[CLIPBOARD_DETECT_KEY] = if (enabled) 1 else 0
+        }
+    }
+
+    /** 主界面左右滑动手势是否切换页面（默认开；关掉后只能点底栏切页）。 */
+    val swipeSwitchPages: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[SWIPE_SWITCH_KEY] != 0 // 默认开
+    }
+
+    suspend fun setSwipeSwitchPages(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[SWIPE_SWITCH_KEY] = if (enabled) 1 else 0
         }
     }
 

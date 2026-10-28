@@ -23,6 +23,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +62,42 @@ fun BatchResultScreen(viewModel: MainViewModel, onBack: () -> Unit) {
     val isParsing by viewModel.isBatchParsing.collectAsState()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    var pendingSave by remember { mutableStateOf<List<BatchParseItem>?>(null) }
+
+    fun saveEntries(entries: List<BatchParseItem>, motion: Boolean) {
+        val images = mutableListOf<Pair<String, String>>()
+        val videos = mutableListOf<Pair<List<String>, String>>()
+        val livePhotos = mutableListOf<com.linkgrab.app.viewmodel.MotionPhotoDownload>()
+        val ts = System.currentTimeMillis()
+        entries.forEachIndexed { entryIndex, entry ->
+            val result = entry.result ?: return@forEachIndexed
+            if (result.type == MediaType.VIDEO) {
+                val url = result.videoQualities.firstOrNull()?.url ?: result.videoUrl
+                if (url != null) videos.add(listOf(url) to "LinkGrab_${ts}_$entryIndex.mp4")
+            } else result.images.forEachIndexed { i, image ->
+                val live = result.livePhotoCandidates(i)
+                if (motion && live.isNotEmpty()) {
+                    livePhotos.add(com.linkgrab.app.viewmodel.MotionPhotoDownload(image, live,
+                        "MVIMG_LinkGrab_${ts}_${entryIndex}_$i.jpg"))
+                } else {
+                    images.add(image to "LinkGrab_${ts}_${entryIndex}_$i.jpg")
+                    if (live.isNotEmpty()) videos.add(live to "LinkGrab_Live_${ts}_${entryIndex}_$i.mp4")
+                }
+            }
+        }
+        viewModel.downloadBatch(context, images = images, videos = videos, motionPhotos = livePhotos,
+            historyUrls = entries.map { it.url },
+            platformLabel = entries.firstOrNull()?.platform?.displayName)
+        onBack()
+    }
+
+    pendingSave?.let { entries ->
+        LivePhotoSaveDialog(
+            count = entries.sumOf { it.result?.livePhotos?.size ?: 0 },
+            onDismiss = { pendingSave = null },
+            onSave = { motion -> pendingSave = null; saveEntries(entries, motion) },
+        )
+    }
 
     // 选择状态按 url 记：默认勾上解析成功的条目
     val selected = remember { mutableStateMapOf<String, Boolean>() }
@@ -105,28 +143,8 @@ fun BatchResultScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                         .background(if (enabled) iosBlue() else iosTertiaryBackground())
                         .clickable(enabled = enabled) {
                             haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
-                            val images = mutableListOf<Pair<String, String>>()
-                            val videos = mutableListOf<Pair<List<String>, String>>()
-                            val ts = System.currentTimeMillis()
-                            selectedItems.forEach { entry ->
-                                val result = entry.result ?: return@forEach
-                                when (result.type) {
-                                    MediaType.VIDEO -> {
-                                        val url = result.videoQualities.firstOrNull()?.url ?: result.videoUrl
-                                        if (url != null) videos.add(listOf(url) to "LinkGrab_${ts}.mp4")
-                                    }
-                                    else -> result.images.forEachIndexed { i, image ->
-                                        images.add(image to "LinkGrab_${ts}_$i.jpg")
-                                    }
-                                }
-                            }
-                            viewModel.downloadBatch(
-                                context,
-                                images = images,
-                                videos = videos,
-                                platformLabel = selectedItems.firstOrNull()?.platform?.displayName,
-                            )
-                            onBack()
+                            if (selectedItems.any { it.result?.hasLivePhotos == true }) pendingSave = selectedItems
+                            else saveEntries(selectedItems, false)
                         }
                         .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center,

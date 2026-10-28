@@ -415,10 +415,13 @@ private fun MainTabs(
     onNavigateToFileTransfer: () -> Unit,
     onNavigateToPanDirect: () -> Unit = {},
 ) {
+    // 手势切页开关（设置里可关）：关掉后左右滑动不再切页，点底栏 tab 照常动画翻页
+    val swipeEnabled by viewModel.swipeSwitchPages.collectAsState()
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize(),
         beyondViewportPageCount = 1,
+        userScrollEnabled = swipeEnabled,
     ) { page ->
     // 注意：这里不要再套 IOSPageSurface。它的 16dp 投影是用来表达「层叠页面」
     // 上下关系的，而 pager 内三个页面是左右并排的兄弟关系——套上之后，

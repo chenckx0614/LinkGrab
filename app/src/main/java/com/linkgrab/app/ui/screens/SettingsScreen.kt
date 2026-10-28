@@ -225,6 +225,21 @@ fun SettingsScreen(
                         )
                     }
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
+                    // 手势切页：关掉后主界面左右滑动不再切换页面
+                    val swipeSwitchPages by viewModel.swipeSwitchPages.collectAsState()
+                    IOS26ListRow(
+                        "左右滑动切换页面",
+                        if (swipeSwitchPages) "在主界面左右滑动即可切换页面" else "只能通过点底栏切换页面",
+                    ) {
+                        IOS26Switch(
+                            checked = swipeSwitchPages,
+                            onCheckedChange = { enabled ->
+                                switchHaptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                viewModel.setSwipeSwitchPages(enabled)
+                            },
+                        )
+                    }
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
                     // 检查更新挪进「更新设置」二级页，这里只留一行入口带版本号
                     IOS26ListRow(
                         "更新设置",

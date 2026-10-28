@@ -214,9 +214,9 @@ private fun TaskRow(
             )
             val statusText = when (task.status) {
                 DownloadStatus.Queued -> "排队中"
-                DownloadStatus.Downloading ->
+                DownloadStatus.Downloading -> if (task.motionImageUrl != null) "实况照片 · ${task.progress}%" else
                     "${task.progress}% · ${formatBytes(task.downloadedBytes)}/${if (task.totalBytes > 0) formatBytes(task.totalBytes) else "未知"}"
-                DownloadStatus.Paused -> "已暂停 · ${formatBytes(task.downloadedBytes)}${if (task.totalBytes > 0) "/" + formatBytes(task.totalBytes) else ""}"
+                DownloadStatus.Paused -> if (task.motionImageUrl != null) "已暂停 · 继续时重新封装" else "已暂停 · ${formatBytes(task.downloadedBytes)}${if (task.totalBytes > 0) "/" + formatBytes(task.totalBytes) else ""}"
                 DownloadStatus.Success -> "已完成" + if (task.platform != null) " · ${task.platform}" else ""
                 DownloadStatus.Failed -> "失败：${task.error ?: "未知错误"}"
                 DownloadStatus.Canceled -> "已取消"

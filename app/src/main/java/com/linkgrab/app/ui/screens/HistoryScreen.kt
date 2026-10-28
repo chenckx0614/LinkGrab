@@ -56,8 +56,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -122,13 +124,24 @@ private fun platformName(raw: String): String = when (raw) {
     else -> raw
 }
 
+private fun historyTypeName(raw: String): String = when (raw) {
+    "video" -> "视频"
+    "image" -> "图片"
+    "audio" -> "音频"
+    "unknown" -> "其他"
+    else -> raw.ifBlank { "其他" }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (String) -> Unit) {
     val history by viewModel.allHistory.collectAsState(initial = emptyList())
-    var filter by remember { mutableStateOf("all") }
-    var searchQuery by remember { mutableStateOf("") }
-    var searchMode by remember { mutableStateOf(false) }
+    var platformFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var typeFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var downloadedOnly by rememberSaveable { mutableStateOf(false) }
+    var favoritesOnly by rememberSaveable { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var searchMode by rememberSaveable { mutableStateOf(false) }
     val searchFocus = remember { FocusRequester() }
     var selectionMode by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(setOf<Long>()) }
@@ -139,21 +152,24 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     // 菜单玻璃要采样页面内容才有模糊：页面停在顶部时图层默认不录，这里强制录
     val menuVisible = showMenu || menuFraction.value > 0.01f
 
-    // 筛选（平台 / 收藏）+ 搜索（标题、链接），收藏置顶（稳定排序保住时间序）
+    // Every dimension combines with AND; favorite-first sorting is stable.
     val query = searchQuery.trim()
     val filtered = history
         .filter { item ->
-            val platformOk = when {
-                filter == "all" -> true
-                filter == "fav" -> item.favorite
-                else -> item.platform == filter
-            }
             val searchOk = query.isEmpty() ||
                 item.title.contains(query, ignoreCase = true) ||
+                item.author.contains(query, ignoreCase = true) ||
                 item.url.contains(query, ignoreCase = true)
-            platformOk && searchOk
+            (platformFilter == null || item.platform == platformFilter) &&
+                (typeFilter == null || item.type == typeFilter) &&
+                (!downloadedOnly || item.downloaded) &&
+                (!favoritesOnly || item.favorite) && searchOk
         }
         .sortedByDescending { it.favorite }
+    val visibleIds = filtered.map { it.id }.toSet()
+    // Bulk actions are restricted to visible records, even while filters change.
+    val visibleSelected = selected.intersect(visibleIds)
+    LaunchedEffect(visibleIds) { selected = selected.intersect(visibleIds) }
     // 菜单要对齐到吸顶栏里那颗按钮的基线（状态栏下方）
     val headerTopInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
@@ -172,19 +188,16 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
         searchQuery = ""
     }
 
-    // 搜索框展开后自动聚焦
-    LaunchedEffect(searchMode) {
-        if (searchMode) searchFocus.requestFocus()
-    }
-
     IOS26Canvas {
+        // Opening search returns the lazy list to the top so its input is present
+        // even when search was opened while viewing a distant history record.
+        key(searchMode) {
         IOS26StickyPage(
-            title = if (selectionMode) "已选 ${selected.size} 项" else "历史记录",
+            title = if (selectionMode) "已选 ${visibleSelected.size} 项" else "历史记录",
             onBack = { if (selectionMode) exitSelection() else onBack() },
             spacedBy = 10.dp,
             recordBackdrop = menuVisible,
             overlay = { backdrop ->
-                if (filtered.isEmpty()) return@IOS26StickyPage
                 // 点空白处收起菜单
                 if (menuVisible) {
                     Box(
@@ -232,10 +245,10 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                     ) {
                         if (selectionMode) {
                             LiquidGlassDropdownMenuItem(
-                                text = if (selected.size == filtered.size) "取消全选" else "全选",
+                                text = if (visibleSelected.size == filtered.size) "取消全选" else "全选",
                                 onClick = {
                                     showMenu = false
-                                    selected = if (selected.size == filtered.size) emptySet()
+                                    selected = if (visibleSelected.size == filtered.size) emptySet()
                                     else filtered.map { it.id }.toSet()
                                 },
                                 icon = {
@@ -247,11 +260,11 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                                     )
                                 },
                             )
-                            if (selected.isNotEmpty()) {
-                                val favTargets = filtered.filter { it.id in selected }
+                            if (visibleSelected.isNotEmpty()) {
+                                val favTargets = filtered.filter { it.id in visibleSelected }
                                 val makeFav = favTargets.any { !it.favorite }
                                 LiquidGlassDropdownMenuItem(
-                                    text = if (makeFav) "收藏(${selected.size})" else "取消收藏(${selected.size})",
+                                    text = if (makeFav) "收藏(${visibleSelected.size})" else "取消收藏(${visibleSelected.size})",
                                     onClick = {
                                         showMenu = false
                                         favTargets.forEach {
@@ -268,10 +281,10 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                                     },
                                 )
                                 LiquidGlassDropdownMenuItem(
-                                    text = "删除(${selected.size})",
+                                    text = "删除(${visibleSelected.size})",
                                     onClick = {
                                         showMenu = false
-                                        pendingDelete = filtered.filter { it.id in selected }
+                                        pendingDelete = filtered.filter { it.id in visibleSelected }
                                     },
                                     icon = {
                                         Icon(
@@ -312,10 +325,11 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                     IOS27TextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = "按标题或链接搜索",
+                        placeholder = "搜索标题、作者或链接",
                         singleLine = true,
                         modifier = Modifier.focusRequester(searchFocus),
                     )
+                    LaunchedEffect(Unit) { searchFocus.requestFocus() }
                 }
             }
             item {
@@ -326,13 +340,40 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                         .padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    IOS26Choice("全部", filter == "all", onClick = { filter = "all" })
-                    IOS26Choice("★ 收藏", filter == "fav", onClick = { filter = "fav" })
-                    IOS26Choice("抖音", filter == "douyin", onClick = { filter = "douyin" })
-                    IOS26Choice("小红书", filter == "xiaohongshu", onClick = { filter = "xiaohongshu" })
-                    IOS26Choice("B站", filter == "bilibili", onClick = { filter = "bilibili" })
-                    IOS26Choice("微博", filter == "weibo", onClick = { filter = "weibo" })
-                    IOS26Choice("网页", filter == "web", onClick = { filter = "web" })
+                    IOS26Choice("全部平台", platformFilter == null, onClick = { platformFilter = null })
+                    (listOf("douyin", "xiaohongshu", "bilibili", "weibo", "web") +
+                        history.map { it.platform }).distinct().forEach { platform ->
+                        IOS26Choice(platformName(platform), platformFilter == platform,
+                            onClick = { platformFilter = if (platformFilter == platform) null else platform })
+                    }
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IOS26Choice("全部类型", typeFilter == null, onClick = { typeFilter = null })
+                    (listOf("video", "image") + history.map { it.type }).distinct().forEach { type ->
+                        IOS26Choice(historyTypeName(type), typeFilter == type,
+                            onClick = { typeFilter = if (typeFilter == type) null else type })
+                    }
+                    IOS26Choice("已下载", downloadedOnly, onClick = { downloadedOnly = !downloadedOnly })
+                    IOS26Choice("★ 收藏", favoritesOnly, onClick = { favoritesOnly = !favoritesOnly })
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("${filtered.size} 条记录", color = iosSecondaryLabel(), fontSize = 13.sp)
+                    if (query.isNotEmpty() || platformFilter != null || typeFilter != null ||
+                        downloadedOnly || favoritesOnly) {
+                        IOS26Choice("清除筛选", false, onClick = {
+                            searchQuery = ""
+                            platformFilter = null
+                            typeFilter = null
+                            downloadedOnly = false
+                            favoritesOnly = false
+                        })
+                    }
                 }
             }
             if (history.isEmpty()) {
@@ -401,6 +442,7 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                     )
                 }
             }
+        }
         }
     }
 
@@ -531,11 +573,21 @@ private fun HistoryCard(
                 letterSpacing = (-0.2).sp,
             )
             Text(
-                "${platformName(item.platform)} · ${if (item.type == "video") "视频" else "图片"}",
+                "${platformName(item.platform)} · ${historyTypeName(item.type)}" +
+                    if (item.downloaded) " · 已下载" else "",
                 color = iosSecondaryLabel(),
                 modifier = Modifier.padding(top = 4.dp),
                 fontSize = 14.sp,
             )
+            if (item.author.isNotBlank()) {
+                Text(
+                    item.author,
+                    color = iosSecondaryLabel(),
+                    modifier = Modifier.padding(top = 4.dp),
+                    fontSize = 12.sp,
+                    maxLines = 2,
+                )
+            }
         }
         if (!selectionMode) {
             Icon(

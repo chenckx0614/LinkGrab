@@ -15,8 +15,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 350
-        versionName = "3.1.0"
+        versionCode = 351
+        versionName = "3.2.0"
     }
 
     // 永久签名：密钥在 app/linkgrab-sign.jks（已 gitignore），密码在 local.properties
@@ -85,6 +85,7 @@ android {
 }
 
 dependencies {
+    testImplementation("junit:junit:4.13.2")
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

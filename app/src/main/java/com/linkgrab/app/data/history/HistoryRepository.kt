@@ -1,21 +1,28 @@
 package com.linkgrab.app.data.history
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.linkgrab.app.data.model.MediaResult
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 @Serializable
 data class HistoryItem(
@@ -29,155 +36,167 @@ data class HistoryItem(
     val downloaded: Boolean = false,
     val favorite: Boolean = false,
     val localPath: String = "",
-    /**
-     * 解析结果的 JSON 快照（[com.linkgrab.app.data.model.MediaResult]）。
-     * 有了它，同一链接再粘一次可以**秒开**、不再走网络；媒体直链有时效，
-     * 所以和 [cacheExpireAt] 一起用，过期就当没有。
-     */
+    /** MediaResult snapshot; direct media URLs may expire. */
     val resultJson: String = "",
-    /** 缓存过期时间（epoch ms）；0 表示没缓存。 */
     val cacheExpireAt: Long = 0L,
+    val author: String = "",
 )
 
 private val Context.historyDataStore by preferencesDataStore("history")
 
-class HistoryRepository(private val context: Context) {
+class HistoryRepository internal constructor(private val dataStore: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.applicationContext.historyDataStore)
 
     companion object {
         private const val MAX_ITEMS = 200
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val json = Json { ignoreUnknownKeys = true }
+    // Persist every field, including timestamp-based defaults. Otherwise a value
+    // matching the serializer's freshly evaluated default can be omitted and a
+    // later read silently generates a different record ID.
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val historyKey = stringPreferencesKey("history_list")
 
-    private val _items = MutableStateFlow<List<HistoryItem>>(emptyList())
-    val allHistory: Flow<List<HistoryItem>> = _items.asStateFlow()
+    // DataStore is the source of truth: no asynchronous hydration can overwrite a
+    // mutation. edit serializes read/modify/write, including across repo instances.
+    val allHistory: Flow<List<HistoryItem>> = dataStore.data
+        .map { readItems(it) }.distinctUntilChanged()
 
-    init {
-        scope.launch {
-            val data = context.historyDataStore.data.first()
-            val jsonStr = data[historyKey] ?: "[]"
-            try {
-                _items.value = json.decodeFromString<List<HistoryItem>>(jsonStr)
-            } catch (e: Exception) {
-                _items.value = emptyList()
+    private fun readItems(prefs: Preferences): List<HistoryItem> {
+        val items = try {
+            val stored = json.parseToJsonElement(prefs[historyKey] ?: "[]").jsonArray
+            // Older releases could omit a timestamp-based default ID. Give such
+            // entries a stable identity until the next edit persists every field.
+            val normalized = stored.mapIndexed { index, element ->
+                val fields = element.jsonObject
+                if ("id" in fields) element else {
+                    val url = fields["url"]?.jsonPrimitive?.content.orEmpty()
+                    val id = UUID.nameUUIDFromBytes("$index|$url".toByteArray(Charsets.UTF_8))
+                        .mostSignificantBits and Long.MAX_VALUE
+                    JsonObject(fields + ("id" to JsonPrimitive(id)))
+                }
             }
+            json.decodeFromJsonElement<List<HistoryItem>>(JsonArray(normalized))
+        } catch (_: SerializationException) {
+            emptyList()
+        } catch (_: IllegalArgumentException) {
+            emptyList()
+        }
+        // Older versions only stored the author inside the cached result.
+        return items.map { item ->
+            if (item.author.isNotBlank() || item.resultJson.isBlank()) item
+            else item.copy(author = decodeResult(item.resultJson)?.author.orEmpty())
+        }
+    }
+
+    private fun decodeResult(value: String): MediaResult? = try {
+        json.decodeFromString<MediaResult>(value)
+    } catch (_: SerializationException) {
+        null
+    }
+
+    private suspend fun updateItems(transform: (List<HistoryItem>) -> List<HistoryItem>) {
+        dataStore.edit { prefs ->
+            prefs[historyKey] = json.encodeToString(transform(readItems(prefs)))
         }
     }
 
     suspend fun add(item: HistoryItem) {
-        val current = _items.value.toMutableList()
-        // 同一条内容只保留最新一条：先按去重键把旧记录摘掉，再把新的插到
-        // 最前并刷新时间，避免反复解析同一个作品刷出一串重复项。
-        val key = dedupKey(item)
-        current.removeAll { dedupKey(it) == key }
-        current.add(
-            0,
-            item.copy(id = System.currentTimeMillis(), parseTime = System.currentTimeMillis())
-        )
-        while (current.size > MAX_ITEMS) {
-            current.removeLast()
+        dataStore.edit { prefs ->
+            val current = readItems(prefs).toMutableList()
+            val old = current.firstOrNull {
+                it.url == item.url || (dedupKey(it) == dedupKey(item) &&
+                    (it.author.isBlank() || item.author.isBlank() || it.author == item.author))
+            }
+            val now = System.currentTimeMillis()
+            // Reuse identity so pending selection/download/favorite actions still
+            // refer to the same record after parsing it again.
+            val id = old?.id ?: maxOf(now, (current.maxOfOrNull { it.id } ?: 0L) + 1)
+            val hasNewCache = item.resultJson.isNotBlank()
+            val merged = item.copy(
+                id = id,
+                parseTime = now,
+                favorite = old?.favorite == true || item.favorite,
+                downloaded = old?.downloaded == true || item.downloaded,
+                localPath = old?.localPath?.takeIf { it.isNotBlank() } ?: item.localPath,
+                author = item.author.ifBlank { old?.author.orEmpty() },
+                cover = item.cover.ifBlank { old?.cover.orEmpty() },
+                resultJson = if (hasNewCache) item.resultJson else old?.resultJson.orEmpty(),
+                cacheExpireAt = if (hasNewCache) item.cacheExpireAt else old?.cacheExpireAt ?: 0L,
+            )
+            current.removeAll { it.id == id }
+            current.add(0, merged)
+            // Favorited items and saved-file metadata survive routine history pruning.
+            while (current.size > MAX_ITEMS) {
+                val index = current.indexOfLast { !it.favorite && !it.downloaded }
+                if (index < 0) break
+                current.removeAt(index)
+            }
+            prefs[historyKey] = json.encodeToString(current)
         }
-        _items.value = current
-        save()
     }
 
-    /**
-     * 去重键：分享链接每次都可能带不同的 token（小红书 xsec_token、抖音短链
-     * 后缀），直接拿 url 比会漏；标题为空或占位值时退回用 url。
-     */
     private fun dedupKey(item: HistoryItem): String {
         val title = item.title.trim()
-        return if (title.isEmpty() || title == "未命名") {
-            "url:${item.url}"
-        } else {
-            "${item.platform}|$title"
-        }
+        return if (title.isEmpty() || title == "未命名") "url:${item.url}"
+        else "${item.platform}|$title"
     }
 
-    suspend fun delete(item: HistoryItem) {
-        _items.value = _items.value.filter { it.id != item.id }
-        save()
-    }
+    suspend fun delete(item: HistoryItem) = updateItems { items -> items.filterNot { it.id == item.id } }
 
     suspend fun deleteMany(items: List<HistoryItem>) {
-        if (items.isEmpty()) return
         val ids = items.map { it.id }.toSet()
-        _items.value = _items.value.filterNot { it.id in ids }
-        save()
+        if (ids.isNotEmpty()) updateItems { current -> current.filterNot { it.id in ids } }
     }
 
-    suspend fun toggleFavorite(id: Long, favorite: Boolean) {
-        _items.value = _items.value.map {
-            if (it.id == id) it.copy(favorite = favorite) else it
-        }
-        save()
+    suspend fun toggleFavorite(id: Long, favorite: Boolean) = updateItems { items ->
+        items.map { if (it.id == id) it.copy(favorite = favorite) else it }
     }
 
-    // ==================== 解析缓存 & 已保存标记（3.0.16） ====================
-
-    /**
-     * 同一链接、缓存仍在有效期内 → 直接返回上次的解析结果，不再走网络。
-     *
-     * 按**原始分享链接**精确匹配：重新粘同一段分享文案（剪贴板/分享入口最常见
-     * 的重复场景）时命中。换了 token 的同一条内容命中不了，那种情况靠
-     * [findDownloadedByKey] 在解析之后补一个「已保存过」标记。
-     */
     suspend fun cachedResult(url: String, ignoreTtl: Boolean = false): MediaResult? {
         val now = System.currentTimeMillis()
-        val item = _items.value.firstOrNull {
+        val item = readItems(dataStore.data.first()).firstOrNull {
             it.url == url && (ignoreTtl || it.cacheExpireAt > now)
         } ?: return null
-        if (item.resultJson.isBlank()) return null
-        return try {
-            json.decodeFromString<MediaResult>(item.resultJson)
-        } catch (_: Exception) {
-            null
-        }
+        return if (item.resultJson.isBlank()) null else decodeResult(item.resultJson)
     }
 
-    /** 解析成功：把结果快照挂到对应的历史记录上（等 [add] 落库之后再调用）。 */
     suspend fun cacheResult(url: String, result: MediaResult, ttlMs: Long) {
-        val jsonStr = try {
-            json.encodeToString(result)
-        } catch (_: Exception) {
-            return
-        }
-        _items.value = _items.value.map {
-            if (it.url == url) {
-                it.copy(resultJson = jsonStr, cacheExpireAt = System.currentTimeMillis() + ttlMs)
-            } else {
-                it
+        val encoded = json.encodeToString(result)
+        updateItems { items ->
+            items.map {
+                if (it.url == url) it.copy(
+                    resultJson = encoded,
+                    cacheExpireAt = System.currentTimeMillis() + ttlMs,
+                    author = result.author.ifBlank { it.author },
+                ) else it
             }
         }
-        save()
     }
 
-    /** 这条作品之前是否已经存过（按平台 + 标题去重，token 变了也认得）。 */
     suspend fun findDownloadedByKey(platform: String, title: String): HistoryItem? {
-        if (title.isBlank() || title == "未命名") return null
+        if (title.isBlank() || title.trim() == "未命名") return null
         val key = "$platform|${title.trim()}"
-        return _items.value.firstOrNull { dedupKey(it) == key && it.downloaded }
+        return readItems(dataStore.data.first()).firstOrNull { dedupKey(it) == key && it.downloaded }
     }
 
-    /** 下载成功：给这条作品打上「已保存」，并记下首个落盘路径。 */
     suspend fun markDownloaded(platform: String, title: String, localPath: String) {
-        if (title.isBlank() || title == "未命名") return
+        if (title.isBlank() || title.trim() == "未命名") return
         val key = "$platform|${title.trim()}"
-        _items.value = _items.value.map {
-            if (dedupKey(it) == key) {
-                it.copy(downloaded = true, localPath = it.localPath.ifEmpty { localPath })
-            } else {
-                it
+        updateItems { items ->
+            items.map {
+                if (dedupKey(it) == key) it.copy(downloaded = true, localPath = it.localPath.ifEmpty { localPath }) else it
             }
         }
-        save()
     }
 
-    private suspend fun save() {
-        context.historyDataStore.edit { prefs ->
-            prefs[historyKey] = json.encodeToString(_items.value)
+    /** Download completion uses its enqueued URL, never the currently open result. */
+    suspend fun markDownloadedByUrl(url: String, localPath: String) {
+        if (url.isBlank()) return
+        updateItems { items ->
+            items.map {
+                if (it.url == url) it.copy(downloaded = true, localPath = it.localPath.ifEmpty { localPath }) else it
+            }
         }
     }
 }

@@ -13,6 +13,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -74,6 +79,15 @@ class WebViewParser(private val context: Context) {
     // ==================== Douyin ====================
 
     private suspend fun parseDouyin(url: String): Result<MediaResult> {
+        // Strategy 0: WebView 真浏览器直载分享页 —— 原生接口被风控打薄时的
+        // 权威通道。Chromium 网络栈与真实浏览器一致（小红书同款修法），
+        // 图集 / 视频通吃；页面还会下发 ttwid，回填给原生解析器后，
+        // 之后每次抖音解析的原生通道风控概率都会大降。
+        try {
+            parseDouyinInWebView(url)?.let { return Result.success(it) }
+        } catch (_: Exception) {
+        }
+
         val ucmaoResult = ucmaoParser.parse(url)
         if (ucmaoResult.isSuccess) return ucmaoResult
 
@@ -103,6 +117,196 @@ class WebViewParser(private val context: Context) {
         } catch (e: Exception) {
             Result.failure(Exception("解析抖音失败: ${ucmaoResult.exceptionOrNull()?.message ?: e.message}"))
         }
+    }
+
+    /**
+     * WebView（真 Chromium 网络栈）直载抖音分享页 —— 原生接口被风控打薄时的
+     * 权威通道。桌面 UA 下分享页 SSR 自带 window._ROUTER_DATA（图集全量
+     * images 都在里面）；WebView 会自动收下 ttwid cookie，成功后回填给
+     * DouyinParser，之后原生请求不再裸奔。短链直接丢进去，302 自己跟。
+     */
+    @SuppressLint("SetJavaScriptEnabled")
+    suspend fun parseDouyinInWebView(url: String): MediaResult? = suspendCancellableCoroutine { cont ->
+        val handler = Handler(Looper.getMainLooper())
+        var webView: WebView? = null
+        var resumed = false
+
+        // 分享页内嵌的 _ROUTER_DATA 原始字面量（SSR 直出）
+        val extractRouterJs = """
+            (function(){
+              try {
+                var m = document.documentElement.innerHTML.match(/window\._ROUTER_DATA\s*=\s*([\s\S]*?)<\/script>/);
+                if (m && m[1]) return m[1];
+              } catch (e) {}
+              return null;
+            })()
+        """.trimIndent()
+
+        // _ROUTER_DATA 落空时的兜底：直接在渲染后的 HTML 里正则抓图集
+        val extractAlbumJs = """
+            (function(){
+              var html = document.documentElement.innerHTML;
+              var re = /"download_url_list"\s*:\s*\[\s*"(https?:[^"]+)"\s*\]/g;
+              var urls = [], m;
+              while ((m = re.exec(html)) !== null) {
+                var u = m[1].replace(/\\u002F/g, '/').replace(/\\\//g, '/').replace(/\\u0026/g, '&');
+                if (urls.indexOf(u) < 0) urls.push(u);
+              }
+              if (!urls.length) return null;
+              return JSON.stringify({t:'i', u: urls});
+            })()
+        """.trimIndent()
+
+        val timeout = Runnable {
+            if (!resumed && cont.isActive) {
+                resumed = true
+                handler.post { webView?.destroy() }
+                cont.resume(null)
+            }
+        }
+        handler.postDelayed(timeout, 25_000)
+
+        fun finish(result: MediaResult?) {
+            if (resumed || !cont.isActive) return
+            resumed = true
+            handler.removeCallbacks(timeout)
+            handler.post { webView?.destroy() }
+            cont.resume(result)
+        }
+
+        /** 把 WebView 会话里的 ttwid 回填给原生解析器（两个域都试）。 */
+        fun harvestTtwid() {
+            try {
+                for (domain in listOf("https://www.iesdouyin.com/", "https://www.douyin.com/")) {
+                    val cookie = android.webkit.CookieManager.getInstance().getCookie(domain) ?: continue
+                    Regex("ttwid=([^;]+)").find(cookie)?.groupValues?.get(1)
+                        ?.let { DouyinParser.injectTtwid(it) }
+                }
+            } catch (_: Exception) {
+            }
+        }
+
+        fun tryAlbumRegex(view: WebView?) {
+            if (view == null) { finish(null); return }
+            view.evaluateJavascript(extractAlbumJs) { raw ->
+                val parsed = raw?.takeIf { it != "null" }?.let { parseWebViewResult(it) }
+                if (parsed != null && parsed.isSuccess) finish(parsed.getOrNull()) else finish(null)
+            }
+        }
+
+        fun tryExtract(view: WebView?, attempt: Int) {
+            if (resumed || view == null) return
+            view.evaluateJavascript(extractRouterJs) { encoded ->
+                val literal = encoded?.takeIf { it != "null" }?.let {
+                    runCatching { json.decodeFromString<String>(it) }.getOrNull()
+                }
+                val parsed = literal?.let { parseDouyinRouterData(it) }
+                when {
+                    parsed != null -> {
+                        harvestTtwid()
+                        finish(parsed)
+                    }
+                    attempt < 5 -> handler.postDelayed({ tryExtract(view, attempt + 1) }, 900)
+                    else -> tryAlbumRegex(view)
+                }
+            }
+        }
+
+        handler.post {
+            webView = WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.userAgentString =
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, loadedUrl: String?) {
+                        super.onPageFinished(view, loadedUrl)
+                        handler.postDelayed({ tryExtract(view, 0) }, 1_000)
+                    }
+                }
+                loadUrl(url)
+            }
+        }
+
+        cont.invokeOnCancellation {
+            resumed = true
+            handler.removeCallbacks(timeout)
+            handler.post { webView?.destroy() }
+        }
+    }
+
+    /** 从 _ROUTER_DATA 字面量里找出作品 item（扫全部 loaderData 键找 item_list）。 */
+    private fun parseDouyinRouterData(literal: String): MediaResult? {
+        return try {
+            val loaderData = json.parseToJsonElement(literal)
+                .jsonObject["loaderData"]?.jsonObject ?: return null
+            var item: JsonObject? = null
+            for ((_, value) in loaderData) {
+                val list = (value as? JsonObject)?.get("videoInfoRes")
+                    ?.jsonObject?.get("item_list")?.jsonArray ?: continue
+                item = list.firstOrNull() as? JsonObject
+                if (item != null) break
+            }
+            item?.let { douyinDetailToMediaResult(it) }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** 抖音作品 detail → MediaResult：图集优先，视频兜底（画质档位由原生通道负责）。 */
+    private fun douyinDetailToMediaResult(detail: JsonObject): MediaResult? {
+        val desc = (detail["desc"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+        val images = mutableListOf<String>()
+        val livePhotos = mutableMapOf<Int, List<String>>()
+        detail["images"]?.jsonArray?.forEachIndexed { index, el ->
+            val img = el as? JsonObject ?: return@forEachIndexed
+            val url = pickDouyinImageUrl(img) ?: return@forEachIndexed
+            images.add(url)
+            // Live Photo：images[].video.play_addr
+            val liveUrls = img["video"]?.jsonObject?.get("play_addr")
+                ?.jsonObject?.get("url_list")?.jsonArray
+                ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                ?.filter { it.isNotEmpty() }
+                ?.map { it.replace("playwm", "play") }
+                .orEmpty()
+            if (liveUrls.isNotEmpty()) livePhotos[index] = liveUrls
+        }
+        if (images.isNotEmpty()) {
+            val distinct = images.distinct()
+            return MediaResult(
+                type = MediaType.IMAGE,
+                title = desc ?: "抖音图文",
+                images = distinct,
+                coverUrl = distinct.first(),
+                livePhotos = livePhotos,
+                source = "douyin",
+            ).withSecureUrls()
+        }
+        val playUrl = detail["video"]?.jsonObject?.get("play_addr")
+            ?.jsonObject?.get("url_list")?.jsonArray
+            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            ?.firstOrNull { it.isNotEmpty() }
+            ?.replace("playwm", "play") ?: return null
+        return MediaResult(
+            type = MediaType.VIDEO,
+            title = desc ?: "抖音视频",
+            videoUrl = playUrl,
+            source = "douyin",
+        ).withSecureUrls()
+    }
+
+    /** 图集单张图地址：download_url_list（无水印原图）优先，其次 url_list；非 webp 优先。 */
+    private fun pickDouyinImageUrl(img: JsonObject): String? {
+        for (key in listOf("download_url_list", "url_list")) {
+            val urls = img[key] as? kotlinx.serialization.json.JsonArray ?: continue
+            val candidates = urls.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                .filter { it.isNotEmpty() }
+                .map { it.replace("\\u002F", "/").replace("\\/", "/").replace("\\u0026", "&") }
+            candidates.firstOrNull { !it.substringBefore('?').endsWith(".webp", ignoreCase = true) }
+                ?.let { return it }
+            candidates.firstOrNull()?.let { return it }
+        }
+        return null
     }
 
     // ==================== Xiaohongshu ====================
