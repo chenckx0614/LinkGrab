@@ -2,7 +2,7 @@
 
 ## 版本与发布
 - **每次代码修改之后必须升版本号**，versionCode +1、versionName 按 3.0.x 递增（用户明确要求"每次都得"）。
-- 更新日志（UpdateLogScreen.recentLogs）随版本号一起加条目，每条一句话。**写完必须用 ai-text-humanizer skill（AI味去除器）过一遍去 AI 味**（用户 2026-10-28 要求）。
+- 更新日志（UpdateLogScreen.recentLogs）随版本号一起加条目。**写作规范（扒了微信/B站/网易云/Hive 的真实日志总结，用户 2026-10-28 认可此方向）**：① 每条只说一件事，动词开头（"可XX""支持XX""修复XX"），微信式短句；② 只写用户能得到什么，**永不写实现原理**（禁出现 Motion Photo 目录、内置浏览器通道、ttwid 等术语）；③ 去 AI 味 ≠ 加口语表演——"这个修好了""随便选""换了条路"这种刻意腔也是 AI 味，平实直说才对；④ 禁止"全新升级：A、B、C、D"冒号排比和一句话塞多件事的复合长句。ai-text-humanizer skill（AI味去除器）作为辅助检查。
 - 交付链路：assembleRelease（release + debug 签名 + R8），出包后双 ABI 覆盖 dist/。
 - 推送节奏：本地 commit → 用户确认 → 代理 7897 push GitHub/Gitee；Release 需用户说一声才发。
 
