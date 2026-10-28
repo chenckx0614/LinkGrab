@@ -24,6 +24,9 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.2.1", "2026-10-28", listOf(
+        "修复实况保存后在部分相册只显示为普通图片的问题（Motion Photo 目录信息补全）",
+    )),
     UpdateLogItem("3.2.0", "2026-10-28", listOf(
         "实况支持保存为单文件 Motion Photo，在支持的相册中播放；同时保留图片＋视频分开保存，单张、选中和批量下载均可选择",
         "历史收藏新增作者搜索、图片/视频与保存状态组合筛选",

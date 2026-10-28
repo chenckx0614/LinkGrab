@@ -20,6 +20,9 @@ class MotionPhotoWriterTest {
         val jpegTail = 4 + segmentLength
         assertArrayEquals(jpeg.copyOfRange(2, jpeg.size), bytes.copyOfRange(jpegTail, bytes.size - video.size))
         assertArrayEquals(video, bytes.copyOfRange(bytes.size - video.size, bytes.size))
+        // Video starts immediately after the cover's EOI marker.
+        assertEquals(0xd9, bytes[bytes.size - video.size - 1].toInt() and 0xff)
+        assertEquals(0xff.toByte(), bytes[bytes.size - video.size - 2])
         val header = "http://ns.adobe.com/xap/1.0/\u0000".toByteArray()
         assertArrayEquals(header, bytes.copyOfRange(6, 6 + header.size))
         val xml = bytes.copyOfRange(6 + header.size, jpegTail)
@@ -31,11 +34,18 @@ class MotionPhotoWriterTest {
         assertEquals(video.size.toString(), description.getAttributeNS(camera, "MicroVideoOffset"))
         val items = doc.getElementsByTagNameNS("http://ns.google.com/photos/1.0/container/", "Item")
         assertEquals(2, items.length)
-        val motion = items.item(1) as org.w3c.dom.Element
         val itemNs = "http://ns.google.com/photos/1.0/container/item/"
+        val primary = items.item(0) as org.w3c.dom.Element
+        val motion = items.item(1) as org.w3c.dom.Element
+        assertEquals("image/jpeg", primary.getAttributeNS(itemNs, "Mime"))
+        assertEquals("Primary", primary.getAttributeNS(itemNs, "Semantic"))
         assertEquals("video/mp4", motion.getAttributeNS(itemNs, "Mime"))
         assertEquals("MotionPhoto", motion.getAttributeNS(itemNs, "Semantic"))
         assertEquals(video.size.toString(), motion.getAttributeNS(itemNs, "Length"))
+        // Primary length must match the actual bytes before the video: galleries that
+        // navigate via Container:Directory need the real number, not 0.
+        val primaryLength = primary.getAttributeNS(itemNs, "Length").toLong()
+        assertEquals((bytes.size - video.size).toLong(), primaryLength)
     }
 
     @Test(expected = IllegalArgumentException::class)
