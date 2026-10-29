@@ -1,0 +1,55 @@
+name: 问题反馈
+description: 解析失败、保存失败或其他问题
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 💡 更方便的方式：直接在 App「我的 → 反馈问题」里提交，会自动带上版本号和失败记录。
+        > 这个表单是给网页端用户准备的。
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: 问题类型
+      options:
+        - 解析失败
+        - 保存失败
+        - 闪退/异常
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: link
+    attributes:
+      label: 相关链接
+      description: 出问题的分享链接（完整复制）
+      placeholder: "https://v.douyin.com/..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 发生了什么、预期是什么
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: App 版本
+      description: 「我的 → 关于应用」里可以看到
+      placeholder: "3.2.8 (359)"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: 机型与系统
+      placeholder: "Xiaomi 14 / Android 15"
+    validations:
+      required: false

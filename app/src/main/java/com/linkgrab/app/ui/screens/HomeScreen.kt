@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,7 +55,12 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.viewmodel.MainViewModel
 
 @Composable
-fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, initialShareText: String? = null) {
+fun HomeScreen(
+    viewModel: MainViewModel,
+    onNavigateToHistory: () -> Unit = {},
+    initialShareText: String? = null,
+    onNavigateToFeedback: () -> Unit = {},
+) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     var input by remember { mutableStateOf("") }
@@ -166,12 +172,29 @@ fun HomeScreen(viewModel: MainViewModel, onNavigateToHistory: () -> Unit = {}, i
                         singleLine = false,
                     )
                     AnimatedVisibility(state.error != null, enter = fadeIn(), exit = fadeOut()) {
-                        Text(
-                            state.error.orEmpty(),
-                            color = iosError(),
-                            modifier = Modifier.padding(top = 10.dp),
-                            fontSize = 14.sp,
-                        )
+                        Column(Modifier.padding(top = 10.dp)) {
+                            Text(
+                                state.error.orEmpty(),
+                                color = iosError(),
+                                fontSize = 14.sp,
+                            )
+                            // 失败就地反馈入口：带着这次失败的上下文跳反馈页
+                            if (state.error != null) {
+                                Text(
+                                    "反馈此问题 ›",
+                                    color = iosBlue(),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier
+                                        .padding(top = 6.dp)
+                                        .clickable {
+                                            FeedbackDraft.prefillType = "解析失败"
+                                            FeedbackDraft.prefillLink = state.url
+                                            onNavigateToFeedback()
+                                        },
+                                )
+                            }
+                        }
                     }
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

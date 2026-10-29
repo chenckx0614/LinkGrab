@@ -1,0 +1,19 @@
+name: 功能建议
+description: 想要新功能或改进
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: 建议
+      description: 想要什么功能、解决什么问题
+    validations:
+      required: true
+
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景
+      description: 什么情况下会用到（选填）
+    validations:
+      required: false
