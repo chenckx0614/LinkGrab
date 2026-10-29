@@ -1,0 +1,915 @@
+{
+ "activity_video_type": 0,
+ "anchors": null,
+ "authentication_token": "MS4wLjAAAAAA2_4R7l6zLxjWDr-1HZAE71DUNgrocxSszSYBeFWVlznNCVrir5FDr_pxhQ6I6hX3A0eDg-6oUYaMNEMS1qJDNbv-qPeJhQ8ohUTMwPQZjXGN5j-HZsN66bXsj4Tk1VrExpURPiTsxQWN7IHxVwWw5ypt2_rz-DoIxoABwAREBIIkKZDhvx8wYZifcodvMYLAo6A6030HtnmPJLSqyPEQhBuGah5FMjdeS5QexrDeagIaSg0w7PabgCm_I3KGE0eq",
+ "author": {
+  "account_cert_info": "{}",
+  "avatar_thumb": {
+   "height": 720,
+   "uri": "100x100/aweme-avatar/tos-cn-avt-0015_c7eb4371210ec8662b44ba69ceabad82",
+   "url_list": [
+    "https://p3-pc.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_c7eb4371210ec8662b44ba69ceabad82.jpeg?from=327834062"
+   ],
+   "width": 720
+  },
+  "awemehts_greet_info": "",
+  "cf_list": null,
+  "close_friend_type": 0,
+  "contacts_status": 1,
+  "contrail_list": null,
+  "cover_url": [
+   {
+    "height": 720,
+    "uri": "c8510002be9a3a61aad2",
+    "url_list": [
+     "https://p3-pc-sign.douyinpic.com/obj/c8510002be9a3a61aad2?lk3s=138a59ce&x-expires=1794474000&x-signature=g0zYCNFzwCRkfvKyx6f2yglIxCc%3D&from=327834062",
+     "https://p9-pc-sign.douyinpic.com/obj/c8510002be9a3a61aad2?lk3s=138a59ce&x-expires=1794474000&x-signature=GIuLzA%2BOGRKRgDZeknEC92Dzhvg%3D&from=327834062"
+    ],
+    "width": 720
+   }
+  ],
+  "create_time": 0,
+  "custom_verify": "",
+  "data_label_list": null,
+  "endorsement_info_list": null,
+  "enterprise_verify_reason": "",
+  "favoriting_count": 4906,
+  "follow_status": 0,
+  "follower_count": 401164,
+  "follower_list_secondary_information_struct": null,
+  "follower_status": 0,
+  "following_count": 0,
+  "hide_others_recommend_interest": 0,
+  "hide_self_recommend_interest": 0,
+  "im_role_ids": null,
+  "is_ad_fake": false,
+  "is_blocked_v2": false,
+  "is_blocking_v2": false,
+  "is_cf": 0,
+  "live_high_value": 0,
+  "mate_add_permission": 1,
+  "max_follower_count": 0,
+  "nickname": "周周子爱拍照",
+  "offline_info_list": null,
+  "personal_tag_list": null,
+  "prevent_download": false,
+  "risk_notice_text": "",
+  "sec_uid": "MS4wLjABAAAAt1Y5RZIvtpMSURb1D051SbigTjom9udRWoAvFgxEvzs",
+  "secret": 0,
+  "share_info": {
+   "share_desc": "",
+   "share_desc_info": "",
+   "share_qrcode_url": {
+    "height": 720,
+    "uri": "729e0028b6717d53998b",
+    "url_list": [
+     "https://p3-pc-sign.douyinpic.com/obj/729e0028b6717d53998b?lk3s=138a59ce&x-expires=1793286000&x-signature=z0oZLHZW4K%2BsCweJJpLLchgMc4E%3D&from=327834062",
+     "https://p9-pc-sign.douyinpic.com/obj/729e0028b6717d53998b?lk3s=138a59ce&x-expires=1793286000&x-signature=vhttEdP7cMX6jG0hsbvcdDViThw%3D&from=327834062"
+    ],
+    "width": 720
+   },
+   "share_title": "",
+   "share_title_myself": "",
+   "share_title_other": "",
+   "share_url": "",
+   "share_weibo_desc": ""
+  },
+  "short_id": "653534771",
+  "signature": "四川成都｜女摄影师｜不定期旅拍｜取关我的男的都发财了！\n发的都是我拍的  🈲️盗图搬运，盗图搬运替我挡灾🙏\n约拍/合作👉🏻🧣Chowlyner77 📮zzzaipaizhao@163.com\n🎵 🍠 🧣全网同名  👧老婆@周子的旧时光 \n私信不回 有事进群聊哦～\n谢谢你这么美还关注我♥️",
+  "signature_extra": null,
+  "special_follow_status": 0,
+  "special_people_labels": null,
+  "status": 1,
+  "story25_comment": 1,
+  "story_interactive": 4,
+  "story_ttl": 7,
+  "text_extra": null,
+  "total_favorited": 12224494,
+  "uid": "96231023871",
+  "unique_id": "chowlyner",
+  "user_age": -1,
+  "user_canceled": false,
+  "user_permissions": null,
+  "verification_type": 1
+ },
+ "author_mask_tag": 0,
+ "author_user_id": 96231023871,
+ "aweme_control": {
+  "can_comment": true,
+  "can_forward": true,
+  "can_share": true,
+  "can_show_comment": true
+ },
+ "aweme_id": "7700942408430718115",
+ "aweme_listen_struct": {
+  "trace_info": "{\"copyright_not_speech\":\"false\",\"copyright_reason\":\"not_intercept\",\"copyright_tag_hit\":\"0\",\"copyright_use_aed_default\":\"true\",\"copyright_use_tag_default\":\"false\",\"cp_ab\":\"true\",\"desc\":\"\",\"duration_over\":\"false\",\"hit_high_risk\":\"false\",\"media_type\":\"2\",\"reason\":\"hit_ab_0\",\"show\":\"false\"}"
+ },
+ "aweme_type": 68,
+ "aweme_type_tags": "",
+ "boost_status": 0,
+ "can_be_oc_cover": true,
+ "can_cache_to_local": false,
+ "caption": "",
+ "cf_assets_type": 0,
+ "cf_recheck_ts": 0,
+ "challenge_position": null,
+ "chapter_list": null,
+ "clip_paging": {
+  "direct": 0,
+  "has_more": false,
+  "source": "26"
+ },
+ "collect_stat": 0,
+ "collection_corner_mark": 0,
+ "comment_gid": 7700942408430718115,
+ "comment_list": null,
+ "comment_permission_info": {
+  "can_comment": true,
+  "comment_permission_status": 0,
+  "item_detail_entry": false,
+  "press_entry": false,
+  "toast_guide": false
+ },
+ "commerce_config_data": null,
+ "component_control": {
+  "data_source_url": "/aweme/v1/web/aweme/detail/"
+ },
+ "component_info_v2": "{\"desc_lines_limit\":0,\"hide_marquee\":false}",
+ "cover_labels": null,
+ "create_time": 1793015378,
+ "desc": "本世纪最伟大前奏。我的相册和这个 bgm适配度💯\n#本世纪最伟大前奏 #姐感 #唐泽雪穗 #仿拍",
+ "disable_relation_bar": 0,
+ "dislike_dimension_list": null,
+ "dislike_dimension_list_v2": null,
+ "distribute_circle": {
+  "campus_block_interaction": false,
+  "distribute_type": 0,
+  "is_campus": false
+ },
+ "diversion_bar_info": [],
+ "douplus_user_type": 0,
+ "douyin_pc_video_extra_seo": "",
+ "duet_aggregate_in_music_tab": false,
+ "duration": 0,
+ "ecom_comment_atmosphere_type": 1,
+ "enable_comment_sticker_rec": false,
+ "enable_decorated_emoji": true,
+ "ent_log_extra": {
+  "log_extra": "{\"global_log_extra\":null,\"page_log_extra\":null,\"aweme_log_extra\":{\"ce_current_group_id\":\"7700942408430718115\",\"author_id\":\"96231023871\"},\"extra_log_extra\":null}"
+ },
+ "entertainment_product_info": {
+  "market_info": {
+   "limit_free": {
+    "in_free": false
+   }
+  }
+ },
+ "entertainment_recommend_info": "{\"recommend_free_count\":0,\"test_info\":\"\",\"recommend_playlet_trigger_reqid\":\"\",\"recommend_playlet_trigger_cid\":\"\",\"recommend_playlet_trigger_reqid_type\":\"\",\"playlet_continue_play_config\":null,\"roi3_mode\":0,\"predict_identity\":\"\"}",
+ "entertainment_video_paid_way": {
+  "enable_use_new_ent_data": false,
+  "paid_type": 0,
+  "paid_ways": []
+ },
+ "entertainment_video_type": 3,
+ "f_s_grouth_property": {
+  "is_client_pack": false,
+  "is_natural_traffic": false,
+  "is_related_path": false
+ },
+ "fall_card_struct": {
+  "recommend_reason_v2": "[]"
+ },
+ "feed_comment_config": {
+  "audio_comment_permission": 1,
+  "author_audit_status": 0,
+  "common_comment_permission": 0,
+  "common_flags": "{\"api_ab\":\"0\",\"hashtag\":\"[{\\\"name\\\":\\\"姐感\\\",\\\"id\\\":1715936387282956},{\\\"name\\\":\\\"唐泽雪穗\\\",\\\"id\\\":1629514296000519},{\\\"name\\\":\\\"仿拍\\\",\\\"id\\\":1613035433735239},{\\\"name\\\":\\\"本世纪最伟大前奏\\\",\\\"id\\\":7695806488509417506}]\",\"item_author_nickname\":\"周周子爱拍照\",\"video_labels_v2_tag1\":\"颜值\",\"video_labels_v2_tag2\":\"颜值自拍\",\"video_type\":\"all\"}",
+  "double_publish_limit": 1,
+  "input_config_text": "善语结善缘，恶言伤人心",
+  "input_config_text_type": "default_guide"
+ },
+ "flash_mob_trends": 0,
+ "follow_shoot_clip_info": {
+  "origin_clip_id": 7452661812782271259
+ },
+ "follow_shoot_property": {
+  "recommended_camera_mode": "photo"
+ },
+ "friend_recommend_info": {
+  "disable_friend_recommend_guide_label": false,
+  "friend_recommend_source": 26
+ },
+ "game_tag_info": {
+  "is_game": false
+ },
+ "geofencing": [],
+ "geofencing_regions": null,
+ "group_id": "7700942408430718115",
+ "guide_scene_info": {},
+ "hybrid_label": null,
+ "image_album_music_info": {
+  "begin_time": 0,
+  "end_time": 22491,
+  "volume": 100
+ },
+ "image_comment": {
+  "comment_highlight_text": ""
+ },
+ "image_crop_ctrl": 0,
+ "image_infos": null,
+ "image_item_quality_level": 0,
+ "image_list": null,
+ "images": [
+  {
+   "clip_type": 5,
+   "download_url_list": [
+    "https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG~tplv-dy-water-v10:5oqW6Z-z5Y-377yaY2hvd2x5bmVy:3000:3000:q75.webp?lk3s=138a59ce&x-expires=1795856400&x-signature=QwuyGy9GAvNeNcraJMZ%2FzSQE3ts%3D&sig=OODL3eQaEY-xk1dU2xOBLTV3d9E%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&sc=image&biz_tag=aweme_images&l=202610291727023012B24912AABF45FF1D",
+    "https://p9-pc-sign.douyinpic.com/tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG~tplv-dy-water-v10:5oqW6Z-z5Y-377yaY2hvd2x5bmVy:3000:3000:q75.webp?lk3s=138a59ce&x-expires=1795856400&x-signature=a3egVKvJVQAgEAdIaQUZwbBSrVk%3D&sig=OODL3eQaEY-xk1dU2xOBLTV3d9E%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&sc=image&biz_tag=aweme_images&l=202610291727023012B24912AABF45FF1D",
+    "https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG~tplv-dy-water-v10:5oqW6Z-z5Y-377yaY2hvd2x5bmVy:3000:3000:q75.jpeg?lk3s=138a59ce&x-expires=1795856400&x-signature=RkzXt%2FJchjpuadwh%2Bx%2B40ioyjGo%3D&sig=X9Lflc8ZeF2tYMjYHeFvTSirSpk%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&sc=image&biz_tag=aweme_images&l=202610291727023012B24912AABF45FF1D"
+   ],
+   "height": 2142,
+   "is_new_text_mode": 0,
+   "live_photo_type": 1,
+   "resolution_log_param": {},
+   "uri": "tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG",
+   "url_list": [
+    "https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG~tplv-dy-aweme-images-v2:3000:3000:q75.webp?lk3s=138a59ce&x-expires=1795856400&x-signature=jA7GDJBLEOxqcJHmBm0%2BPB8EY4g%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&sc=image&biz_tag=aweme_images&l=202610291727023012B24912AABF45FF1D",
+    "https://p9-pc-sign.douyinpic.com/tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG~tplv-dy-aweme-images-v2:3000:3000:q75.webp?lk3s=138a59ce&x-expires=1795856400&x-signature=%2FYzZUp9nDqISZYdYEaP9RfZuTpw%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&sc=image&biz_tag=aweme_images&l=202610291727023012B24912AABF45FF1D",
+    "https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG~tplv-dy-aweme-images-v2:3000:3000:q75.jpeg?lk3s=138a59ce&x-expires=1795856400&x-signature=HTNLOIXfO6kNE3WFFJVD1AXxrnk%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&sc=image&biz_tag=aweme_images&l=202610291727023012B24912AABF45FF1D"
+   ],
+   "video": {
+    "big_thumbs": [],
+    "bit_rate": [
+     {
+      "FPS": 30,
+      "HDR_bit": "",
+      "HDR_type": "",
+      "bit_rate": 1502734,
+      "format": "mp4",
+      "gear_name": "normal_720_0",
+      "is_bytevc1": 0,
+      "is_h265": 0,
+      "play_addr": {
+       "data_size": 1033130,
+       "file_cs": "c:0-7500-8354|d:0-516564-304f,516565-1033129-a063|a:v0d00fg10000dbfjqanog65u5m1eqe80",
+       "file_hash": "c7c96dcf4c7aca45746fdb7c0bb1dd05",
+       "height": 960,
+       "uri": "v0d00fg10000dbfjqanog65u5m1eqe80",
+       "url_key": "v0d00fg10000dbfjqanog65u5m1eqe80_h264_720p_1502734",
+       "url_list": [
+        "https://v11-weba.douyinvod.com/efd810651a288942344060098d0353d5/6ae31f7b/video/tos/cn/tos-cn-ve-15/ose7gBptA4VmWhgf5VCcQZuPAfLlBVAnv0Ga1I/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1467&bt=1467&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=ZDQ1NWQzMzM4MzczOGdpNUBpM2hocHg5cmRtZTMzNGkzM0AyLy42NWMuNjExMjFhNTI1YSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=f5241e7604dff1d9d6c943fd20bd51a2&l=202610291727023012B24912AABF45FF1D",
+        "https://v26-web.douyinvod.com/74ce956f33cc035eb0fca195c487c219/6ae31f7b/video/tos/cn/tos-cn-ve-15/ose7gBptA4VmWhgf5VCcQZuPAfLlBVAnv0Ga1I/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1467&bt=1467&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=ZDQ1NWQzMzM4MzczOGdpNUBpM2hocHg5cmRtZTMzNGkzM0AyLy42NWMuNjExMjFhNTI1YSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=f5241e7604dff1d9d6c943fd20bd51a2&l=202610291727023012B24912AABF45FF1D",
+        "https://www.douyin.com/aweme/v1/play/?video_id=v0d00fg10000dbfjqanog65u5m1eqe80&line=0&file_id=825f8dd5405440459010f08a9212215a&sign=c7c96dcf4c7aca45746fdb7c0bb1dd05&is_play_url=1&source=PackSourceEnum_AWEME_DETAIL"
+       ],
+       "width": 720
+      },
+      "quality_type": 10,
+      "video_extra": "{\"PktOffsetMap\":\"[{\\\"time\\\": 1, \\\"offset\\\": 212223}, {\\\"time\\\": 2, \\\"offset\\\": 415310}, {\\\"time\\\": 3, \\\"offset\\\": 618142}, {\\\"time\\\": 4, \\\"offset\\\": 783608}, {\\\"time\\\": 5, \\\"offset\\\": 960928}]\",\"format\":\"mp4\",\"definition\":\"720p\",\"quality\":\"normal\",\"file_id\":\"825f8dd5405440459010f08a9212215a\",\"applog_map\":{\"feature_id\":\"f5241e7604dff1d9d6c943fd20bd51a2\"},\"audio_channels\":\"2.0\",\"audio_sample_rate\":\"44100\",\"audio_metrics\":null,\"audio_score\":null}"
+     }
+    ],
+    "bit_rate_audio": null,
+    "cdn_url_expired": 1793269627,
+    "cover": {
+     "height": 720,
+     "uri": "tos-cn-p-0015/owBfe7CVXv5epXpnxBbMUAGBayB8AVbTdApBQn",
+     "url_list": [
+      "https://p3-pc-sign.douyinpic.com/obj/tos-cn-p-0015/owBfe7CVXv5epXpnxBbMUAGBayB8AVbTdApBQn?lk3s=138a59ce&x-expires=1794474000&x-signature=I7My5PzxUEL9TzIbuhZZ0UJZJko%3D&from=327834062",
+      "https://p9-pc-sign.douyinpic.com/obj/tos-cn-p-0015/owBfe7CVXv5epXpnxBbMUAGBayB8AVbTdApBQn?lk3s=138a59ce&x-expires=1794474000&x-signature=%2F8H6hyW4JAXJ1UGQ4xjpvjlL2OM%3D&from=327834062"
+     ],
+     "width": 720
+    },
+    "download_addr": {
+     "data_size": 1928718,
+     "height": 720,
+     "uri": "v0d00fg10000dbfjqanog65u5m1eqe80",
+     "url_list": [
+      "https://v11-weba.douyinvod.com/aca11674b1c47f71004adb045cc2c79f/6ae31f7b/video/tos/cn/tos-cn-ve-15/o0PBUIAGA5HCup0LeWV7BAA4gtfgmvRSnVaeaa/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1778&bt=1778&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=NTtoaWU2Zmg3NTo7OTU5PEBpM2hocHg5cmRtZTMzNGkzM0A2MjE0LS0vNjIxXmEtNWFhYSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=93c5283e1794c821af5e0ee1411bec9d&l=202610291727023012B24912AABF45FF1D",
+      "https://v26-web.douyinvod.com/4b0698e989fff817c23734a352c54d02/6ae31f7b/video/tos/cn/tos-cn-ve-15/o0PBUIAGA5HCup0LeWV7BAA4gtfgmvRSnVaeaa/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1778&bt=1778&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=NTtoaWU2Zmg3NTo7OTU5PEBpM2hocHg5cmRtZTMzNGkzM0A2MjE0LS0vNjIxXmEtNWFhYSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=93c5283e1794c821af5e0ee1411bec9d&l=202610291727023012B24912AABF45FF1D",
+      "https://www.douyin.com/aweme/v1/play/?video_id=v0d00fg10000dbfjqanog65u5m1eqe80&line=0&ratio=720p&watermark=1&media_type=2&vr_type=0&improve_bitrate=0&biz_sign=NRPI1lC4AlkgB1YZ_o3JkfAfESRKvePEcubBoNQldXOwTcZpHMxcwc8G9-yE9VaaOzLa7CA0Ou-V1V2BgVYRf9AV7U3HDGbNHaUZIZuaRMUGyO7s5wbVW7et0I2xs1hA&logo_name=aweme_search_suffix&source=PackSourceEnum_AWEME_DETAIL"
+     ],
+     "width": 720
+    },
+    "download_suffix_logo_addr": {
+     "data_size": 1928718,
+     "height": 720,
+     "uri": "v0d00fg10000dbfjqanog65u5m1eqe80",
+     "url_list": [
+      "https://v11-weba.douyinvod.com/aca11674b1c47f71004adb045cc2c79f/6ae31f7b/video/tos/cn/tos-cn-ve-15/o0PBUIAGA5HCup0LeWV7BAA4gtfgmvRSnVaeaa/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1778&bt=1778&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=NTtoaWU2Zmg3NTo7OTU5PEBpM2hocHg5cmRtZTMzNGkzM0A2MjE0LS0vNjIxXmEtNWFhYSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=93c5283e1794c821af5e0ee1411bec9d&l=202610291727023012B24912AABF45FF1D",
+      "https://v26-web.douyinvod.com/4b0698e989fff817c23734a352c54d02/6ae31f7b/video/tos/cn/tos-cn-ve-15/o0PBUIAGA5HCup0LeWV7BAA4gtfgmvRSnVaeaa/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1778&bt=1778&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=NTtoaWU2Zmg3NTo7OTU5PEBpM2hocHg5cmRtZTMzNGkzM0A2MjE0LS0vNjIxXmEtNWFhYSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=93c5283e1794c821af5e0ee1411bec9d&l=202610291727023012B24912AABF45FF1D",
+      "https://www.douyin.com/aweme/v1/play/?video_id=v0d00fg10000dbfjqanog65u5m1eqe80&line=0&ratio=720p&watermark=1&media_type=2&vr_type=0&improve_bitrate=0&biz_sign=NRPI1lC4AlkgB1YZ_o3JkfAfESRKvePEcubBoNQldXOwTcZpHMxcwc8G9-yE9VaaOzLa7CA0Ou-V1V2BgVYRf9AV7U3HDGbNHaUZIZuaRMUGyO7s5wbVW7et0I2xs1hA&logo_name=aweme_search_suffix&source=PackSourceEnum_AWEME_DETAIL"
+     ],
+     "width": 720
+    },
+    "duration": 5500,
+    "has_download_suffix_logo_addr": true,
+    "has_watermark": true,
+    "height": 960,
+    "is_bytevc1": 0,
+    "is_callback": true,
+    "is_h265": 0,
+    "is_source_HDR": 0,
+    "meta": "{\"enable_manual_ladder\":\"1\",\"format\":\"mp4\",\"gear_vqm\":\"{\\\"1080p_720p\\\":-1,\\\"720p_540p\\\":-1}\",\"hrids\":\"260309002\",\"is_cdn_peak\":\"false\",\"is_spatial_video\":\"0\",\"isad\":\"0\",\"qprf\":\"1.000\",\"sdgs\":\"[\\\"normal_720_0\\\"]\",\"sr_score\":\"1.000\",\"strategy_tokens\":\"[\\\"online\\\"]\",\"vqs_origin\":\"61.7\"}",
+    "need_set_token": false,
+    "origin_cover": {
+     "height": 720,
+     "uri": "",
+     "url_list": [],
+     "width": 720
+    },
+    "play_addr": {
+     "data_size": 1033130,
+     "file_cs": "c:0-7500-8354|d:0-516564-304f,516565-1033129-a063|a:v0d00fg10000dbfjqanog65u5m1eqe80",
+     "file_hash": "c7c96dcf4c7aca45746fdb7c0bb1dd05",
+     "height": 960,
+     "uri": "v0d00fg10000dbfjqanog65u5m1eqe80",
+     "url_key": "v0d00fg10000dbfjqanog65u5m1eqe80_h264_720p_1502734",
+     "url_list": [
+      "https://v11-weba.douyinvod.com/efd810651a288942344060098d0353d5/6ae31f7b/video/tos/cn/tos-cn-ve-15/ose7gBptA4VmWhgf5VCcQZuPAfLlBVAnv0Ga1I/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1467&bt=1467&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=ZDQ1NWQzMzM4MzczOGdpNUBpM2hocHg5cmRtZTMzNGkzM0AyLy42NWMuNjExMjFhNTI1YSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=f5241e7604dff1d9d6c943fd20bd51a2&l=202610291727023012B24912AABF45FF1D",
+      "https://v26-web.douyinvod.com/74ce956f33cc035eb0fca195c487c219/6ae31f7b/video/tos/cn/tos-cn-ve-15/ose7gBptA4VmWhgf5VCcQZuPAfLlBVAnv0Ga1I/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1467&bt=1467&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=ZDQ1NWQzMzM4MzczOGdpNUBpM2hocHg5cmRtZTMzNGkzM0AyLy42NWMuNjExMjFhNTI1YSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=f5241e7604dff1d9d6c943fd20bd51a2&l=202610291727023012B24912AABF45FF1D",
+      "https://www.douyin.com/aweme/v1/play/?video_id=v0d00fg10000dbfjqanog65u5m1eqe80&line=0&file_id=825f8dd5405440459010f08a9212215a&sign=c7c96dcf4c7aca45746fdb7c0bb1dd05&is_play_url=1&source=PackSourceEnum_AWEME_DETAIL"
+     ],
+     "width": 720
+    },
+    "play_addr_h264": {
+     "data_size": 1033130,
+     "file_cs": "c:0-7500-8354|d:0-516564-304f,516565-1033129-a063|a:v0d00fg10000dbfjqanog65u5m1eqe80",
+     "file_hash": "c7c96dcf4c7aca45746fdb7c0bb1dd05",
+     "height": 960,
+     "uri": "v0d00fg10000dbfjqanog65u5m1eqe80",
+     "url_key": "v0d00fg10000dbfjqanog65u5m1eqe80_h264_720p_1502734",
+     "url_list": [
+      "https://v11-weba.douyinvod.com/efd810651a288942344060098d0353d5/6ae31f7b/video/tos/cn/tos-cn-ve-15/ose7gBptA4VmWhgf5VCcQZuPAfLlBVAnv0Ga1I/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1467&bt=1467&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=ZDQ1NWQzMzM4MzczOGdpNUBpM2hocHg5cmRtZTMzNGkzM0AyLy42NWMuNjExMjFhNTI1YSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=f5241e7604dff1d9d6c943fd20bd51a2&l=202610291727023012B24912AABF45FF1D",
+      "https://v26-web.douyinvod.com/74ce956f33cc035eb0fca195c487c219/6ae31f7b/video/tos/cn/tos-cn-ve-15/ose7gBptA4VmWhgf5VCcQZuPAfLlBVAnv0Ga1I/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1467&bt=1467&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=ZDQ1NWQzMzM4MzczOGdpNUBpM2hocHg5cmRtZTMzNGkzM0AyLy42NWMuNjExMjFhNTI1YSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=f5241e7604dff1d9d6c943fd20bd51a2&l=202610291727023012B24912AABF45FF1D",
+      "https://www.douyin.com/aweme/v1/play/?video_id=v0d00fg10000dbfjqanog65u5m1eqe80&line=0&file_id=825f8dd5405440459010f08a9212215a&sign=c7c96dcf4c7aca45746fdb7c0bb1dd05&is_play_url=1&source=PackSourceEnum_AWEME_DETAIL"
+     ],
+     "width": 720
+    },
+    "play_addr_lowbr": {
+     "data_size": 1033130,
+     "file_cs": "c:0-7500-8354|d:0-516564-304f,516565-1033129-a063|a:v0d00fg10000dbfjqanog65u5m1eqe80",
+     "file_hash": "c7c96dcf4c7aca45746fdb7c0bb1dd05",
+     "height": 960,
+     "uri": "v0d00fg10000dbfjqanog65u5m1eqe80",
+     "url_key": "v0d00fg10000dbfjqanog65u5m1eqe80_h264_720p_1502734",
+     "url_list": [
+      "https://v11-weba.douyinvod.com/efd810651a288942344060098d0353d5/6ae31f7b/video/tos/cn/tos-cn-ve-15/ose7gBptA4VmWhgf5VCcQZuPAfLlBVAnv0Ga1I/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1467&bt=1467&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=ZDQ1NWQzMzM4MzczOGdpNUBpM2hocHg5cmRtZTMzNGkzM0AyLy42NWMuNjExMjFhNTI1YSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=f5241e7604dff1d9d6c943fd20bd51a2&l=202610291727023012B24912AABF45FF1D",
+      "https://v26-web.douyinvod.com/74ce956f33cc035eb0fca195c487c219/6ae31f7b/video/tos/cn/tos-cn-ve-15/ose7gBptA4VmWhgf5VCcQZuPAfLlBVAnv0Ga1I/?a=6383&ch=26&cr=3&dr=0&lr=all&cd=0%7C0%7C0%7C3&cv=1&br=1467&bt=1467&cs=0&ds=3&ft=AJkeU_TLRR0si0C4kNj2Nc.xBiGNbLx6iqRU_4TFPDdSNv7TGW&mime_type=video_mp4&qs=0&rc=ZDQ1NWQzMzM4MzczOGdpNUBpM2hocHg5cmRtZTMzNGkzM0AyLy42NWMuNjExMjFhNTI1YSM1bi4yMmRrbmNhLS1kLWFzcw%3D%3D&btag=c0000e00008000&cquery=100o&dy_q=1793266022&feature_id=f5241e7604dff1d9d6c943fd20bd51a2&l=202610291727023012B24912AABF45FF1D",
+      "https://www.douyin.com/aweme/v1/play/?video_id=v0d00fg10000dbfjqanog65u5m1eqe80&line=0&file_id=825f8dd5405440459010f08a9212215a&sign=c7c96dcf4c7aca45746fdb7c0bb1dd05&is_play_url=1&source=PackSourceEnum_AWEME_DETAIL"
+     ],
+     "width": 720
+    },
+    "ratio": "720p",
+    "tags": null,
+    "width": 720
+   },
+   "width": 1606
+  }
+ ],
+ "img_bitrate": null,
+ "impression_data": {
+  "group_id_list_a": [],
+  "group_id_list_b": [],
+  "group_id_list_c": [],
+  "group_id_list_d": [],
+  "similar_id_list_a": null,
+  "similar_id_list_b": null
+ },
+ "incentive_item_type": 0,
+ "interaction_stickers": null,
+ "is_24_story": 0,
+ "is_25_story": 0,
+ "is_ads": false,
+ "is_aigc_media": false,
+ "is_collects_selected": 0,
+ "is_duet_sing": false,
+ "is_from_ad_auth": false,
+ "is_image_beat": false,
+ "is_life_item": false,
+ "is_live_photo": 1,
+ "is_moment_history": 0,
+ "is_moment_story": 0,
+ "is_multi_content": 1,
+ "is_new_text_mode": 0,
+ "is_share_post": false,
+ "is_story": 0,
+ "is_subtitled": 0,
+ "is_top": 0,
+ "is_use_music": true,
+ "item_aigc_follow_shot": 1,
+ "item_title": "",
+ "item_warn_notification": {
+  "content": "",
+  "show": false,
+  "type": 0
+ },
+ "label_top_text": null,
+ "libfinsert_task_id": "",
+ "long_video": null,
+ "mark_largely_following": true,
+ "media_type": 2,
+ "music": {
+  "album": "",
+  "artist_user_infos": null,
+  "artists": [],
+  "audition_duration": 22,
+  "author": "玫瑰不开了",
+  "author_deleted": false,
+  "author_position": null,
+  "author_status": 1,
+  "avatar_large": {
+   "height": 720,
+   "uri": "1080x1080/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e",
+   "url_list": [
+    "https://p3-pc.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e.jpeg?from=327834062"
+   ],
+   "width": 720
+  },
+  "avatar_medium": {
+   "height": 720,
+   "uri": "720x720/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e",
+   "url_list": [
+    "https://p3-pc.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e.jpeg?from=327834062"
+   ],
+   "width": 720
+  },
+  "avatar_thumb": {
+   "height": 720,
+   "uri": "100x100/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e",
+   "url_list": [
+    "https://p3-pc.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e.jpeg?from=327834062"
+   ],
+   "width": 720
+  },
+  "binded_challenge_id": 0,
+  "can_background_play": true,
+  "collect_stat": 0,
+  "cover_hd": {
+   "height": 720,
+   "uri": "1080x1080/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e",
+   "url_list": [
+    "https://p3-pc.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e.jpeg?from=327834062"
+   ],
+   "width": 720
+  },
+  "cover_large": {
+   "height": 720,
+   "uri": "1080x1080/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e",
+   "url_list": [
+    "https://p3-pc.douyinpic.com/aweme/1080x1080/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e.jpeg?from=327834062"
+   ],
+   "width": 720
+  },
+  "cover_medium": {
+   "height": 720,
+   "uri": "720x720/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e",
+   "url_list": [
+    "https://p3-pc.douyinpic.com/aweme/720x720/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e.jpeg?from=327834062"
+   ],
+   "width": 720
+  },
+  "cover_thumb": {
+   "height": 720,
+   "uri": "100x100/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e",
+   "url_list": [
+    "https://p3-pc.douyinpic.com/aweme/100x100/aweme-avatar/tos-cn-avt-0015_71ca9962af2370cbea031787f61eee7e.jpeg?from=327834062"
+   ],
+   "width": 720
+  },
+  "dmv_auto_show": false,
+  "dsp_status": 10,
+  "duration": 22,
+  "end_time": 0,
+  "external_song_info": [],
+  "extra": "{\"aed_music_score\":0.96,\"aed_singing_score\":0.01,\"aggregate_exempt_conf\":[],\"aigc_clip\":false,\"beats\":{\"audio_effect_onset\":\"https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/strong_beat/audio_effect_onset/model_spec_tnt/7452661812782271259/1771317942\",\"beats_tracker\":\"https://sf6-cdn-tos.douyinstatic.com/obj/ies-music/strong_beat/beats_tracker/model_spec_tnt/7452661812782271259/1771317943\",\"energy_trace\":\"https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/strong_beat/energy_trace/model_spec_tnt/7452661812782271259/1771317942\",\"merged_beats\":\"https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/strong_beat/merged_beats/model_spec_tnt/7452661812782271259/1771317943\"},\"cover_colors\":null,\"diversion_music_detail_preload\":{\"author\":\"\",\"cover_medium\":null,\"diversion_code\":1,\"is_same\":false,\"luna_song_id\":7513776510845487131,\"scene\":0,\"show_head\":false,\"title\":\"\"},\"douyin_beats_info\":{},\"dsp_switch\":274877906944,\"extract_item_id\":7452661758084271414,\"has_edited\":0,\"hotsoon_review_time\":-1,\"image_beats_url\":\"https://sf6-cdn-tos.douyinstatic.com/obj/ies-music/strong_beat/beats_tracker/model_spec_tnt/7452661812782271259/1771317943\",\"is_aed_music\":1,\"is_red\":0,\"is_subsidy_exp\":false,\"long_pic_video_usable\":true,\"music_display_mapping_title\":\"本世纪最伟大的前奏（爱情买卖） - ice黎\",\"music_label_id\":null,\"music_tagging\":{\"AEDs\":[\"non_vocal\"],\"Genres\":null,\"Instruments\":null,\"Languages\":[\"non_vocal\"],\"Moods\":[\"Inspirational\"],\"SingingVersions\":null,\"Themes\":null},\"review_unshelve_reason\":0,\"reviewed\":1,\"schedule_search_time\":0,\"uniqa_speech_score\":0.04,\"with_aed_model\":1}",
+  "id": 7452661812782271259,
+  "id_str": "7452661812782271259",
+  "is_audio_url_with_cookie": false,
+  "is_commerce_music": false,
+  "is_del_video": false,
+  "is_matched_metadata": false,
+  "is_original": false,
+  "is_original_sound": true,
+  "is_pgc": false,
+  "is_restricted": false,
+  "is_video_self_see": false,
+  "lyric_short_position": null,
+  "matched_pgc_sound": {
+   "author": "ice黎",
+   "cover_medium": {
+    "height": 720,
+    "uri": "tos-cn-v-2774c002/ooEazrUAiPoiNBBEA9ZKgWrCSIs4AIbqSisAQ",
+    "url_list": [
+     "https://p11.douyinpic.com/aweme/200x200/tos-cn-v-2774c002/ooEazrUAiPoiNBBEA9ZKgWrCSIs4AIbqSisAQ.jpeg",
+     "https://p3.douyinpic.com/aweme/200x200/tos-cn-v-2774c002/ooEazrUAiPoiNBBEA9ZKgWrCSIs4AIbqSisAQ.jpeg",
+     "https://p26.douyinpic.com/aweme/200x200/tos-cn-v-2774c002/ooEazrUAiPoiNBBEA9ZKgWrCSIs4AIbqSisAQ.jpeg"
+    ],
+    "width": 720
+   },
+   "mixed_author": "",
+   "mixed_title": "",
+   "title": "本世纪最伟大的前奏（爱情买卖）"
+  },
+  "mid": "7452661812782271259",
+  "music_chart_ranks": null,
+  "music_collect_count": 0,
+  "music_cover_atmosphere_color_value": "",
+  "music_image_beats": {
+   "music_image_beats_url": {
+    "height": 720,
+    "uri": "ies-music/strong_beat/beats_tracker/model_spec_tnt/7452661812782271259/1771317943",
+    "url_list": [
+     "https://sf6-cdn-tos.douyinstatic.com/obj/ies-music/strong_beat/beats_tracker/model_spec_tnt/7452661812782271259/1771317943"
+    ],
+    "width": 720
+   }
+  },
+  "music_status": 1,
+  "musician_user_infos": null,
+  "mute_share": false,
+  "offline_desc": "",
+  "owner_handle": "988788908",
+  "owner_id": "92684878637",
+  "owner_nickname": "玫瑰不开了",
+  "pgc_music_type": 2,
+  "play_url": {
+   "height": 720,
+   "uri": "https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/7452661868243503882.mp3",
+   "url_key": "7452661812782271259",
+   "url_list": [
+    "https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/7452661868243503882.mp3",
+    "https://sf6-cdn-tos.douyinstatic.com/obj/ies-music/7452661868243503882.mp3"
+   ],
+   "width": 720
+  },
+  "position": null,
+  "prevent_download": false,
+  "prevent_item_download_status": 0,
+  "preview_end_time": 0,
+  "preview_start_time": 0,
+  "reason_type": 0,
+  "redirect": false,
+  "schema_url": "",
+  "search_impr": {
+   "entity_id": "7452661812782271259"
+  },
+  "sec_uid": "MS4wLjABAAAAeLxkFzqMdMGU_obkHTq9-1zqJoUr8nI1tVSFm63vxWw",
+  "shoot_duration": 22,
+  "show_origin_clip": false,
+  "song": {
+   "artists": null,
+   "id": 7700051941191976986,
+   "id_str": "7700051941191976986"
+  },
+  "source_platform": 23,
+  "start_time": 0,
+  "status": 1,
+  "strong_beat_url": {
+   "height": 720,
+   "uri": "https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/pattern/c0051ae3bd9d3a0d18d6c411a31d61bb.json",
+   "url_list": [
+    "https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/pattern/c0051ae3bd9d3a0d18d6c411a31d61bb.json",
+    "https://sf6-cdn-tos.douyinstatic.com/obj/ies-music/pattern/c0051ae3bd9d3a0d18d6c411a31d61bb.json"
+   ],
+   "width": 720
+  },
+  "tag_list": null,
+  "title": "@玫瑰不开了创作的原声",
+  "unshelve_countries": null,
+  "user_count": 0,
+  "video_duration": 22
+ },
+ "nickname_position": null,
+ "origin_comment_ids": null,
+ "origin_duet_resource_uri": "",
+ "origin_text_extra": [],
+ "original": 0,
+ "original_images": null,
+ "pack_usage_scene_by_req_path": "/aweme/v1/web/aweme/detail/",
+ "packed_clips": null,
+ "pc_need_login": false,
+ "personal_page_botton_diagnose_style": 0,
+ "photo_search_entrance": {
+  "ecom_type": 0
+ },
+ "position": null,
+ "preview_title": "本世纪最伟大前奏。我的相册和这个 bgm适配度💯\n#本世纪最伟大前奏 #姐感 #唐泽雪穗 #仿拍",
+ "preview_video_status": 1,
+ "product_genre_info": {
+  "material_genre_sub_type_set": [
+   2
+  ],
+  "product_genre_type": 1,
+  "special_info": {
+   "recommend_group_name": 1
+  }
+ },
+ "promotions": [],
+ "publish_plus_alienation": {
+  "alienation_type": 0
+ },
+ "rate": 12,
+ "region": "CN",
+ "related_music_anchor": {
+  "extra": "{\"luna_sid\":7513776510845487131,\"medium_cover_urls\":[\"https://p9-sign.huoshanimg.com/tos-cn-v-2774c002/oEAAZEK6QBA3pnexFDCeCkWjFAaIEIfzramOMm~tplv-dy-resize-walign-adapt-aq:720:q75.heic?biz_tag=aweme_music\\u0026lk3s=08d74b56\\u0026s=PackSourceEnum_FEED\\u0026sc=cover\\u0026x-expires=1793287390\\u0026x-signature=q4uTix89bwHDgoOVZNGe5ZkfEqY%3D\",\"https://p6-sign.huoshanimg.com/tos-cn-v-2774c002/oEAAZEK6QBA3pnexFDCeCkWjFAaIEIfzramOMm~tplv-dy-resize-walign-adapt-aq:720:q75.heic?biz_tag=aweme_music\\u0026lk3s=08d74b56\\u0026s=PackSourceEnum_FEED\\u0026sc=cover\\u0026x-expires=1793287390\\u0026x-signature=fLua3AuAaCBHfx2hEywxhGWUhkc%3D\"],\"hit_strategy\":655360,\"hit_strategy_v2\":0,\"author\":\"慕容晓晓\",\"title\":\"爱情买卖\",\"promotion_anchor_type\":\"\",\"promotion_anchor_landing_page_url\":\"\",\"middle_page_color\":\"{\\\"base_5\\\":\\\"afa1aa\\\",\\\"base_7\\\":\\\"675a63\\\",\\\"base_8\\\":\\\"42393f\\\",\\\"gradient_effect_end\\\":\\\"897a84\\\",\\\"gradient_effect_start\\\":\\\"afa1aa\\\"}\",\"media_type\":\"\",\"mv_meta_song_id\":0,\"aweme_copyright\":true,\"anchor_text\":\"汽水音乐\",\"anchor_icon\":\"https://p3-luna.douyinpic.com/tos-cn-i-b829550vbb/sodaIcon.svg~tplv-b829550vbb-obj.image\"}",
+  "image_url": {
+   "uri": "",
+   "url_list": [
+    "https://lf3-cdn-tos.douyinstatic.com/obj/aweme-server-static-resource/qishuiyinyue_jiantou.png"
+   ]
+  },
+  "priority": 9050,
+  "schema_url": "aweme://music_streaming/whole_song_detail?accessibility_text=%E6%B1%BD%E6%B0%B4%E9%9F%B3%E4%B9%90%E6%8C%89%E9%92%AE&enter_method=luna_logo&luna_song_id=7513776510845487131&meta_song_id=7700051941191976986",
+  "type": "luna_anchor_v2"
+ },
+ "relation_labels": null,
+ "risk_infos": {
+  "content": "",
+  "risk_sink": false,
+  "type": 0,
+  "vote": false,
+  "warn": false
+ },
+ "sec_item_id": "MS4wLjAAAAAAbcgkeB51Y3mDJ_QbuwMdUBozcc0xTS88Xth6b1JvdmEqz4vmPjYib71uZ92Gl1so",
+ "select_anchor_expanded_content": 0,
+ "seo_info": {},
+ "series_basic_info": {},
+ "series_paid_info": {
+  "item_price": 0,
+  "series_paid_status": 0
+ },
+ "share_info": {
+  "share_desc": "在抖音，记录美好生活",
+  "share_desc_info": "#在抖音，记录美好生活#本世纪最伟大前奏。我的相册和这个 bgm适配度💯\n#本世纪最伟大前奏 #姐感 #唐泽雪穗 #仿拍",
+  "share_link_desc": "8.71 12/07 m@D.uf EHV:/ :3pm 本世纪最伟大前奏。我的相册和这个 bgm适配度💯 # 本世纪最伟大前奏 # 姐感 # 唐泽雪穗 # 仿拍  %s 复制此链接，打开Dou音搜索，直接观看视频！",
+  "share_url": "https://www.iesdouyin.com/share/video/7700942408430718115/?region=CN&mid=7452661812782271259&u_code=-1&did=MS4wLjABAAAA4BCHXdPO4iCt8e30yled2HkiXmtSrOnU8LW6R_2x_CohPv0t0CJPKtuwIgqKwkxq&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&schema_type=37&share_sign=6NC71VY9GNYRTPJc0k4nObJ5.4piI9Nu1sGS177CFPg-&share_version=290100&ts=1793266022&from_aid=6383&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D"
+ },
+ "share_rec_extra": "",
+ "share_url": "https://www.iesdouyin.com/share/video/7700942408430718115/?region=CN&mid=7452661812782271259&u_code=-1&did=MS4wLjABAAAA4BCHXdPO4iCt8e30yled2HkiXmtSrOnU8LW6R_2x_CohPv0t0CJPKtuwIgqKwkxq&iid=MS4wLjABAAAANwkJuWIRFOzg5uCpDRpMj4OX-QryoDgn-yYlXQnRwQQ&with_sec_did=1&video_share_track_ver=&titleType=title&schema_type=37&share_sign=6NC71VY9GNYRTPJc0k4nObJ5.4piI9Nu1sGS177CFPg-&share_version=290100&ts=1793266022&from_aid=6383&from_ssr=1&share_track_info=%7B%22link_description_type%22%3A%22%22%7D",
+ "shoot_way": "single_song",
+ "should_open_ad_report": false,
+ "show_follow_button": {},
+ "social_tag_list": null,
+ "statistics": {
+  "admire_count": 0,
+  "aweme_id": "7700942408430718115",
+  "collect_count": 6547,
+  "comment_count": 962,
+  "digg_count": 53471,
+  "play_count": 0,
+  "recommend_count": 1090,
+  "share_count": 7975
+ },
+ "status": {
+  "allow_friend_recommend": false,
+  "allow_friend_recommend_guide": true,
+  "allow_self_recommend_to_friend": true,
+  "allow_share": true,
+  "aweme_id": "7700942408430718115",
+  "enable_soft_delete": 0,
+  "in_reviewing": false,
+  "is_delete": false,
+  "is_prohibited": false,
+  "listen_video_status": 2,
+  "not_allow_soft_del_reason": "ab",
+  "part_see": 0,
+  "private_status": 0,
+  "review_result": {
+   "review_status": 0
+  }
+ },
+ "suggest_words": {
+  "suggest_words": [
+   {
+    "extra_info": "{\"is_life_intent\":1,\"resp_from\":\"hit_cache\"}",
+    "hint_text": "大家都在搜：",
+    "icon_url": "",
+    "scene": "comment_top_rec",
+    "words": [
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "石原里美",
+      "word_id": "6527566247347885319"
+     },
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "唐泽雪穗",
+      "word_id": "6595501018576852231"
+     },
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "出卖我的爱",
+      "word_id": "6585039027345298696"
+     },
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "本世纪最伟大前奏",
+      "word_id": "7497334610289579302"
+     },
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "慕容晓晓",
+      "word_id": "6538391985013658893"
+     },
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "本世纪最伟大的前奏",
+      "word_id": "7343162024544097576"
+     },
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "我的女孩女二",
+      "word_id": "6595890640167376142"
+     },
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "本世纪最伟大的前妻",
+      "word_id": "7694993204043699519"
+     },
+     {
+      "info": "{\"End\":0,\"Start\":0,\"ecpm_boost_tag\":false,\"log_pb\":\"\",\"qrec_for_search\":\"{}\"}",
+      "word": "花碎花是什么歌",
+      "word_id": "7089305278538470671"
+     }
+    ]
+   }
+  ]
+ },
+ "text_extra": [
+  {
+   "caption_end": 0,
+   "caption_start": 0,
+   "end": 8,
+   "start": 0,
+   "type": 7
+  },
+  {
+   "caption_end": 0,
+   "caption_start": 0,
+   "end": 9,
+   "start": 8,
+   "type": 8
+  },
+  {
+   "caption_end": 0,
+   "caption_start": 0,
+   "end": 35,
+   "hashtag_id": "7695806488509417506",
+   "hashtag_name": "本世纪最伟大前奏",
+   "is_commerce": false,
+   "start": 26,
+   "type": 1
+  },
+  {
+   "caption_end": 0,
+   "caption_start": 0,
+   "end": 39,
+   "hashtag_id": "1715936387282956",
+   "hashtag_name": "姐感",
+   "is_commerce": false,
+   "start": 36,
+   "type": 1
+  },
+  {
+   "caption_end": 0,
+   "caption_start": 0,
+   "end": 45,
+   "hashtag_id": "1629514296000519",
+   "hashtag_name": "唐泽雪穗",
+   "is_commerce": false,
+   "start": 40,
+   "type": 1
+  },
+  {
+   "caption_end": 0,
+   "caption_start": 0,
+   "end": 49,
+   "hashtag_id": "1613035433735239",
+   "hashtag_name": "仿拍",
+   "is_commerce": false,
+   "start": 46,
+   "type": 1
+  }
+ ],
+ "trends_event_track": "{}",
+ "trends_infos": [
+  {
+   "track_pass_through": "{\"trends_universe_id\":\"7700800480989036594\"}"
+  }
+ ],
+ "uniqid_position": null,
+ "user_digged": 0,
+ "user_recommend_status": 1,
+ "video": {
+  "audio": {},
+  "big_thumbs": null,
+  "bit_rate_audio": null,
+  "cover": {
+   "height": 720,
+   "uri": "tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG",
+   "url_list": [
+    "https://p3-pc-sign.douyinpic.com/tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG~noop.jpeg?lk3s=138a59ce&x-expires=1794474000&x-signature=kG9EQLVBVnlRhtbKcMla7nkzBcU%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&biz_tag=pcweb_cover&l=202610291727023012B24912AABF45FF1D",
+    "https://p9-pc-sign.douyinpic.com/tos-cn-i-0813c001/oYXAGfzf9gA9DGAQAHyEAwCNPA3FIUVAq614AG~noop.jpeg?lk3s=138a59ce&x-expires=1794474000&x-signature=zN3VwRGWTkp2Vx79hMnrOPAqSIs%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&biz_tag=pcweb_cover&l=202610291727023012B24912AABF45FF1D"
+   ],
+   "width": 720
+  },
+  "duration": 0,
+  "has_watermark": false,
+  "height": 2142,
+  "is_h265": 0,
+  "meta": "{}",
+  "origin_cover": {
+   "height": 720,
+   "uri": "tos-cn-p-0015/owBfe7CVXv5epXpnxBbMUAGBayB8AVbTdApBQn",
+   "url_list": [
+    "https://p3-pc-sign.douyinpic.com/tos-cn-p-0015/owBfe7CVXv5epXpnxBbMUAGBayB8AVbTdApBQn~noop.jpeg?lk3s=138a59ce&x-expires=1794474000&x-signature=U75hP5yh1efedOyfN6FA0iSaR%2FE%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&biz_tag=pcweb_cover&l=202610291727023012B24912AABF45FF1D",
+    "https://p9-pc-sign.douyinpic.com/tos-cn-p-0015/owBfe7CVXv5epXpnxBbMUAGBayB8AVbTdApBQn~noop.jpeg?lk3s=138a59ce&x-expires=1794474000&x-signature=BJOJxwKB%2BXIBiK%2FIXtRwuwrJc60%3D&from=327834062&s=PackSourceEnum_AWEME_DETAIL&se=false&biz_tag=pcweb_cover&l=202610291727023012B24912AABF45FF1D"
+   ],
+   "width": 720
+  },
+  "play_addr": {
+   "height": 720,
+   "uri": "https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/7452661868243503882.mp3",
+   "url_key": "7452661812782271259",
+   "url_list": [
+    "https://sf11-cdn-tos.douyinstatic.com/obj/ies-music/7452661868243503882.mp3",
+    "https://sf6-cdn-tos.douyinstatic.com/obj/ies-music/7452661868243503882.mp3"
+   ],
+   "width": 720
+  },
+  "ratio": "default",
+  "width": 1606
+ },
+ "video_control": {
+  "allow_douplus": true,
+  "allow_download": true,
+  "allow_duet": true,
+  "allow_dynamic_wallpaper": true,
+  "allow_music": true,
+  "allow_react": true,
+  "allow_record": true,
+  "allow_share": true,
+  "allow_stitch": true,
+  "disable_record_reason": "",
+  "download_ignore_visibility": true,
+  "download_info": {
+   "level": 0
+  },
+  "draft_progress_bar": 0,
+  "duet_ignore_visibility": true,
+  "duet_info": {
+   "fail_info": {
+    "code": 100017,
+    "reason": "aweme_type"
+   },
+   "level": 2
+  },
+  "prevent_download_type": 0,
+  "share_grayed": false,
+  "share_ignore_visibility": true,
+  "share_type": 1,
+  "show_ai_corner": false,
+  "show_progress_bar": 0,
+  "show_watermark": false,
+  "text_copy_type": 0,
+  "timer_info": {},
+  "timer_status": 1
+ },
+ "video_game_data_channel_config": {},
+ "video_labels": null,
+ "video_share_edit_status": 0,
+ "video_tag": [
+  {
+   "level": 1,
+   "tag_id": 2029,
+   "tag_name": "随拍"
+  },
+  {
+   "level": 2,
+   "tag_id": 2029001,
+   "tag_name": "人物随拍"
+  },
+  {
+   "level": 3,
+   "tag_id": 2029001003,
+   "tag_name": "人物图片轮播"
+  }
+ ],
+ "video_text": [],
+ "visual_search_info": {
+  "is_ecom_img": false,
+  "is_high_accuracy_ecom": false,
+  "is_high_recall_ecom": false,
+  "is_show_img_entrance": true,
+  "visual_search_longpress": 1
+ },
+ "vtag_search": {
+  "vtag_delay_ts": 3,
+  "vtag_enable": true
+ },
+ "xigua_base_info": {
+  "item_id": 0,
+  "star_altar_order_id": 0,
+  "star_altar_type": 0,
+  "status": 0
+ }
+}

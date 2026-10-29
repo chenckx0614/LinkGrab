@@ -263,8 +263,12 @@ class DouyinParser {
         // `request_source=200` is required for image albums but returns an
         // empty list for videos, so both variants are tried and the first
         // response that actually carries media wins.
+        //
+        // 打薄（风控过滤）的 detail 一律不返回：它 images 为空却常保留
+        // video.play_addr（图文作品的 BGM mp3），会被 hasMedia 之外任何
+        // 「有字段就算数」的宽容判定误收，从而挡住后面的签名 detail 通道
+        // （实测 7700942408430718115：slidesinfo 打薄 → 假成功 → 解析失败）。
         fun trySlidesinfo(): JsonObject? {
-            var partial: JsonObject? = null
             for (rsParam in listOf("", "&request_source=200")) {
                 val detail = try {
                     val body = get(
@@ -278,9 +282,8 @@ class DouyinParser {
                 } ?: continue
 
                 if (hasMedia(detail)) return detail
-                if (partial == null) partial = detail
             }
-            return partial
+            return null
         }
 
         trySlidesinfo()?.let { return it }
@@ -296,6 +299,10 @@ class DouyinParser {
     private fun hasMedia(detail: JsonObject): Boolean {
         val album = detail["images"]?.jsonArray
         if (album != null && album.any { pickImageUrl(it.jsonObject) != null }) return true
+        // 带 images 键的必是图文作品。images 空说明被风控打薄——它常还留着
+        // video.play_addr，但那指向 BGM 音频（mp3/m4a），不是视频流，绝不能
+        // 拿来当有效媒体，否则会挡住后面的签名 detail 通道。
+        if (album != null) return false
         return !bestVideoUrl(detail).isNullOrEmpty()
     }
 
