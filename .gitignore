@@ -19,3 +19,5 @@ google-services.json
 *.hprof
 .gradle-local/
 *.zip
+tools/douyin-sign/test_*.jpeg
+tools/douyin-sign/test_*.mp4
