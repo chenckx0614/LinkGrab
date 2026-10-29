@@ -33,8 +33,8 @@ import java.util.concurrent.TimeUnit
  *    albums additionally need `request_source=200`). 空结果时强制刷新 ttwid
  *    重试一轮。The legacy HTML SSR page is kept as a fallback.
  * 3. Read the first `aweme_details` entry:
- *    - images → images[] (album). `download_url_list` is preferred because it
- *      is the watermark-free original, otherwise `url_list` is used.
+ *    - images → images[] (album). 候选 URL 按「不含水印模板优先」挑选
+ *      （`download_url_list` 与 `url_list` 谁无水印随接口版本而变）。
  *      Live Photos expose images[].video.play_addr.url_list[0].
  *    - video  → 高清档位来自 video.bit_rate[]（见 bestVideoUrl）。注意
  *               video.play_addr 恒定是 `aweme/v1/play/?ratio=720p`，
@@ -626,23 +626,36 @@ class DouyinParser {
     }
 
     /**
-     * Best still-image URL for an album entry. `download_url_list` holds the
-     * watermark-free original, `url_list` is the rendered (sometimes webp)
-     * variant. Some responses nest both under a `url` / `download_url` object.
+     * Best still-image URL for an album entry.
+     *
+     * 两个字段的语义随接口版本而变：web detail 的 `download_url_list` 全部是
+     * 带水印模板（`~tplv-dy-water-*`）的下载版，`url_list` 才是无水印渲染图；
+     * 老移动端接口恰好相反。所以不按字段名挑，而是把所有候选摊开，按
+     * 「URL 不含水印模板」优先排序后再挑非 webp。
      */
     private fun pickImageUrl(img: JsonObject): String? {
-        preferNonWebpOrNull(img["download_url_list"])?.let { return it }
-        preferNonWebpOrNull(img["url_list"])?.let { return it }
-        val download = img["download_url"]?.jsonObject
-        preferNonWebpOrNull(download?.get("url_list"))?.let { return it }
-        val url = img["url"]?.jsonObject
-        preferNonWebpOrNull(url?.get("url_list"))?.let { return it }
-        return null
+        val urls = listOfNotNull(
+            img["url_list"],
+            img["download_url_list"],
+            img["download_url"]?.jsonObject?.get("url_list"),
+            img["url"]?.jsonObject?.get("url_list"),
+        ).asSequence()
+            .filterIsInstance<JsonArray>()
+            .flatMap { arr -> arr.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
+        val clean = urls.filter { !looksWatermarked(it) }
+        return preferNonWebpList(clean.ifEmpty { urls })
     }
 
-    private fun preferNonWebpOrNull(element: JsonElement?): String? {
-        val array = element as? JsonArray ?: return null
-        return preferNonWebp(array)
+    /**
+     * 水印模板识别：只匹配 tplv 模板名里的 water（如 `~tplv-dy-water-v2:`），
+     * 不裸查 "water" —— 避免误伤文件名本身含水（waterfall 等）的图。
+     */
+    private fun looksWatermarked(url: String): Boolean {
+        val path = url.substringBefore('?').substringBefore('#')
+        return Regex("""tplv[a-zA-Z0-9:_-]*water""", RegexOption.IGNORE_CASE).containsMatchIn(path)
     }
 
     /** First non-empty entry of a url_list. */
@@ -663,11 +676,12 @@ class DouyinParser {
     /**
      * Prefer the first url_list entry that is not a .webp asset.
      */
-    private fun preferNonWebp(urlList: JsonArray): String? {
-        val urls = urlList.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-            .filter { it.isNotEmpty() }
-        return urls.firstOrNull { !isWebp(it) } ?: urls.firstOrNull()
-    }
+    private fun preferNonWebp(urlList: JsonArray): String? =
+        preferNonWebpList(urlList.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+            .filter { it.isNotEmpty() })
+
+    private fun preferNonWebpList(urls: List<String>): String? =
+        urls.firstOrNull { !isWebp(it) } ?: urls.firstOrNull()
 
     /**
      * GET helper with explicit redirect policy control.
