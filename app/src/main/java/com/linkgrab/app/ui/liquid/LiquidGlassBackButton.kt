@@ -265,7 +265,7 @@ fun LiquidGlassBackButton(
     modifier: Modifier = Modifier,
     buttonSize: Dp = 42.dp,
     darkBackground: Boolean = false,
-    performHapticFeedback: Boolean = false,
+    performHapticFeedback: Boolean = true,
     enabled: Boolean = true,
 ) {
     LiquidGlassTopBarButton(
@@ -276,7 +276,6 @@ fun LiquidGlassBackButton(
         contentDescription = "返回",
         buttonSize = buttonSize,
         darkBackground = darkBackground,
-        // 返回是高频操作，默认不震（沿用历史行为）
         performHapticFeedback = performHapticFeedback,
         enabled = enabled,
     )

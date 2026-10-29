@@ -50,14 +50,33 @@ import java.util.concurrent.TimeUnit
 class DouyinParser {
 
     companion object {
-        // ttwid 跨实例共享：WebView 通道拿到真浏览器会话后回填到这里，
-        // 之后所有 DouyinParser 实例的原生请求都带上这个 cookie。
+        // 访客会话跨实例共享：WebView 通道拿到真浏览器会话后回填到这里，
+        // 之后所有 DouyinParser 实例的原生请求都带上这些 cookie。
         @Volatile
         private var cachedTtwid: String? = null
+
+        /** uifid（页面 secsdk JS 铸造的访客 id）—— x-secsdk-web-signature 的绑定对象。 */
+        @Volatile
+        private var cachedUifid: String? = null
+
+        /** s_v_web_id（即 verifyFp / fp 参数与 cookie）。 */
+        @Volatile
+        private var cachedSvWebId: String? = null
+
+        /** WebView 会话里的 msToken（没有也能用，伪造值已实测可接受）。 */
+        @Volatile
+        private var cachedMsToken: String? = null
 
         /** WebView 真页面拿到 ttwid 后回填（原生解析从此风控概率大降）。 */
         fun injectTtwid(value: String) {
             if (value.isNotBlank()) cachedTtwid = value
+        }
+
+        /** WebView 访问抖音页面后回填其余访客凭据（uifid 是签名通道的钥匙）。 */
+        fun injectVisitorCookies(uifid: String?, svWebId: String?, msToken: String?) {
+            uifid?.takeIf { it.isNotBlank() }?.let { cachedUifid = it }
+            svWebId?.takeIf { it.isNotBlank() }?.let { cachedSvWebId = it }
+            msToken?.takeIf { it.isNotBlank() }?.let { cachedMsToken = it }
         }
     }
 
@@ -152,8 +171,10 @@ class DouyinParser {
 
             // 优先走 slidesinfo 专用接口（SSR 页面的 videoInfoRes 字段已下线，
             // 图文 note 需要带 request_source=200 才返回数据）。接口失败时
-            // 回退到旧的 HTML SSR 解析。
+            // 依次尝试带签名的官方 detail 接口（需要 WebView 铸造的 uifid）
+            // 和旧的 HTML SSR 解析。
             val data = fetchAwemeDetail(videoId)
+                ?: fetchAwemeDetailSigned(videoId)
                 ?: fetchAwemeDetailFromHtml(videoId)
                 ?: return@withContext Result.failure(Exception("未找到作品信息"))
 
@@ -277,6 +298,101 @@ class DouyinParser {
         if (album != null && album.any { pickImageUrl(it.jsonObject) != null }) return true
         return !bestVideoUrl(detail).isNullOrEmpty()
     }
+
+    // region: 带签名的官方 detail 接口
+    //
+    // /aweme/v1/web/aweme/detail/ 是抖音的签名保护端点，需要三件套：
+    //   1. a_bogus —— bdms SDK 逆向出的纯算签名（DouyinWebSigner.ABogus）
+    //   2. uifid —— 真浏览器页面 JS 铸造的访客 id（WebView 通道收割），
+    //      用于 x-secsdk-web-signature = md5(uifid_时间戳_盐_query)
+    //   3. ttwid cookie
+    // 参考实现 2026-09-08/09 实测 24/24 通过；缺 uifid 时该端点一律 403
+    // "Uifid Not Found"，所以没有 uifid 时直接跳过本通道不浪费请求。
+
+    private fun fetchAwemeDetailSigned(videoId: String): JsonObject? {
+        val uifid = cachedUifid ?: return null
+        return try {
+            val msToken = cachedMsToken ?: fakeMsToken()
+            val params = baseDetailParams() + listOf("aweme_id" to videoId, "msToken" to msToken)
+
+            // a_bogus 的前像 = form 编码的业务参数（不含 a_bogus 本身），
+            // 附加时整个值要 percent-encode（s4 字母表含 / - =）。
+            val query = DouyinWebSigner.pythonUrlEncode(params)
+            val bogus = DouyinWebSigner.ABogus(defaultUa).getValue(query)
+            val withBogus = params + listOf("a_bogus" to bogus)
+
+            // x-secsdk 对「重新序列化后的完整 query」签名（verifyFp/fp 来自
+            // s_v_web_id cookie，浏览器页面也带这两个空参与非空参两种形态）。
+            val svWebId = cachedSvWebId
+            val visitorPairs = withBogus +
+                (svWebId?.let { listOf("verifyFp" to it, "fp" to it) } ?: emptyList())
+            val (signedQuery, signHeaders) = DouyinWebSigner.webSign(visitorPairs, uifid)
+
+            val cookie = buildList {
+                cachedTtwid?.let { add("ttwid=$it") }
+                add("uifid=$uifid")
+                svWebId?.let { add("s_v_web_id=$it") }
+                add("msToken=$msToken")
+            }.joinToString("; ")
+
+            val request = Request.Builder()
+                .url("https://www.douyin.com/aweme/v1/web/aweme/detail/?$signedQuery")
+                .header("User-Agent", defaultUa)
+                .header("Referer", "https://www.douyin.com/")
+                .header("Cookie", cookie)
+                .header("uifid", signHeaders.getValue("uifid"))
+                .header("x-secsdk-web-signature", signHeaders.getValue("x-secsdk-web-signature"))
+                .header("x-secsdk-web-expire", signHeaders.getValue("x-secsdk-web-expire"))
+                .build()
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val body = resp.body?.string() ?: return null
+                val detail = json.parseToJsonElement(body).jsonObject["aweme_detail"]?.jsonObject
+                    ?: return null
+                detail.takeIf { hasMedia(it) }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** 与 defaultUa（Chrome/128 桌面）自洽的浏览器画像参数。 */
+    private fun baseDetailParams(): List<Pair<String, String>> = listOf(
+        "device_platform" to "webapp",
+        "aid" to "6383",
+        "channel" to "channel_pc_web",
+        "pc_client_type" to "1",
+        "version_code" to "290100",
+        "version_name" to "29.1.0",
+        "cookie_enabled" to "true",
+        "screen_width" to "1920",
+        "screen_height" to "1080",
+        "browser_language" to "zh-CN",
+        "browser_platform" to "Win32",
+        "browser_name" to "Chrome",
+        "browser_version" to "128.0.0.0",
+        "browser_online" to "true",
+        "engine_name" to "Blink",
+        "engine_version" to "128.0.0.0",
+        "os_name" to "Windows",
+        "os_version" to "10",
+        "cpu_core_num" to "8",
+        "device_memory" to "8",
+        "platform" to "PC",
+        "downlink" to "10",
+        "effective_type" to "4g",
+        "round_trip_time" to "0",
+        "update_version_code" to "170400",
+    )
+
+    /** 本地伪造 msToken（抖音对 detail 端点已实测不校验其真实性）。 */
+    private fun fakeMsToken(): String =
+        buildString {
+            val alphabet = ('a'..'z') + ('A'..'Z') + ('0'..'9')
+            repeat(116) { append(alphabet.random()) }
+            append("==")
+        }
+    // endregion
 
     /**
      * 全部可用画质档位，按「高 → 低」排列，供 UI 让用户选择。

@@ -1,0 +1,14 @@
+{
+ "sm3_abc": "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0",
+ "sm3_empty": "1ab21d8355cfa17f8e61194831e81a8f22bec8c728fefb747ed035eb5082aa2b",
+ "abogus_v1": "YJ45g7tyYZR5FVMS8cjct7dUn9n/rT8yszTQSwMTSOFvbhFOWbNOxNGYGoLi4dVw0SpzhHVH7nMAbxdcPtUkZenkqmkkumhWMzVc9g6LZqq4TFJQErbkeu6FFwMrU5Gql554i14I8UrH6jxAirdD/QA9eKoFQbuBM1xjk2Tci9sXZFgADZcePBtkLh4B",
+ "abogus_v2": "YJ45g7tyYZR5FVMS8cjct7dUn9n/rT8ym0TQSwHTSOKUbhzPWbNOxNGYGoLi4dVw0SpzhHVH7nMAbxdcPtUkZenkqmkkumhWMzVc9g6LZqq4TFJQErbkeu6FFwMrU5Gql554i14I8UrH6jxAirdD/QA9eKoFQbuBM1xjk2Tci9sXZFgADZcePBtkLh5/",
+ "abogus_body": "QyU5DqtEdN/5adFbuObCtSplj9n/rTSy94T2Wa2TSOOYbqUORuNxxLzYnFxjsDnwTuphhH3Hen0MYdjOMGW9ZCrkumpfuYXWFG5C98vo8qwRTMkQDNjwez6zFwMN05GqeA57iA4IhUro6nnAiqd8/Qly9KLKQbuBB3xfk/YbE9sXZMyAD1crPBbkKhRl",
+ "websign_query": "aid=6383&aweme_id=123&a_bogus=AbC%2FdE-F%3D&uifid=UIFID_TEMP_test_1234567890&timestamp=1730000000&x-secsdk-web-signature=5230cf46710a319ca55cf033dbf67063",
+ "websign_signature": "5230cf46710a319ca55cf033dbf67063",
+ "websign_headers": {
+  "uifid": "UIFID_TEMP_test_1234567890",
+  "x-secsdk-web-signature": "5230cf46710a319ca55cf033dbf67063",
+  "x-secsdk-web-expire": "1730000000"
+ }
+}

@@ -174,13 +174,21 @@ class WebViewParser(private val context: Context) {
             cont.resume(result)
         }
 
-        /** 把 WebView 会话里的 ttwid 回填给原生解析器（两个域都试）。 */
+        /** 把 WebView 会话里的访客凭据回填给原生解析器（两个域都试）。
+         *  uifid 是页面 secsdk JS 铸造的，是原生签名 detail 通道的钥匙。 */
         fun harvestTtwid() {
             try {
                 for (domain in listOf("https://www.iesdouyin.com/", "https://www.douyin.com/")) {
                     val cookie = android.webkit.CookieManager.getInstance().getCookie(domain) ?: continue
                     Regex("ttwid=([^;]+)").find(cookie)?.groupValues?.get(1)
                         ?.let { DouyinParser.injectTtwid(it) }
+                    val uifid = Regex("(?:uifid|uifid_temp|uifidtemp)=([^;]+)", RegexOption.IGNORE_CASE)
+                        .find(cookie)?.groupValues?.get(1)
+                    val svWebId = Regex("s_v_web_id=([^;]+)").find(cookie)?.groupValues?.get(1)
+                    val msToken = Regex("msToken=([^;]+)").find(cookie)?.groupValues?.get(1)
+                    if (uifid != null || svWebId != null || msToken != null) {
+                        DouyinParser.injectVisitorCookies(uifid, svWebId, msToken)
+                    }
                 }
             } catch (_: Exception) {
             }
@@ -221,6 +229,9 @@ class WebViewParser(private val context: Context) {
                 webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView?, loadedUrl: String?) {
                         super.onPageFinished(view, loadedUrl)
+                        // 页面 JS 在加载过程就会铸造 uifid/ttwid —— 无论 SSR
+                        // 是否被风控打薄，先收割再提取（原生签名通道靠它）。
+                        harvestTtwid()
                         handler.postDelayed({ tryExtract(view, 0) }, 1_000)
                     }
                 }
