@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalUriHandler
@@ -290,8 +291,10 @@ fun AboutScreen(
                 Text(
                     "解析服务由第三方网络接口提供，具体可用性取决于平台页面和网络环境。",
                     fontSize = 12.sp,
+                    lineHeight = 18.sp,
                     color = iosSecondaryLabel(),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
         }
