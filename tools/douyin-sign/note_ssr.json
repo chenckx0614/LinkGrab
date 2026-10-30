@@ -1,0 +1,62 @@
+{
+ "loaderData": {
+  "note_layout": null,
+  "note_(id)/page": {
+   "ua": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+   "isSpider": false,
+   "query": {
+    "region": "CN",
+    "mid": "7452661812782271259",
+    "titleType": "title",
+    "schema_type": "37",
+    "from_ssr": "1",
+    "utm_source": "copy"
+   },
+   "renderInSSR": 1,
+   "lastPath": "7700942408430718115",
+   "appName": "safari",
+   "host": "www.iesdouyin.com",
+   "isNotSupportWebp": false,
+   "commonContext": {
+    "ua": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+    "isSpider": false,
+    "query": {
+     "region": "CN",
+     "mid": "7452661812782271259",
+     "titleType": "title",
+     "schema_type": "37",
+     "from_ssr": "1",
+     "utm_source": "copy"
+    },
+    "renderInSSR": 1,
+    "lastPath": "7700942408430718115",
+    "appName": "safari",
+    "host": "www.iesdouyin.com",
+    "isNotSupportWebp": false
+   },
+   "itemId": "7700942408430718115",
+   "openDirectGroup": "4",
+   "isButtonOptimize": true,
+   "isNoteStyleOptimize": true,
+   "isShowScrollToast": false,
+   "isAutoOpenApp": false,
+   "darkModeAdaptation": true,
+   "abParams": {
+    "reflow_video_page_optimize": "2",
+    "search_video_mark_abtest": "0",
+    "share_page_dark_mode_adaptation": "1",
+    "reflow_page_open_app_optimize": "4",
+    "reflow_page_auto_open_optimize": "0",
+    "reflow_to_featured_app": "1",
+    "select_pool_data": {
+     "use_new_select_scope": 0
+    },
+    "jx_label_display_position_list": [],
+    "reflow_page_615883_optimaze": false,
+    "show_rec_group_list": "0",
+    "is_use_ulink": false
+   }
+  }
+ },
+ "errors": null
+}

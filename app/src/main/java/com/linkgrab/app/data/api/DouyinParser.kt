@@ -230,6 +230,10 @@ class DouyinParser {
             val playUrl = qualities.firstOrNull()?.url
                 ?: fallbackVideoUrl(data)
                 ?: return@withContext Result.failure(Exception("未找到视频或图片地址"))
+            // 双保险：万一打薄数据漏过 hasMedia，也别把 BGM mp3 当视频给用户
+            if (looksLikeAudio(playUrl)) {
+                return@withContext Result.failure(Exception("未找到视频或图片地址"))
+            }
 
             // Follow the 302 to the final mp4 (西瓜视频 may have no redirect).
             val finalUrl = resolveRedirect(playUrl)
@@ -303,7 +307,23 @@ class DouyinParser {
         // video.play_addr，但那指向 BGM 音频（mp3/m4a），不是视频流，绝不能
         // 拿来当有效媒体，否则会挡住后面的签名 detail 通道。
         if (album != null) return false
-        return !bestVideoUrl(detail).isNullOrEmpty()
+        // images 键整个缺失是另一种打薄形态：单图+配乐作品（aweme_type 68，
+        // 实测 7700942408430718115）的 play_addr 指向 BGM mp3，按视频收下会
+        // 产出「下载视频」必失败的假结果。按音频特征拒绝，落到后面的通道取图。
+        val videoUrl = bestVideoUrl(detail)
+        return !videoUrl.isNullOrEmpty() && !looksLikeAudio(videoUrl)
+    }
+
+    /**
+     * BGM 音频地址识别：图文（note）作品的 `video.play_addr` 指向配乐而非
+     * 视频流，特征是 ies-music 目录或 .mp3 / .m4a 后缀（可能出现在 path，
+     * 也可能出现在 query 的 video_id 参数里）。
+     */
+    private fun looksLikeAudio(url: String): Boolean {
+        val lowered = url.lowercase()
+        if ("ies-music" in lowered) return true
+        val path = lowered.substringBefore('?').substringBefore('#')
+        return path.endsWith(".mp3") || path.endsWith(".m4a")
     }
 
     // region: 带签名的官方 detail 接口

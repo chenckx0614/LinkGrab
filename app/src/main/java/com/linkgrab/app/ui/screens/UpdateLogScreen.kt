@@ -24,6 +24,9 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.2.12", "2026-10-30", listOf(
+        "修复带配乐的单张图片解析后无法下载的问题",
+    )),
     UpdateLogItem("3.2.10", "2026-10-30", listOf(
         "修复「我的」页「关于应用」下方多出一条分割线的问题",
     )),

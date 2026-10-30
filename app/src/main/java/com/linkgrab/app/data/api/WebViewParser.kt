@@ -293,11 +293,21 @@ class WebViewParser(private val context: Context) {
                 source = "douyin",
             ).withSecureUrls()
         }
+        // images 键存在但一张可用图都没取到：这是被风控打薄的图文作品。
+        // 它的 video.play_addr 指向 BGM 配乐（mp3），按视频返回只会得到一个
+        // 下载必失败的假结果（单图+配乐实测 7700942408430718115），宁可失败。
+        if (detail.containsKey("images")) return null
         val playUrl = detail["video"]?.jsonObject?.get("play_addr")
             ?.jsonObject?.get("url_list")?.jsonArray
             ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
             ?.firstOrNull { it.isNotEmpty() }
             ?.replace("playwm", "play") ?: return null
+        // 双保险：BGM 音频特征（ies-music 目录 / mp3 m4a 后缀）不是视频流
+        val audio = playUrl.contains("ies-music", ignoreCase = true) || run {
+            val path = playUrl.substringBefore('?').substringBefore('#').lowercase()
+            path.endsWith(".mp3") || path.endsWith(".m4a")
+        }
+        if (audio) return null
         return MediaResult(
             type = MediaType.VIDEO,
             title = desc ?: "抖音视频",
@@ -667,6 +677,14 @@ class WebViewParser(private val context: Context) {
                 if (matcher.find()) {
                     var videoUrl = matcher.group(1) ?: matcher.group()
                     videoUrl = videoUrl.replace("\\u002F", "/").replace("\\/", "/").replace("\\u0026", "&")
+                    // 图文作品的 playAddr 指向 BGM 配乐（mp3/m4a），不是视频流，
+                    // 返回只会产出下载必失败的假结果
+                    val path = videoUrl.substringBefore('?').substringBefore('#').lowercase()
+                    if (videoUrl.contains("ies-music", ignoreCase = true) ||
+                        path.endsWith(".mp3") || path.endsWith(".m4a")
+                    ) {
+                        return@withContext Result.failure(Exception("无法从页面提取视频链接"))
+                    }
                     return@withContext Result.success(MediaResult(type = MediaType.VIDEO, title = "抖音视频", videoUrl = videoUrl, source = "douyin"))
                 }
             }
