@@ -24,6 +24,9 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.2.9", "2026-10-29", listOf(
+        "交流与反馈支持直接前往 GitHub Issues",
+    )),
     UpdateLogItem("3.2.8", "2026-10-29", listOf(
         "新增反馈问题页面，可带诊断信息一键提 Issue",
     )),

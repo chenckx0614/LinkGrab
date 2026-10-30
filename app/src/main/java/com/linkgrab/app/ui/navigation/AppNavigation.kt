@@ -111,7 +111,6 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import com.linkgrab.app.ui.screens.AboutScreen
-import com.linkgrab.app.ui.screens.FeedbackScreen
 import com.linkgrab.app.ui.screens.BatchResultScreen
 import com.linkgrab.app.ui.screens.BottomBarStyleScreen
 import com.linkgrab.app.ui.screens.DonateScreen
@@ -171,7 +170,6 @@ sealed class Screen(val route: String, val title: String) {
     data object FileTransfer : Screen("file_transfer", "文件传输")
     data object ToolWeb : Screen("tool_web", "工具网页")
     data object History : Screen("history", "历史记录")
-    data object Feedback : Screen("feedback", "反馈问题")
     data object VideoToAudio : Screen("video_to_audio", "视频转音频")
     data object ImageConvert : Screen("image_convert", "图片转格式")
     data object Music : Screen("music", "音乐解析下载")
@@ -416,7 +414,6 @@ private fun MainTabs(
     onNavigateToBottomBarStyle: () -> Unit,
     onNavigateToFileTransfer: () -> Unit,
     onNavigateToPanDirect: () -> Unit = {},
-    onNavigateToFeedback: () -> Unit = {},
 ) {
     // 手势切页开关（设置里可关）：关掉后左右滑动不再切页，点底栏 tab 照常动画翻页
     val swipeEnabled by viewModel.swipeSwitchPages.collectAsState()
@@ -436,7 +433,6 @@ private fun MainTabs(
             viewModel = viewModel,
             onNavigateToHistory = onNavigateToHistory,
             initialShareText = initialShareText,
-            onNavigateToFeedback = onNavigateToFeedback,
         )
         1 -> SettingsScreen(
             viewModel = viewModel,
@@ -444,7 +440,6 @@ private fun MainTabs(
             onNavigateToDownloads = onNavigateToDownloads,
             onNavigateToAbout = onNavigateToAbout,
             onNavigateToBottomBarStyle = onNavigateToBottomBarStyle,
-            onNavigateToFeedback = onNavigateToFeedback,
         )
         else -> ToolboxScreen(
             onNavigateToVideoToAudio = onNavigateToVideoToAudio,
@@ -680,9 +675,6 @@ fun AppNavigation(
                     onNavigateToBottomBarStyle = {
                         navController.navigate(Screen.BottomBarStyle.route)
                     },
-                    onNavigateToFeedback = {
-                        navController.navigate(Screen.Feedback.route)
-                    },
                 )
             }
 
@@ -727,11 +719,6 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() },
                     onNavigateToUpdateLog = { navController.navigate(Screen.UpdateLog.route) },
                     onNavigateToDonate = { navController.navigate(Screen.Donate.route) },
-                )
-            }
-            iosPage(Screen.Feedback.route) {
-                FeedbackScreen(
-                    onBack = { navController.popBackStack() },
                 )
             }
             iosPage(Screen.Donate.route) {

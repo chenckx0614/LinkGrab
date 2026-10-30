@@ -65,7 +65,6 @@ fun SettingsScreen(
     onNavigateToDownloads: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
     onNavigateToBottomBarStyle: () -> Unit = {},
-    onNavigateToFeedback: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val colorMode by viewModel.colorMode.collectAsState()
@@ -288,19 +287,6 @@ fun SettingsScreen(
                         )
                     }
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
-                    // 「反馈问题」二级页：问题类型 + 描述，一键带诊断信息提 GitHub Issue
-                    IOS26ListRow(
-                        "反馈问题",
-                        "解析失败、保存失败或功能建议",
-                        onClick = onNavigateToFeedback,
-                    ) {
-                        Icon(
-                            Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            tint = iosDisclosureColor(),
-                            modifier = Modifier.size(IOS26IconSize.Disclosure),
-                        )
-                    }
                 }
             }
         }

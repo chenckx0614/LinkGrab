@@ -39,6 +39,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.clickable
 import com.linkgrab.app.BuildConfig
 import com.linkgrab.app.R
 import com.linkgrab.app.ui.theme.IOS26Canvas
@@ -63,6 +65,9 @@ import com.linkgrab.app.ui.theme.iosSecondaryLabel
  * ic_launcher 是 adaptive-icon XML，painterResource 不支持该格式，运行时直接
  * 抛异常（进关于页即闪退）。必须走 Drawable + rememberDrawablePainter。
  */
+/** 「前往GitHub反馈」直达地址（仿 Nexio 课程表：开 Issues 列表页）。 */
+private const val FEEDBACK_ISSUE_URL = "https://github.com/chenckx0614/LinkGrab/issues"
+
 @Composable
 fun AboutScreen(
     onBack: () -> Unit,
@@ -122,39 +127,43 @@ fun AboutScreen(
                 }
             }
 
-            // ===== 卡片1：交流与反馈（页内展开）/ 捐赠支持 =====
+            // ===== 卡片1：反馈与建议（GitHub Issues，仿 Nexio 课程表 CommunicationScreen）/ 捐赠支持 =====
             item {
                 IOS26Panel(Modifier.fillMaxWidth()) {
-                    var feedbackExpanded by remember { mutableStateOf(false) }
-                    // 统一走 ExpandableSection：chevron 弹簧旋转 + 高度弹簧 + 内容淡入
-                    ExpandableSection(
-                        expanded = feedbackExpanded,
-                        onToggle = { feedbackExpanded = !feedbackExpanded },
-                        header = {
+                    // 仿 hyper_schedule「前往GitHub反馈」ArrowPreference：
+                    // 标题 + 小字说明 + 右箭头，点击直达 GitHub Issues。
+                    val uriHandler = LocalUriHandler.current
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                uriHandler.openUri(FEEDBACK_ISSUE_URL)
+                            }
+                            .padding(horizontal = 4.dp, vertical = 13.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column {
                             Text(
-                                "交流与反馈",
+                                "前往GitHub反馈",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = iosLabel(),
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 13.dp),
-                            )
-                        },
-                    ) {
-                        Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 13.dp)) {
-                            Text(
-                                "敬请期待",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = iosLabel(),
                             )
                             Text(
-                                "交流群与反馈通道正在筹备中，后续版本会在这里上线。",
+                                "在GitHub Issues提交反馈和建议",
                                 fontSize = 14.sp,
-                                lineHeight = 22.sp,
                                 color = iosSecondaryLabel(),
                                 modifier = Modifier.padding(top = 4.dp),
                             )
                         }
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = iosDisclosureColor(),
+                            modifier = Modifier.size(IOS26IconSize.Disclosure),
+                        )
                     }
                     IOS26Divider(Modifier.padding(vertical = 2.dp))
                     Row(

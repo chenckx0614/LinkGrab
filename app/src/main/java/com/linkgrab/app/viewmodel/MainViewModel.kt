@@ -12,7 +12,6 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.linkgrab.app.data.feedback.FeedbackStore
 import com.linkgrab.app.data.history.HistoryItem
 import com.linkgrab.app.data.history.HistoryRepository
 import com.linkgrab.app.data.model.MediaResult
@@ -430,13 +429,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = friendlyParseError(e),
-                    )
-                    // 记下这次失败：反馈页可以一键附带，省去用户描述环境
-                    FeedbackStore.recordFailure(
-                        getApplication(),
-                        platform.displayName,
-                        url,
-                        friendlyParseError(e),
                     )
                 }
         }

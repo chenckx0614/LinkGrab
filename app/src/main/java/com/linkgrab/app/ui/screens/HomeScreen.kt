@@ -32,13 +32,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.net.URLEncoder
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.linkgrab.app.BuildConfig
 import com.linkgrab.app.data.model.Platform
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26Canvas
@@ -59,9 +62,9 @@ fun HomeScreen(
     viewModel: MainViewModel,
     onNavigateToHistory: () -> Unit = {},
     initialShareText: String? = null,
-    onNavigateToFeedback: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val state by viewModel.uiState.collectAsState()
     var input by remember { mutableStateOf("") }
     // 分享进来的文本只负责回填输入框：解析由 MainActivity 统一做一次
@@ -178,7 +181,7 @@ fun HomeScreen(
                                 color = iosError(),
                                 fontSize = 14.sp,
                             )
-                            // 失败就地反馈入口：带着这次失败的上下文跳反馈页
+                            // 失败就地反馈：直接带上下文开 GitHub Issue（预填链接与错误）
                             if (state.error != null) {
                                 Text(
                                     "反馈此问题 ›",
@@ -188,9 +191,16 @@ fun HomeScreen(
                                     modifier = Modifier
                                         .padding(top = 6.dp)
                                         .clickable {
-                                            FeedbackDraft.prefillType = "解析失败"
-                                            FeedbackDraft.prefillLink = state.url
-                                            onNavigateToFeedback()
+                                            val body = buildString {
+                                                append("- 链接：").append(state.url).append('\n')
+                                                append("- 错误：").append(state.error).append('\n')
+                                                append("- 版本：").append(BuildConfig.VERSION_NAME).append('\n')
+                                            }
+                                            val url = "https://github.com/chenckx0614/LinkGrab/issues/new" +
+                                                "?template=feedback.md" +
+                                                "&title=" + URLEncoder.encode("解析失败反馈", "UTF-8") +
+                                                "&body=" + URLEncoder.encode(body, "UTF-8")
+                                            uriHandler.openUri(url)
                                         },
                                 )
                             }
