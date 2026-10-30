@@ -286,7 +286,6 @@ fun SettingsScreen(
                             modifier = Modifier.size(IOS26IconSize.Disclosure),
                         )
                     }
-                    IOS26Divider(Modifier.padding(vertical = 4.dp))
                 }
             }
         }
