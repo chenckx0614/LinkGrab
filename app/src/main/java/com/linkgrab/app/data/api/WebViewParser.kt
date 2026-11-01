@@ -88,11 +88,16 @@ class WebViewParser(private val context: Context) {
         } catch (_: Exception) {
         }
 
-        val ucmaoResult = ucmaoParser.parse(url)
-        if (ucmaoResult.isSuccess) return ucmaoResult
-
+        // Strategy 1: 直连分享页 HTML 抠图集/视频。图集优先于播放地址，
+        // 必须排在第三方 API 前面（见下方 ucmao 的位置说明）。
         val directResult = parseDouyinDirect(url)
         if (directResult.isSuccess) return directResult
+
+        // Strategy 2: 第三方解析 API（parse.ucmao.cn）。质量最差、且对图文
+        // 作品恒定返回一个 VIDEO（封面 + 图集预览流），下载经常失败——放在
+        // 直连通道之后，只当最后兜底。
+        val ucmaoResult = ucmaoParser.parse(url)
+        if (ucmaoResult.isSuccess) return ucmaoResult
 
         return try {
             parseWithWebView(
@@ -164,7 +169,9 @@ class WebViewParser(private val context: Context) {
                 cont.resume(null)
             }
         }
-        handler.postDelayed(timeout, 25_000)
+        // 12s：分享页 SSR 数据在 3s 内就该到，提取重试最多 5×900ms。
+        // 再等下去只会让用户干等——超时后由直连 HTML / 第三方接口接力。
+        handler.postDelayed(timeout, 12_000)
 
         fun finish(result: MediaResult?) {
             if (resumed || !cont.isActive) return
@@ -269,7 +276,9 @@ class WebViewParser(private val context: Context) {
         val desc = (detail["desc"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
         val images = mutableListOf<String>()
         val livePhotos = mutableMapOf<Int, List<String>>()
-        detail["images"]?.jsonArray?.forEachIndexed { index, el ->
+        // 风控打薄时常给 `"images": null`：JsonNull 直接 .jsonArray 会抛异常，
+        // 必须用 as? 软转，否则整条通道直接崩在异常里
+        (detail["images"] as? kotlinx.serialization.json.JsonArray)?.forEachIndexed { index, el ->
             val img = el as? JsonObject ?: return@forEachIndexed
             val url = pickDouyinImageUrl(img) ?: return@forEachIndexed
             images.add(url)
@@ -293,10 +302,13 @@ class WebViewParser(private val context: Context) {
                 source = "douyin",
             ).withSecureUrls()
         }
-        // images 键存在但一张可用图都没取到：这是被风控打薄的图文作品。
-        // 它的 video.play_addr 指向 BGM 配乐（mp3），按视频返回只会得到一个
-        // 下载必失败的假结果（单图+配乐实测 7700942408430718115），宁可失败。
-        if (detail.containsKey("images")) return null
+        // 图文作品（带 images 键，或打薄后只剩 aweme_type=68）一张可用图都没
+        // 取到：这是被风控打薄的 note。它的 video.play_addr 指向 BGM 配乐（mp3）
+        // 或图集预览流，按视频返回只会得到一个下载必失败的假结果
+        // （单图+配乐实测 7700942408430718115），宁可失败。
+        val isNote = detail.containsKey("images") ||
+            (detail["aweme_type"] as? JsonPrimitive)?.contentOrNull == "68"
+        if (isNote) return null
         val playUrl = detail["video"]?.jsonObject?.get("play_addr")
             ?.jsonObject?.get("url_list")?.jsonArray
             ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }

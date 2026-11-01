@@ -179,7 +179,9 @@ class DouyinParser {
                 ?: return@withContext Result.failure(Exception("未找到作品信息"))
 
             // ---- images (图集) + LivePhoto ----
-            val album = data["images"]?.jsonArray
+            // 注意用 as? JsonArray：风控打薄时常给 `"images": null`，
+            // JsonNull 直接 .jsonArray 会抛异常，把整条解析拖进失败态。
+            val album = data["images"] as? JsonArray
             val images = mutableListOf<String>()
             val livePhotos = mutableMapOf<Int, List<String>>()
 
@@ -217,10 +219,10 @@ class DouyinParser {
             }
 
             // 图文（note）作品的 detail 即使被风控打薄，也会带 images 字段
-            // （可能为 null / 空数组）。这种情况绝不能落到视频分支 —— note 自带的
-            // video 只是图集预览流，返回 VIDEO 会让用户在结果页以视频方式
-            // “预览”，且只能看到一张封面。
-            if (images.isEmpty() && data.containsKey("images")) {
+            // （可能为 null / 空数组），或者干脆丢了 images 键、只剩 aweme_type=68。
+            // 这种情况绝不能落到视频分支 —— note 自带的 video 只是图集预览流，
+            // 返回 VIDEO 会让用户在结果页以视频方式“预览”，下载也拿不到图。
+            if (isNote(data)) {
                 return@withContext Result.failure(Exception("抖音图集未取到图片（接口被风控过滤）"))
             }
 
@@ -301,18 +303,24 @@ class DouyinParser {
     }
 
     private fun hasMedia(detail: JsonObject): Boolean {
-        val album = detail["images"]?.jsonArray
+        val album = detail["images"] as? JsonArray
         if (album != null && album.any { pickImageUrl(it.jsonObject) != null }) return true
-        // 带 images 键的必是图文作品。images 空说明被风控打薄——它常还留着
-        // video.play_addr，但那指向 BGM 音频（mp3/m4a），不是视频流，绝不能
-        // 拿来当有效媒体，否则会挡住后面的签名 detail 通道。
-        if (album != null) return false
-        // images 键整个缺失是另一种打薄形态：单图+配乐作品（aweme_type 68，
-        // 实测 7700942408430718115）的 play_addr 指向 BGM mp3，按视频收下会
-        // 产出「下载视频」必失败的假结果。按音频特征拒绝，落到后面的通道取图。
+        // 图文作品（带 images 键，或打薄后只剩 aweme_type=68）：没有可用图片
+        // 就没有媒体。它常还留着 video.play_addr —— 那是 BGM 音频或图集预览流，
+        // 按视频收下只会产出「下载视频」必失败的假结果，必须让位给后面的通道。
+        if (isNote(detail)) return false
+        // 音频特征双保险（BGM mp3/m4a 不是视频流）
         val videoUrl = bestVideoUrl(detail)
         return !videoUrl.isNullOrEmpty() && !looksLikeAudio(videoUrl)
     }
+
+    /**
+     * 图文（note）作品判定：带 `images` 键（哪怕空数组），或 `aweme_type == 68`
+     * （单图/图集 + 配乐）。风控打薄时这两者都可能只剩一个。
+     */
+    private fun isNote(detail: JsonObject): Boolean =
+        detail.containsKey("images") ||
+            (detail["aweme_type"] as? JsonPrimitive)?.contentOrNull == "68"
 
     /**
      * BGM 音频地址识别：图文（note）作品的 `video.play_addr` 指向配乐而非

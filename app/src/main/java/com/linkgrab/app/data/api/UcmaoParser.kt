@@ -71,10 +71,14 @@ class UcmaoParser {
      */
     private fun parseDouyin(text: String): MediaResult {
         val apiResult = callApi(text)
+        // 图文作品的第三方结果常常只有封面、没有可下载的视频地址。
+        // 以前这里无条件返回 VIDEO，结果页就成了「douyin · 视频」+ 下载必失败。
+        val videoUrl = apiResult.video_url?.takeIf { it.isNotBlank() }
+            ?: throw Exception("第三方接口未返回视频地址")
         return MediaResult(
             type = MediaType.VIDEO,
             title = apiResult.title ?: "抖音视频",
-            videoUrl = apiResult.video_url,
+            videoUrl = videoUrl,
             coverUrl = apiResult.cover_url,
             source = "douyin"
         )
