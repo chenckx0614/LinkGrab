@@ -50,6 +50,9 @@ import java.util.concurrent.TimeUnit
 class DouyinParser {
 
     companion object {
+        /** 图文作品的 aweme_type：2 普通图集 / 68 单图+配乐 / 150 图文。 */
+        private val NOTE_TYPES = setOf("2", "68", "150")
+
         // 访客会话跨实例共享：WebView 通道拿到真浏览器会话后回填到这里，
         // 之后所有 DouyinParser 实例的原生请求都带上这些 cookie。
         @Volatile
@@ -81,6 +84,14 @@ class DouyinParser {
     }
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    /**
+     * 本次解析途中是否见过「被风控打薄的图文数据」。
+     *
+     * 只影响失败文案：带「图集」二字时 [ParseRepository] 会拒绝降级链给出的
+     * 视频结果（那只是图集预览流），避免用户拿到一个点不动的「下载视频」。
+     */
+    private var sawNote = false
 
     private val client = OkHttpClient.Builder()
         .followRedirects(true)
@@ -165,6 +176,7 @@ class DouyinParser {
     // endregion
 
     suspend fun parse(shareUrl: String): Result<MediaResult> = withContext(Dispatchers.IO) {
+        sawNote = false
         try {
             val videoId = resolveVideoId(shareUrl)
                 ?: return@withContext Result.failure(Exception("无法从链接中提取抖音作品 ID"))
@@ -176,7 +188,12 @@ class DouyinParser {
             val data = fetchAwemeDetail(videoId)
                 ?: fetchAwemeDetailSigned(videoId)
                 ?: fetchAwemeDetailFromHtml(videoId)
-                ?: return@withContext Result.failure(Exception("未找到作品信息"))
+                ?: return@withContext Result.failure(
+                    Exception(
+                        if (sawNote) "抖音图集未取到图片（接口被风控过滤）"
+                        else "未找到作品信息"
+                    )
+                )
 
             // ---- images (图集) + LivePhoto ----
             // 注意用 as? JsonArray：风控打薄时常给 `"images": null`，
@@ -305,22 +322,33 @@ class DouyinParser {
     private fun hasMedia(detail: JsonObject): Boolean {
         val album = detail["images"] as? JsonArray
         if (album != null && album.any { pickImageUrl(it.jsonObject) != null }) return true
-        // 图文作品（带 images 键，或打薄后只剩 aweme_type=68）：没有可用图片
-        // 就没有媒体。它常还留着 video.play_addr —— 那是 BGM 音频或图集预览流，
-        // 按视频收下只会产出「下载视频」必失败的假结果，必须让位给后面的通道。
-        if (isNote(detail)) return false
-        // 音频特征双保险（BGM mp3/m4a 不是视频流）
-        val videoUrl = bestVideoUrl(detail)
-        return !videoUrl.isNullOrEmpty() && !looksLikeAudio(videoUrl)
+        // 图文作品（带 images 键 / image_post_info，或打薄后只剩 aweme_type）：
+        // 没有可用图片就没有媒体。它常还留着 video.play_addr —— 那是 BGM 音频
+        // 或图集预览流，按视频收下只会产出「下载视频」必失败的假结果。
+        if (isNote(detail)) {
+            sawNote = true
+            return false
+        }
+        // 真正的视频必然带 bit_rate 画质档位；没有档位说明这是被打薄的图文
+        // 数据（只剩一条预览流）。一并拒掉，让位给后面的签名 / SSR 通道。
+        val gears = videoQualities(detail)
+        if (gears.isEmpty() || gears.all { looksLikeAudio(it.url) }) return false
+        return true
     }
 
     /**
-     * 图文（note）作品判定：带 `images` 键（哪怕空数组），或 `aweme_type == 68`
-     * （单图/图集 + 配乐）。风控打薄时这两者都可能只剩一个。
+     * 图文（note）作品判定。
+     *
+     * 打薄后的 detail 常常只剩作品类型，所以类型必须认全：
+     * `2` 普通图集、`68` 单图/图集+配乐、`150` 图文——实测这条链接
+     * （7700942408430718115）的分享页数据就是 `aweme_type=2`，只认 68 会把
+     * 它当视频解析，拿图集预览流产出「下载视频」必失败的假结果。
      */
-    private fun isNote(detail: JsonObject): Boolean =
-        detail.containsKey("images") ||
-            (detail["aweme_type"] as? JsonPrimitive)?.contentOrNull == "68"
+    private fun isNote(detail: JsonObject): Boolean {
+        if (detail.containsKey("images")) return true
+        if (detail.containsKey("image_post_info")) return true
+        return (detail["aweme_type"] as? JsonPrimitive)?.contentOrNull in NOTE_TYPES
+    }
 
     /**
      * BGM 音频地址识别：图文（note）作品的 `video.play_addr` 指向配乐而非

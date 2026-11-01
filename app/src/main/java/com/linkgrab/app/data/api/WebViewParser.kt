@@ -302,13 +302,19 @@ class WebViewParser(private val context: Context) {
                 source = "douyin",
             ).withSecureUrls()
         }
-        // 图文作品（带 images 键，或打薄后只剩 aweme_type=68）一张可用图都没
-        // 取到：这是被风控打薄的 note。它的 video.play_addr 指向 BGM 配乐（mp3）
-        // 或图集预览流，按视频返回只会得到一个下载必失败的假结果
-        // （单图+配乐实测 7700942408430718115），宁可失败。
+        // 图文作品（带 images 键 / image_post_info，或打薄后只剩 aweme_type）
+        // 一张可用图都没取到：这是被风控打薄的 note。它的 video.play_addr 指向
+        // BGM 配乐（mp3）或图集预览流，按视频返回只会得到一个下载必失败的假结果
+        // （实测 7700942408430718115：aweme_type=2 的普通图集），宁可失败。
+        val noteTypes = setOf("2", "68", "150")
         val isNote = detail.containsKey("images") ||
-            (detail["aweme_type"] as? JsonPrimitive)?.contentOrNull == "68"
+            detail.containsKey("image_post_info") ||
+            (detail["aweme_type"] as? JsonPrimitive)?.contentOrNull in noteTypes
         if (isNote) return null
+        // 真正的视频带 bit_rate 画质档位；没有档位的是被打薄的预览流，也不能收
+        val gears = (detail["video"]?.jsonObject?.get("bit_rate") as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { it as? JsonObject }.orEmpty()
+        if (gears.isEmpty()) return null
         val playUrl = detail["video"]?.jsonObject?.get("play_addr")
             ?.jsonObject?.get("url_list")?.jsonArray
             ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
