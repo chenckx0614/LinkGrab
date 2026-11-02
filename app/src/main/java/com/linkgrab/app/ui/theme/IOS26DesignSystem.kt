@@ -68,7 +68,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
-import com.linkgrab.app.ui.hyper.HyperBackButton
 import com.linkgrab.app.ui.hyper.HyperCard
 import com.linkgrab.app.ui.hyper.HyperRevealCursor
 import com.linkgrab.app.ui.hyper.LocalHyperRevealCursor
@@ -78,7 +77,6 @@ import com.linkgrab.app.ui.hyper.HyperPrimaryButton
 import com.linkgrab.app.ui.hyper.HyperRow
 import com.linkgrab.app.ui.hyper.HyperSecondaryButton
 import com.linkgrab.app.ui.hyper.HyperSectionTitle
-import com.linkgrab.app.ui.hyper.HyperTopBar
 import com.linkgrab.app.ui.hyper.hyperBackground
 import com.linkgrab.app.ui.hyper.hyperDivider
 import com.linkgrab.app.ui.hyper.hyperError
@@ -188,7 +186,7 @@ fun iosBackground(): Color = if (isHyperOsStyle()) hyperBackground()
 else if (isInDarkTheme()) IOSBackgroundDark else IOSBackgroundLight
 
 @Composable
-fun iosGroupedBackground(): Color = if (isHyperOsStyle()) hyperSurface()
+fun iosGroupedBackground(): Color = if (isHyperOsStyle()) hyperBackground()
 else if (isInDarkTheme()) IOSGroupedBackgroundDark else IOSGroupedBackgroundLight
 
 @Composable
@@ -196,9 +194,8 @@ fun iosSecondaryBackground(): Color = if (isHyperOsStyle()) hyperSurfaceVariant(
 else if (isInDarkTheme()) IOSSecondaryBackgroundDark else IOSSecondaryBackgroundLight
 
 @Composable
-fun iosTertiaryBackground(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) Color(0xFF363941) else Color(0xFFE9ECF2)
-} else if (isInDarkTheme()) IOSTertiaryBackgroundDark else IOSTertiaryBackgroundLight
+fun iosTertiaryBackground(): Color = if (isHyperOsStyle()) hyperSurfaceVariant()
+else if (isInDarkTheme()) IOSTertiaryBackgroundDark else IOSTertiaryBackgroundLight
 
 @Composable
 fun iosLabel(): Color = if (isHyperOsStyle()) hyperTitle()
@@ -210,7 +207,8 @@ else if (isInDarkTheme()) IOSSecondaryLabelDark else IOSSecondaryLabelLight
 
 @Composable
 fun iosTertiaryLabel(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) Color(0xFF777B84) else Color(0xFFA5A9B1)
+    // miuix onSurfaceContainerVariant
+    if (isInDarkTheme()) Color(0xFF737373) else Color(0xFF959595)
 } else if (isInDarkTheme()) IOSTertiaryLabelDark else IOSTertiaryLabelLight
 
 @Composable
@@ -839,10 +837,11 @@ fun IOS26LargeTitle(title: String, subtitle: String? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             title,
-            fontSize = if (hyper) 32.sp else 34.sp,
-            fontWeight = if (hyper) FontWeight.SemiBold else FontWeight.Bold,
+            // miuix CollapsibleTopAppBar 的大标题：30sp Normal（iOS 是 34sp Bold）
+            fontSize = if (hyper) 30.sp else 34.sp,
+            fontWeight = if (hyper) FontWeight.Normal else FontWeight.Bold,
             color = iosLabel(),
-            letterSpacing = (if (hyper) -0.4 else -0.8).sp,
+            letterSpacing = (if (hyper) 0.0 else -0.8).sp,
         )
         subtitle?.let {
             Text(
@@ -975,18 +974,6 @@ fun IOS26BlurHeader(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    if (isHyperOsStyle()) {
-        // HyperOS：52dp 折叠栏 + 92% 实底 + 发丝线，没有液态玻璃
-        HyperTopBar(
-            title = title,
-            backdrop = backdrop,
-            scrolled = scrolled,
-            modifier = modifier,
-            onBack = onBack,
-            actions = actions,
-        )
-        return
-    }
     val progress by animateFloatAsState(
         targetValue = if (scrolled) 1f else 0f,
         animationSpec = tween(260),
@@ -1082,7 +1069,7 @@ fun IOS26BlurHeader(
                 .fillMaxWidth()
                 .padding(top = topInset)
                 .height(IOS26HeaderHeight)
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = if (isHyperOsStyle()) 16.dp else 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
@@ -1091,10 +1078,11 @@ fun IOS26BlurHeader(
             }
             Text(
                 title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
+                // miuix 折叠后的小标题是 19sp Medium（不是 title3 的 20sp）
+                fontSize = if (isHyperOsStyle()) 19.sp else 17.sp,
+                fontWeight = if (isHyperOsStyle()) FontWeight.Medium else FontWeight.SemiBold,
                 color = titleColor,
-                letterSpacing = (-0.2).sp,
+                letterSpacing = if (isHyperOsStyle()) 0.sp else (-0.2).sp,
                 maxLines = 1,
                 modifier = Modifier
                     .weight(1f)
@@ -1233,10 +1221,6 @@ fun IOS26BackButton(
     modifier: Modifier = Modifier,
     backdrop: Backdrop? = null,
 ) {
-    if (isHyperOsStyle()) {
-        HyperBackButton(onClick = onClick, modifier = modifier)
-        return
-    }
     com.linkgrab.app.ui.liquid.LiquidGlassBackButton(
         onClick = onClick,
         backdrop = backdrop,

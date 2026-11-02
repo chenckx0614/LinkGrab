@@ -269,16 +269,6 @@ fun LiquidGlassBackButton(
     performHapticFeedback: Boolean = true,
     enabled: Boolean = true,
 ) {
-    if (com.linkgrab.app.ui.theme.isHyperOsStyle()) {
-        com.linkgrab.app.ui.hyper.HyperBackButton(
-            onClick = onClick,
-            modifier = modifier,
-            enabled = enabled,
-            // 深色背景（图片预览、播放器）上箭头必须是白的
-            tint = if (darkBackground) Color.White else com.linkgrab.app.ui.hyper.hyperTitle(),
-        )
-        return
-    }
     LiquidGlassTopBarButton(
         onClick = onClick,
         backdrop = backdrop,

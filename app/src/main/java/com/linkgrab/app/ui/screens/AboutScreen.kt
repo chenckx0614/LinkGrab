@@ -114,8 +114,8 @@ fun AboutScreen(
                     )
                     Text(
                         "LinkGrab",
-                        fontSize = 34.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = if (com.linkgrab.app.ui.theme.isHyperOsStyle()) 30.sp else 34.sp,
+                        fontWeight = if (com.linkgrab.app.ui.theme.isHyperOsStyle()) FontWeight.Normal else FontWeight.Bold,
                         color = iosLabel(),
                         modifier = Modifier.padding(top = 12.dp, bottom = 5.dp),
                     )

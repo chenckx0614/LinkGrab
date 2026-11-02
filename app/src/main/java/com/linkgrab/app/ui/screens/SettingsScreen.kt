@@ -339,8 +339,8 @@ private fun VisualStyleCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
-    val accent = if (hyper) Color(0xFF387BF6) else Color(0xFF007AFF)
-    val background = if (hyper) Color(0xFFF7F8FA) else Color(0xFFF2F2F7)
+    val accent = if (hyper) Color(0xFF3482FF) else Color(0xFF007AFF)
+    val background = if (hyper) Color(0xFFF4F4F4) else Color(0xFFF2F2F7)
     val cardShape = RoundedCornerShape(if (hyper) 22.dp else 18.dp)
     val borderColor by androidx.compose.animation.animateColorAsState(
         if (selected) accent else iosDisclosureColor().copy(alpha = 0.35f),
