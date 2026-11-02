@@ -44,6 +44,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Shape
+import com.linkgrab.app.ui.hyper.hyperSquircle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -68,6 +70,8 @@ import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import com.linkgrab.app.ui.hyper.HyperBackButton
 import com.linkgrab.app.ui.hyper.HyperCard
+import com.linkgrab.app.ui.hyper.HyperRevealCursor
+import com.linkgrab.app.ui.hyper.LocalHyperRevealCursor
 import com.linkgrab.app.ui.hyper.HyperDimens
 import com.linkgrab.app.ui.hyper.HyperDivider
 import com.linkgrab.app.ui.hyper.HyperPrimaryButton
@@ -218,9 +222,10 @@ fun iosGlass(): Color = if (isHyperOsStyle()) hyperSurface()
 else if (isInDarkTheme()) IOSGlassDark else IOSGlassLight
 
 @Composable
-fun iosGlassStroke(): Color = if (isHyperOsStyle()) {
-    iosSeparator().copy(alpha = 0.65f)
-} else if (isInDarkTheme()) IOSGlassStrokeDark else IOSGlassStrokeLight
+// HyperOS 的卡片没有描边（miuix Card 只有填充）。这里返回透明，
+// 调用点上的 border() 自然什么都不画，不必逐个页面去删。
+fun iosGlassStroke(): Color = if (isHyperOsStyle()) Color.Transparent
+else if (isInDarkTheme()) IOSGlassStrokeDark else IOSGlassStrokeLight
 
 @Composable
 fun iosError(): Color = if (isHyperOsStyle()) hyperError()
@@ -228,10 +233,24 @@ else if (isInDarkTheme()) IOSRedDark else IOSRed
 
 // MARK: - Shape Tokens
 
-val IOSCornerLarge = RoundedCornerShape(32.dp)
-val IOSCornerMedium = RoundedCornerShape(24.dp)
-val IOSCornerSmall = RoundedCornerShape(16.dp)
-val IOSCornerXSmall = RoundedCornerShape(12.dp)
+/**
+ * 圆角令牌。HyperOS 下一律换成连续曲率（squircle），半径同时收到系统设置的档位；
+ * iOS 下保持原来的普通圆角。
+ *
+ * 写成 composable getter 而不是 val：Shape 要在**创建时**就知道当前主题，
+ * `createOutline` 里读不到 CompositionLocal。调用点语法不用改。
+ */
+val IOSCornerLarge: Shape
+    @Composable get() = if (isHyperOsStyle()) hyperSquircle(26.dp) else RoundedCornerShape(32.dp)
+
+val IOSCornerMedium: Shape
+    @Composable get() = if (isHyperOsStyle()) hyperSquircle(20.dp) else RoundedCornerShape(24.dp)
+
+val IOSCornerSmall: Shape
+    @Composable get() = if (isHyperOsStyle()) hyperSquircle(16.dp) else RoundedCornerShape(16.dp)
+
+val IOSCornerXSmall: Shape
+    @Composable get() = if (isHyperOsStyle()) hyperSquircle(12.dp) else RoundedCornerShape(12.dp)
 
 // MARK: - Icon Tokens
 
@@ -288,8 +307,16 @@ fun IOS26Panel(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     if (isHyperOsStyle()) {
-        // HyperOS：miuix Card，圆角 20dp、无描边、内边距 16dp
-        HyperCard(modifier) {
+        // HyperOS：miuix Card，连续曲率 20dp、无描边、内边距 16dp。
+        // 入场名额只在页面首屏发放（见 HyperRevealCursor），滚回来的卡片不重播。
+        val cursor = LocalHyperRevealCursor.current
+        // remember 保证重组不会重复领名额
+        val slot = remember(cursor) { cursor?.take() ?: -1 }
+        HyperCard(
+            modifier = modifier,
+            reveal = slot >= 0,
+            revealIndex = if (slot >= 0) slot else 0,
+        ) {
             Column(Modifier.padding(16.dp), content = content)
         }
         return
@@ -323,7 +350,7 @@ fun IOS26ListRow(
     trailing: @Composable () -> Unit = {},
 ) {
     if (isHyperOsStyle()) {
-        // HyperOS：miuix 偏好行（最小 56dp、标题 16sp、摘要 13sp、16dp 内边距）
+        // HyperOS：miuix 偏好行（最小 56dp、标题 17sp、摘要 14sp、四边 16dp）
         HyperRow(
             title = title,
             subtitle = subtitle,
@@ -674,8 +701,15 @@ fun IOS26Switch(
     var hasVibratedOnce by remember { mutableStateOf(false) }
     var currentDragInteraction by remember { mutableStateOf<DragInteraction.Start?>(null) }
 
-    val thumbOffsetSpring = remember { spring<Dp>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 987f) }
-    val thumbScaleSpring = remember { spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 987f) }
+    // miuix 的开关弹簧带一点点回弹（0.7 / 0.6），iOS 那边是不回弹。
+    // 这是 fork 相对上游改过的地方之一，两个主题各自保留自己的手感。
+    val hyperSwitch = isHyperOsStyle()
+    val thumbOffsetSpring = remember(hyperSwitch) {
+        spring<Dp>(dampingRatio = if (hyperSwitch) 0.7f else Spring.DampingRatioNoBouncy, stiffness = 987f)
+    }
+    val thumbScaleSpring = remember(hyperSwitch) {
+        spring<Float>(dampingRatio = if (hyperSwitch) 0.6f else Spring.DampingRatioNoBouncy, stiffness = 987f)
+    }
 
     val thumbOffset by animateDpAsState(
         targetValue = (if (checked) 25.dp else 4.dp) + dragOffset.dp,
@@ -691,7 +725,14 @@ fun IOS26Switch(
             if (enabled) iosBlue() else iosBlue().copy(alpha = 0.4f)
         } else {
             if (enabled) {
-                if (isInDarkTheme()) Color(0xFF48484A) else Color(0xFFE5E5EA)
+                // miuix 关态轨道：暗 #424242 / 亮 #ECECEC
+                if (hyperSwitch) {
+                    if (isInDarkTheme()) Color(0xFF424242) else Color(0xFFECECEC)
+                } else if (isInDarkTheme()) {
+                    Color(0xFF48484A)
+                } else {
+                    Color(0xFFE5E5EA)
+                }
             } else {
                 if (isInDarkTheme()) Color(0xFF2C2C2E) else Color(0xFFF0F0F2)
             }
@@ -1131,6 +1172,8 @@ fun IOS26StickyPage(
     val backdrop = rememberLayerBackdrop()
     val layerActive = rememberBackdropLayerActive(scrolled || recordBackdrop)
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // 每次进入页面重置入场名额，卡片才会重新「浮上来」
+    val revealCursor = remember { HyperRevealCursor() }
     Box(modifier.fillMaxSize()) {
         // 内容层：页面底色 + 列表一起录进 backdrop。
         // 底色必须在录制层**内部**——列表顶部那段 contentPadding 在层里是
@@ -1144,22 +1187,24 @@ fun IOS26StickyPage(
                 .then(if (contentBackdrop != null) Modifier.layerBackdrop(contentBackdrop) else Modifier)
                 .background(iosBackground()),
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (applyImePadding) Modifier.imePadding() else Modifier)
-                    .padding(horizontal = if (isHyperOsStyle()) HyperDimens.PageHorizontal else 20.dp),
-                verticalArrangement = Arrangement.spacedBy(
-                    if (isHyperOsStyle()) spacedBy.coerceAtMost(12.dp) else spacedBy,
-                ),
-                contentPadding = PaddingValues(
-                    top = topInset + (if (isHyperOsStyle()) HyperDimens.TopBarHeight else IOS26HeaderHeight) +
-                        if (isHyperOsStyle()) 8.dp else 10.dp,
-                    bottom = bottomSpacing,
-                ),
-                content = content,
-            )
+            CompositionLocalProvider(LocalHyperRevealCursor provides revealCursor) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(if (applyImePadding) Modifier.imePadding() else Modifier)
+                        .padding(horizontal = if (isHyperOsStyle()) HyperDimens.PageHorizontal else 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(
+                        if (isHyperOsStyle()) spacedBy.coerceAtMost(12.dp) else spacedBy,
+                    ),
+                    contentPadding = PaddingValues(
+                        top = topInset + (if (isHyperOsStyle()) HyperDimens.TopBarHeight else IOS26HeaderHeight) +
+                            if (isHyperOsStyle()) 8.dp else 10.dp,
+                        bottom = bottomSpacing,
+                    ),
+                    content = content,
+                )
+            }
         }
         IOS26BlurHeader(
             title = title,

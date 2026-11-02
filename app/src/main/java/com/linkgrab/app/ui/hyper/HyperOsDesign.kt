@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -73,10 +72,13 @@ import kotlin.math.PI
  * 1.12 / Kotlin 2.4 构建，与本项目的 BOM 2025.06 / Kotlin 2.3 二进制
  * 不兼容），而是把它真正的度量、配色、弹簧参数照搬过来自绘：
  *
- * - TopAppBar：折叠态 52dp，标题 17sp Medium，导航图标 16dp 起始内边距
- * - Card：圆角 20dp，无描边，浅色靠 1dp 极淡投影分层
- * - 偏好行：最小高度 56dp，标题 16sp，摘要 13sp，左右内边距 16dp
- * - 小标题（SmallTitle）：14sp Medium，#8F9CAE
+ * - TopAppBar：折叠态 52dp，标题 20sp Medium，导航图标 16dp 起始内边距
+ * - Card：圆角 20dp 连续曲率，无描边、无投影，只靠底色分层
+ * - 偏好行：最小高度 56dp，标题 17sp Medium，摘要 14sp，四边内边距 16dp
+ * - 小标题（SmallTitle）：14sp Medium，#8F9CAE，自带 12dp 水平留白
+ * - 下拉面板：圆角 25dp，行高 56dp，字号 15.6sp
+ * - 圆角：全部走连续曲率（squircle），见 HyperShape.kt
+ * - 点击：矩形叠色 10%，形状不缩放，见 HyperIndication.kt
  * - 主色：亮 #3482FF / 暗 #277AF7（miuix 官方色板）
  * - 弹簧：folmeSpring(damping, response)，stiffness = (2π / response)²
  * ========================================================= */
@@ -89,8 +91,11 @@ fun <T> folmeSpring(damping: Float, response: Float): SpringSpec<T> {
     return spring(dampingRatio = damping, stiffness = omega * omega)
 }
 
-/** 点按反馈：miuix SinkFeedback 的收缩量级（约 4%），到位干脆不回弹。 */
-val HyperPressSpring = spring<Float>(dampingRatio = 0.9f, stiffness = 1200f)
+/** 点按反馈：miuix `SinkFeedback(0.94f, spring(0.8f, 600f))` 的原始参数。 */
+val HyperPressSpring = spring<Float>(dampingRatio = 0.8f, stiffness = 600f)
+
+/** 按下时收缩到的比例，miuix 是 0.94（不是 0.96）。 */
+const val HYPER_SINK_SCALE = 0.94f
 
 /** 菜单/浮层展开：轻微过冲，落位快。 */
 val HyperExpandSpring = spring<Float>(dampingRatio = 0.8f, stiffness = ((2 * PI / 0.32) * (2 * PI / 0.32)).toFloat())
@@ -146,48 +151,63 @@ object HyperDimens {
     /** 偏好行最小高度 */
     val RowMinHeight = 56.dp
     val RowHorizontal = 16.dp
-    val RowVertical = 12.dp
+    val RowVertical = 16.dp
 
     /** 顶栏图标按钮热区（miuix IconButton 约 40dp） */
     val IconButton = 40.dp
 
-    val MenuWidth = 208.dp
-    val MenuCorner = 20.dp
-    val MenuItemHeight = 48.dp
+    val MenuWidth = 200.dp
+    val MenuCorner = 25.dp
+    val MenuItemHeight = 56.dp
 }
 
 // MARK: - Card
 
 /**
- * miuix Card：圆角 20dp，无描边。浅色模式下用 1dp 极淡投影把白卡从
- * #F7F8FA 背景上提起来（HyperOS 真实卡片几乎看不到阴影，只靠色差）。
+ * miuix Card：圆角 20dp 连续曲率，无描边、无投影。白卡从 #F7F8FA 的页面底色
+ * 上浮起来靠的是色差本身，加描边或投影都会立刻变成「Material 卡片」。
  */
 @Composable
 fun HyperCard(
     modifier: Modifier = Modifier,
     corner: Dp = HyperDimens.CardCorner,
+    reveal: Boolean = false,
+    revealIndex: Int = 0,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(corner)
-    val surface = hyperSurface()
-    val dark = isInDarkTheme()
+    // miuix 的 Card 就是一块连续曲率的纯色面：没有描边、没有投影。
+    // 卡片和页面底色差本身就是分层，描边反而是 HyperOS 里不存在的东西。
+    val shape = hyperSquircle(corner)
+    val revealState = rememberHyperRevealState(index = revealIndex, enabled = reveal)
     Column(
         modifier = modifier
+            .hyperRevealLayer(revealState)
             .clip(shape)
-            .drawBehind {
-                // 深色下补 1px 亮描边分层，浅色靠底色差，都不加投影
-                if (dark) {
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = 0.06f),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(corner.toPx()),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()),
-                    )
-                }
-            }
-            .background(surface),
+            .background(hyperSurface()),
         content = content,
     )
 }
+
+/**
+ * 卡片入场的名额游标：一页只让前 [HyperRevealBudget] 张卡播入场。
+ *
+ * 为什么要有名额：`LazyColumn` 滚出屏幕的条目会被销毁，滚回来重新组合就会重播
+ * 一次入场，整屏反复闪。限制名额后，只有页面刚进来那几张浮上来，后面滚动到的
+ * 卡片直接呈现。
+ */
+class HyperRevealCursor {
+    internal var next = 0
+
+    /** 取下一个名额；超出预算返回 -1（表示不播）。 */
+    internal fun take(): Int {
+        if (next >= HyperRevealBudget) return -1
+        return next++
+    }
+}
+
+private const val HyperRevealBudget = 8
+
+val LocalHyperRevealCursor = staticCompositionLocalOf<HyperRevealCursor?> { null }
 
 // MARK: - Section title
 
@@ -207,8 +227,11 @@ fun HyperSectionTitle(text: String, modifier: Modifier = Modifier) {
 // MARK: - Rows
 
 /**
- * miuix 偏好行：最小 56dp，标题 16sp、摘要 13sp，右侧跟控件或箭头。
- * 按压时整行做 4% 收缩 + 底色加深（SinkFeedback），不给涟漪。
+ * miuix 偏好行（BasicComponent）：最小 56dp，标题 17sp Medium、摘要 14sp，
+ * 四边 16dp 内边距。
+ *
+ * 按下**不缩放**：MIUI 的整行按压是叠一层 10% 前景色，形状和位置都不动
+ * （见 HyperIndication）。之前写成整行缩 0.96 是错的，那是 iOS 的手法。
  */
 @Composable
 fun HyperRow(
@@ -219,31 +242,19 @@ fun HyperRow(
     showDisclosure: Boolean = false,
     trailing: @Composable () -> Unit = {},
 ) {
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val haptic = LocalHapticFeedback.current
-    val scale by animateFloatAsState(
-        targetValue = if (pressed && onClick != null) 0.96f else 1f,
-        animationSpec = HyperPressSpring,
-        label = "hyperRowScale",
-    )
-    val pressedTint by animateColorAsState(
-        targetValue = if (pressed && onClick != null) hyperSurfaceVariant() else Color.Transparent,
-        animationSpec = tween(120),
-        label = "hyperRowTint",
-    )
+    val titleColor = hyperTitle()
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = HyperDimens.RowMinHeight)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .background(pressedTint)
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(interactionSource = source, indication = null, role = Role.Button) {
-                        haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                        onClick()
-                    }
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = HyperIndication(titleColor),
+                        role = Role.Button,
+                        onClick = onClick,
+                    )
                 } else {
                     Modifier
                 },
@@ -254,9 +265,9 @@ fun HyperRow(
         Column(Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 16.sp,
+                fontSize = 17.sp,
                 fontWeight = FontWeight.Medium,
-                color = hyperTitle(),
+                color = titleColor,
                 letterSpacing = 0.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -265,7 +276,7 @@ fun HyperRow(
                 Text(
                     text = it,
                     modifier = Modifier.padding(top = 2.dp),
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     color = hyperSummary(),
                     letterSpacing = 0.sp,
                 )
@@ -302,7 +313,7 @@ fun HyperDivider(modifier: Modifier = Modifier) {
 
 /**
  * 顶栏图标按钮（返回 / 更多 / 搜索共用）：40dp 热区，24dp 图标，
- * 按下时缩到 0.92 并浮出一层 6% 中性底，松手弹回。
+ * 按下时整块浮出一层 10% 的圆形色，形状不动。
  * 与 iOS 主题的液态玻璃圆钮刻意区分：HyperOS 顶栏按钮没有玻璃、没有描边。
  */
 @Composable
@@ -317,34 +328,19 @@ fun HyperIconButton(
     enabled: Boolean = true,
     haptic: Boolean = true,
 ) {
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.92f else 1f,
-        animationSpec = HyperPressSpring,
-        label = "hyperIconScale",
-    )
-    val pressedBg by animateColorAsState(
-        targetValue = if (pressed) hyperTitle().copy(alpha = 0.06f) else Color.Transparent,
-        animationSpec = tween(120),
-        label = "hyperIconBg",
-    )
-    val hapticFeedback = LocalHapticFeedback.current
+    // miuix IconButton：40dp 热区、圆形（cornerRadius 40 在正方形里退化成圆），
+    // 按下是圆形叠色，不缩放。
     Box(
         modifier = modifier
             .size(buttonSize)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
-            .background(pressedBg)
             .clickable(
-                interactionSource = source,
-                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = HyperIndication(tint),
                 enabled = enabled,
                 role = Role.Button,
-            ) {
-                if (haptic) hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                onClick()
-            },
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -462,7 +458,8 @@ fun HyperTopBar(
                         alpha = progress
                         translationY = (1f - progress) * 4.dp.toPx()
                     },
-                fontSize = 17.sp,
+                // miuix title3 = 20sp，不是 17sp
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Medium,
                 color = hyperTitle(),
                 maxLines = 1,
@@ -475,7 +472,7 @@ fun HyperTopBar(
 
 // MARK: - Buttons
 
-/** miuix 主按钮：蓝底白字，圆角 16dp，最小高 40dp。 */
+/** miuix 主按钮：蓝底白字，连续曲率圆角 16dp，最小高 40dp，17sp Medium。 */
 @Composable
 fun HyperPrimaryButton(
     text: String,
@@ -483,37 +480,28 @@ fun HyperPrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = HyperPressSpring,
-        label = "hyperBtnScale",
-    )
-    val haptic = LocalHapticFeedback.current
     val base = hyperPrimary()
+    val shape = hyperSquircle(16.dp)
     Box(
         modifier = modifier
             .heightIn(min = 40.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(16.dp))
+            .clip(shape)
             .background(if (enabled) base else base.copy(alpha = 0.35f))
             .clickable(
-                interactionSource = source,
-                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = HyperIndication(Color.White),
                 enabled = enabled,
                 role = Role.Button,
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                onClick()
-            }
-            .padding(horizontal = 20.dp, vertical = 13.dp),
+                onClick = onClick,
+            )
+            // miuix ButtonDefaults.InsideMargin = (16dp, 13dp)
+            .padding(horizontal = 16.dp, vertical = 13.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
             color = Color.White,
-            fontSize = 15.sp,
+            fontSize = 17.sp,
             fontWeight = FontWeight.Medium,
         )
     }
@@ -527,36 +515,27 @@ fun HyperSecondaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = HyperPressSpring,
-        label = "hyperSecondBtnScale",
-    )
-    val haptic = LocalHapticFeedback.current
+    val title = hyperTitle()
+    val shape = hyperSquircle(16.dp)
     Box(
         modifier = modifier
             .heightIn(min = 40.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(16.dp))
+            .clip(shape)
             .background(hyperSurfaceVariant())
             .clickable(
-                interactionSource = source,
-                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = HyperIndication(title),
                 enabled = enabled,
                 role = Role.Button,
-            ) {
-                haptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                onClick()
-            }
-            .padding(horizontal = 20.dp, vertical = 13.dp),
+                onClick = onClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 13.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = text,
-            color = hyperTitle(),
-            fontSize = 15.sp,
+            color = title,
+            fontSize = 17.sp,
             fontWeight = FontWeight.Medium,
         )
     }
@@ -617,7 +596,7 @@ fun HyperMenuTrigger(
                             scaleY = 0.86f + 0.14f * p
                             transformOrigin = TransformOrigin(1f, 0f)
                         }
-                        .clip(RoundedCornerShape(HyperDimens.MenuCorner))
+                        .clip(hyperSquircle(HyperDimens.MenuCorner))
                         .background(hyperSurface())
                         .padding(vertical = 8.dp),
                     content = content,
@@ -627,7 +606,7 @@ fun HyperMenuTrigger(
     }
 }
 
-/** 菜单项：48dp 行高，左图标右文字，点击后由面板收起。 */
+/** 菜单项：miuix Dropdown 的 56dp 行高、15.6sp、左右 20dp，点击后由面板收起。 */
 @Composable
 fun HyperMenuRow(
     text: String,
@@ -638,8 +617,13 @@ fun HyperMenuRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = HyperDimens.MenuItemHeight)
-            .clickable(role = Role.Button) { onClick() }
-            .padding(horizontal = 16.dp),
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = HyperIndication(hyperTitle()),
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
@@ -648,7 +632,7 @@ fun HyperMenuRow(
         }
         Text(
             text = text,
-            fontSize = 15.sp,
+            fontSize = 15.6.sp,
             fontWeight = FontWeight.Normal,
             color = hyperTitle(),
             maxLines = 1,

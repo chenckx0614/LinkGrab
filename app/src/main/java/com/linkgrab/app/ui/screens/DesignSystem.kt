@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import com.linkgrab.app.ui.theme.IOSCornerLarge
 import com.linkgrab.app.ui.theme.IOSCornerMedium
@@ -45,7 +46,7 @@ fun LinkGrabBackground(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun Modifier.ios26GlassSurface(shape: RoundedCornerShape = IOSCornerLarge): Modifier = this
+fun Modifier.ios26GlassSurface(shape: Shape = IOSCornerLarge): Modifier = this
     .shadow(
         elevation = 8.dp,
         shape = shape,
