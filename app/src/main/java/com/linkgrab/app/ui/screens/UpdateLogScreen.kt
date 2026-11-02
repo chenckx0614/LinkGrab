@@ -25,7 +25,7 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
     UpdateLogItem("3.2.20", "2026-11-02", listOf(
-        "修复桌面图标被系统裁掉边缘的问题",
+        "修复桌面图标边缘多出一圈深色边的问题",
         "修复顶部栏滚动后底色过淡的问题",
     )),
     UpdateLogItem("3.2.19", "2026-11-02", listOf(
