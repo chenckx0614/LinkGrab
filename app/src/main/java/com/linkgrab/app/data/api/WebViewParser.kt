@@ -307,14 +307,13 @@ class WebViewParser(private val context: Context) {
         // BGM 配乐（mp3）或图集预览流，按视频返回只会得到一个下载必失败的假结果
         // （实测 7700942408430718115：aweme_type=2 的普通图集），宁可失败。
         val noteTypes = setOf("2", "68", "150")
-        val isNote = detail.containsKey("images") ||
-            detail.containsKey("image_post_info") ||
+        // images 必须是数组：打薄的普通视频也带 `"images": null` 这个空键，
+        // 光看键名会把所有视频判成图集；数组为空也算图集（接口承认这是图文，
+        // 只是图片被滤掉了）。
+        val isNote = (detail["images"] as? kotlinx.serialization.json.JsonArray) != null ||
+            (detail["image_post_info"] as? JsonObject)?.isNotEmpty() == true ||
             (detail["aweme_type"] as? JsonPrimitive)?.contentOrNull in noteTypes
         if (isNote) return null
-        // 真正的视频带 bit_rate 画质档位；没有档位的是被打薄的预览流，也不能收
-        val gears = (detail["video"]?.jsonObject?.get("bit_rate") as? kotlinx.serialization.json.JsonArray)
-            ?.mapNotNull { it as? JsonObject }.orEmpty()
-        if (gears.isEmpty()) return null
         val playUrl = detail["video"]?.jsonObject?.get("play_addr")
             ?.jsonObject?.get("url_list")?.jsonArray
             ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }

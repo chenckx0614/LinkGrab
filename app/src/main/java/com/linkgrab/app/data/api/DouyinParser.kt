@@ -329,11 +329,16 @@ class DouyinParser {
             sawNote = true
             return false
         }
-        // 真正的视频必然带 bit_rate 画质档位；没有档位说明这是被打薄的图文
-        // 数据（只剩一条预览流）。一并拒掉，让位给后面的签名 / SSR 通道。
+        // 有画质档位就是真视频。
         val gears = videoQualities(detail)
-        if (gears.isEmpty() || gears.all { looksLikeAudio(it.url) }) return false
-        return true
+        if (gears.any { !looksLikeAudio(it.url) }) return true
+        // 没有档位：可能是接口把 bit_rate 挪走/删了（slidesinfo 和网页 detail 的
+        // 字段随版本变），也可能是被打薄的图集预览流。图集特征上面已经拦过，
+        // 这里只要求它有一条不像音频的播放地址。
+        // 注意别再收紧回「没有档位一律拒」——那样接口一改字段，整类视频都会
+        // 被判成「未找到作品信息」，表现是抖音解析整个失效。
+        val fallback = fallbackVideoUrl(detail) ?: return false
+        return !looksLikeAudio(fallback)
     }
 
     /**
@@ -345,8 +350,14 @@ class DouyinParser {
      * 它当视频解析，拿图集预览流产出「下载视频」必失败的假结果。
      */
     private fun isNote(detail: JsonObject): Boolean {
-        if (detail.containsKey("images")) return true
-        if (detail.containsKey("image_post_info")) return true
+        // 数组存在就算图集（空数组也说明接口承认这是图文，只是被风控滤掉了
+        // 图片）；但 `"images": null` 不算 —— 打薄的普通视频也会带这个空键，
+        // 认了它就会把所有视频都判成图集。
+        val images = detail["images"] as? JsonArray
+        if (images != null) return true
+        // image_post_info 同理：只有真的带内容才算
+        val postInfo = detail["image_post_info"] as? JsonObject
+        if (postInfo != null && postInfo.isNotEmpty()) return true
         return (detail["aweme_type"] as? JsonPrimitive)?.contentOrNull in NOTE_TYPES
     }
 
