@@ -69,7 +69,7 @@ class HyperSquircleShape(
 
         // 右上：顶边 (w - e, 0) → 竖边 (w, e)
         path.lineTo(w - e, 0f)
-        path.cubicTo(w - b2x, 0f, w - b1x, 0f, w - a1x, a1yy)
+        path.cubicTo(w - b2x, 0f, w - b1x, 0f, w - a1yy, a1x)
         path.arcTo(
             Rect(w - arcC - arcR, arcC - arcR, w - arcC + arcR, arcC + arcR),
             290f, 50f, false,
@@ -87,7 +87,7 @@ class HyperSquircleShape(
 
         // 左下：底边 (e, h) → 竖边 (0, h - e)
         path.lineTo(e, h)
-        path.cubicTo(b2x, h, b1x, h, a1x, h - a1yy)
+        path.cubicTo(b2x, h, b1x, h, a1yy, h - a1x)
         path.arcTo(
             Rect(arcC - arcR, h - arcC - arcR, arcC + arcR, h - arcC + arcR),
             110f, 50f, false,
