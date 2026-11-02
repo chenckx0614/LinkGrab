@@ -24,6 +24,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.2.22", "2026-11-02", listOf(
+        "HyperOS 主题按小米的界面重做，分组卡片、开关、按钮一起换新",
+        "返回键和右上角菜单改成小米的样子",
+        "滑动后的顶栏不再透出玻璃，换成实底加一条细线",
+    )),
     UpdateLogItem("3.2.21", "2026-11-02", listOf(
         "桌面图标改成满幅样式，四周不再露出一圈底色",
         "放大图标里的猫和相机，小尺寸下更容易认",

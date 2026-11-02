@@ -66,6 +66,24 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import com.linkgrab.app.ui.hyper.HyperBackButton
+import com.linkgrab.app.ui.hyper.HyperCard
+import com.linkgrab.app.ui.hyper.HyperDimens
+import com.linkgrab.app.ui.hyper.HyperDivider
+import com.linkgrab.app.ui.hyper.HyperPrimaryButton
+import com.linkgrab.app.ui.hyper.HyperRow
+import com.linkgrab.app.ui.hyper.HyperSecondaryButton
+import com.linkgrab.app.ui.hyper.HyperSectionTitle
+import com.linkgrab.app.ui.hyper.HyperTopBar
+import com.linkgrab.app.ui.hyper.hyperBackground
+import com.linkgrab.app.ui.hyper.hyperDivider
+import com.linkgrab.app.ui.hyper.hyperError
+import com.linkgrab.app.ui.hyper.hyperPrimary
+import com.linkgrab.app.ui.hyper.hyperSectionColor
+import com.linkgrab.app.ui.hyper.hyperSummary
+import com.linkgrab.app.ui.hyper.hyperSurface
+import com.linkgrab.app.ui.hyper.hyperSurfaceVariant
+import com.linkgrab.app.ui.hyper.hyperTitle
 import com.linkgrab.app.ui.liquid.InteractiveHighlight
 import com.linkgrab.app.ui.liquid.computeLiquidDragTransform
 import kotlinx.coroutines.delay
@@ -158,24 +176,20 @@ val IOSGlassStrokeDark = Color.White.copy(alpha = 0.10f)
 // MARK: - Theme Helpers
 
 @Composable
-fun iosBlue(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) HyperBlueDark else HyperBlueLight
-} else if (isInDarkTheme()) IOSBlueDark else IOSBlue
+fun iosBlue(): Color = if (isHyperOsStyle()) hyperPrimary()
+else if (isInDarkTheme()) IOSBlueDark else IOSBlue
 
 @Composable
-fun iosBackground(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) HyperBackgroundDark else HyperBackgroundLight
-} else if (isInDarkTheme()) IOSBackgroundDark else IOSBackgroundLight
+fun iosBackground(): Color = if (isHyperOsStyle()) hyperBackground()
+else if (isInDarkTheme()) IOSBackgroundDark else IOSBackgroundLight
 
 @Composable
-fun iosGroupedBackground(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) HyperSurfaceDark else HyperSurfaceLight
-} else if (isInDarkTheme()) IOSGroupedBackgroundDark else IOSGroupedBackgroundLight
+fun iosGroupedBackground(): Color = if (isHyperOsStyle()) hyperSurface()
+else if (isInDarkTheme()) IOSGroupedBackgroundDark else IOSGroupedBackgroundLight
 
 @Composable
-fun iosSecondaryBackground(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) HyperSecondarySurfaceDark else HyperSecondarySurfaceLight
-} else if (isInDarkTheme()) IOSSecondaryBackgroundDark else IOSSecondaryBackgroundLight
+fun iosSecondaryBackground(): Color = if (isHyperOsStyle()) hyperSurfaceVariant()
+else if (isInDarkTheme()) IOSSecondaryBackgroundDark else IOSSecondaryBackgroundLight
 
 @Composable
 fun iosTertiaryBackground(): Color = if (isHyperOsStyle()) {
@@ -183,14 +197,12 @@ fun iosTertiaryBackground(): Color = if (isHyperOsStyle()) {
 } else if (isInDarkTheme()) IOSTertiaryBackgroundDark else IOSTertiaryBackgroundLight
 
 @Composable
-fun iosLabel(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) Color(0xFFF4F5F7) else Color(0xFF17191E)
-} else if (isInDarkTheme()) IOSLabelDark else IOSLabelLight
+fun iosLabel(): Color = if (isHyperOsStyle()) hyperTitle()
+else if (isInDarkTheme()) IOSLabelDark else IOSLabelLight
 
 @Composable
-fun iosSecondaryLabel(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) Color(0xFFA8ABB4) else Color(0xFF7E828C)
-} else if (isInDarkTheme()) IOSSecondaryLabelDark else IOSSecondaryLabelLight
+fun iosSecondaryLabel(): Color = if (isHyperOsStyle()) hyperSummary()
+else if (isInDarkTheme()) IOSSecondaryLabelDark else IOSSecondaryLabelLight
 
 @Composable
 fun iosTertiaryLabel(): Color = if (isHyperOsStyle()) {
@@ -198,14 +210,12 @@ fun iosTertiaryLabel(): Color = if (isHyperOsStyle()) {
 } else if (isInDarkTheme()) IOSTertiaryLabelDark else IOSTertiaryLabelLight
 
 @Composable
-fun iosSeparator(): Color = if (isHyperOsStyle()) {
-    if (isInDarkTheme()) Color(0xFF383A42) else Color(0xFFE8EAEE)
-} else if (isInDarkTheme()) IOSSeparatorDark else IOSSeparatorLight
+fun iosSeparator(): Color = if (isHyperOsStyle()) hyperDivider()
+else if (isInDarkTheme()) IOSSeparatorDark else IOSSeparatorLight
 
 @Composable
-fun iosGlass(): Color = if (isHyperOsStyle()) {
-    iosGroupedBackground()
-} else if (isInDarkTheme()) IOSGlassDark else IOSGlassLight
+fun iosGlass(): Color = if (isHyperOsStyle()) hyperSurface()
+else if (isInDarkTheme()) IOSGlassDark else IOSGlassLight
 
 @Composable
 fun iosGlassStroke(): Color = if (isHyperOsStyle()) {
@@ -213,7 +223,8 @@ fun iosGlassStroke(): Color = if (isHyperOsStyle()) {
 } else if (isInDarkTheme()) IOSGlassStrokeDark else IOSGlassStrokeLight
 
 @Composable
-fun iosError(): Color = if (isInDarkTheme()) IOSRedDark else IOSRed
+fun iosError(): Color = if (isHyperOsStyle()) hyperError()
+else if (isInDarkTheme()) IOSRedDark else IOSRed
 
 // MARK: - Shape Tokens
 
@@ -276,22 +287,27 @@ fun IOS26Panel(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (isHyperOsStyle()) {
+        // HyperOS：miuix Card，圆角 20dp、无描边、内边距 16dp
+        HyperCard(modifier) {
+            Column(Modifier.padding(16.dp), content = content)
+        }
+        return
+    }
     val glass = iosGlass()
     val stroke = iosGlassStroke()
-    val hyper = isHyperOsStyle()
-    val shape = if (hyper) RoundedCornerShape(26.dp) else IOSCornerLarge
     Column(
         modifier = modifier
             .shadow(
-                elevation = if (hyper) 2.dp else 8.dp,
-                shape = shape,
-                ambientColor = Color.Black.copy(alpha = if (hyper) 0.025f else 0.06f),
-                spotColor = Color.Black.copy(alpha = if (hyper) 0.04f else 0.10f),
+                elevation = 8.dp,
+                shape = IOSCornerLarge,
+                ambientColor = Color.Black.copy(alpha = 0.06f),
+                spotColor = Color.Black.copy(alpha = 0.10f),
             )
-            .clip(shape)
+            .clip(IOSCornerLarge)
             .background(glass)
-            .then(if (hyper) Modifier else Modifier.border(0.5.dp, stroke, shape))
-            .padding(if (hyper) 18.dp else 20.dp),
+            .border(0.5.dp, stroke, IOSCornerLarge)
+            .padding(20.dp),
         content = content,
     )
 }
@@ -306,11 +322,21 @@ fun IOS26ListRow(
     onClick: (() -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
-    val hyper = isHyperOsStyle()
+    if (isHyperOsStyle()) {
+        // HyperOS：miuix 偏好行（最小 56dp、标题 16sp、摘要 13sp、16dp 内边距）
+        HyperRow(
+            title = title,
+            subtitle = subtitle,
+            modifier = modifier,
+            onClick = onClick,
+            trailing = trailing,
+        )
+        return
+    }
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        if (pressed && onClick != null) (if (hyper) 0.985f else 0.98f) else 1f,
+        if (pressed && onClick != null) 0.98f else 1f,
         spring(dampingRatio = 0.78f, stiffness = 680f),
         label = "ios26ListRowScale",
     )
@@ -318,7 +344,7 @@ fun IOS26ListRow(
     val rowModifier = if (onClick != null) {
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(if (hyper) 16.dp else 12.dp))
+            .clip(RoundedCornerShape(12.dp))
             .clickable(interactionSource = source, indication = null) {
                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 onClick()
@@ -333,15 +359,15 @@ fun IOS26ListRow(
         Column(Modifier.weight(1f)) {
             Text(
                 title,
-                fontSize = if (hyper) 16.sp else 17.sp,
-                fontWeight = if (hyper) FontWeight.SemiBold else FontWeight.Medium,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Medium,
                 color = iosLabel(),
                 letterSpacing = (-0.2).sp,
             )
             subtitle?.let {
                 Text(
                     it,
-                    fontSize = if (hyper) 13.sp else 14.sp,
+                    fontSize = 14.sp,
                     color = iosSecondaryLabel(),
                     modifier = Modifier.padding(top = 2.dp),
                     letterSpacing = (-0.1).sp,
@@ -368,6 +394,11 @@ fun IOS26Button(
     enabled: Boolean = true,
     backdrop: Backdrop? = null,
 ) {
+    if (isHyperOsStyle()) {
+        // HyperOS：miuix 主按钮（蓝底白字、圆角 16dp、最小高 40dp）
+        HyperPrimaryButton(text, onClick, modifier, enabled)
+        return
+    }
     // 按压形变学习自 Nexio 课程表按钮：整体生长 + 沿拖动方向拉伸 + tanh 阻尼
     // 跟手 + 触摸点高光 + Confirm 触感（替代旧的 collectIsPressed 纯缩放）。
     val animationScope = rememberCoroutineScope()
@@ -461,6 +492,10 @@ fun IOS26OutlinedButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    if (isHyperOsStyle()) {
+        HyperSecondaryButton(text, onClick, modifier, enabled)
+        return
+    }
     val animationScope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val interactiveHighlight = remember(animationScope) { InteractiveHighlight(animationScope) }
@@ -748,6 +783,13 @@ fun IOS26Switch(
     }
 }
 
+/** 卡片内标题：iOS 20sp SemiBold；HyperOS 16sp Medium（miuix 卡片内不放大标题）。 */
+@Composable
+fun iosCardTitleSize(): androidx.compose.ui.unit.TextUnit = if (isHyperOsStyle()) 16.sp else 20.sp
+
+@Composable
+fun iosCardTitleWeight(): FontWeight = if (isHyperOsStyle()) FontWeight.Medium else FontWeight.SemiBold
+
 // MARK: - Typography
 
 @Composable
@@ -781,6 +823,20 @@ fun IOS26PageHeader(title: String, subtitle: String? = null, topPadding: android
 
 @Composable
 fun IOS26SectionHeader(title: String, subtitle: String? = null) {
+    if (isHyperOsStyle()) {
+        Column {
+            HyperSectionTitle(title)
+            subtitle?.let {
+                Text(
+                    it,
+                    fontSize = 13.sp,
+                    color = hyperSummary(),
+                    modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),
+                )
+            }
+        }
+        return
+    }
     Column(Modifier.padding(top = 8.dp, bottom = 8.dp)) {
         Text(
             title,
@@ -828,7 +884,9 @@ fun IOS26IconCapsule(
 
 @Composable
 fun IOS26Divider(modifier: Modifier = Modifier) {
-    if (!isHyperOsStyle()) {
+    if (isHyperOsStyle()) {
+        HyperDivider(modifier)
+    } else {
         androidx.compose.material3.HorizontalDivider(
             modifier = modifier,
             thickness = 0.5.dp,
@@ -876,6 +934,18 @@ fun IOS26BlurHeader(
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    if (isHyperOsStyle()) {
+        // HyperOS：52dp 折叠栏 + 92% 实底 + 发丝线，没有液态玻璃
+        HyperTopBar(
+            title = title,
+            backdrop = backdrop,
+            scrolled = scrolled,
+            modifier = modifier,
+            onBack = onBack,
+            actions = actions,
+        )
+        return
+    }
     val progress by animateFloatAsState(
         targetValue = if (scrolled) 1f else 0f,
         animationSpec = tween(260),
@@ -1079,10 +1149,13 @@ fun IOS26StickyPage(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(if (applyImePadding) Modifier.imePadding() else Modifier)
-                    .padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(spacedBy),
+                    .padding(horizontal = if (isHyperOsStyle()) HyperDimens.PageHorizontal else 20.dp),
+                verticalArrangement = Arrangement.spacedBy(
+                    if (isHyperOsStyle()) spacedBy.coerceAtMost(12.dp) else spacedBy,
+                ),
                 contentPadding = PaddingValues(
-                    top = topInset + IOS26HeaderHeight + 10.dp,
+                    top = topInset + (if (isHyperOsStyle()) HyperDimens.TopBarHeight else IOS26HeaderHeight) +
+                        if (isHyperOsStyle()) 8.dp else 10.dp,
                     bottom = bottomSpacing,
                 ),
                 content = content,
@@ -1115,6 +1188,10 @@ fun IOS26BackButton(
     modifier: Modifier = Modifier,
     backdrop: Backdrop? = null,
 ) {
+    if (isHyperOsStyle()) {
+        HyperBackButton(onClick = onClick, modifier = modifier)
+        return
+    }
     com.linkgrab.app.ui.liquid.LiquidGlassBackButton(
         onClick = onClick,
         backdrop = backdrop,

@@ -66,6 +66,7 @@ import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosGroupedBackground
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosDisclosureColor
+import com.linkgrab.app.ui.theme.isHyperOsStyle
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.viewmodel.MainViewModel
 
@@ -139,7 +140,7 @@ fun SettingsScreen(
                         }
                         VisualStyleCard(
                             title = "类 HyperOS",
-                            description = "Nexio 风格",
+                            description = "MIUI 控件与分组",
                             hyper = true,
                             selected = visualStyle == 1,
                             modifier = Modifier.weight(1f),
@@ -398,6 +399,11 @@ private fun VisualStyleCard(
 /** 分组小标题：与更新设置/关于应用二级页同一语言（panel 外、14sp、中性色）。 */
 @Composable
 private fun SectionLabel(text: String) {
+    if (isHyperOsStyle()) {
+        // HyperOS：miuix SmallTitle（14sp / #8F9CAE / 左 12dp，页面 16dp 叠加后 28dp）
+        com.linkgrab.app.ui.hyper.HyperSectionTitle(text, Modifier.padding(top = 4.dp))
+        return
+    }
     Text(
         text,
         fontSize = 14.sp,

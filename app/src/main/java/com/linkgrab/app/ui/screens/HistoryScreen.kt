@@ -98,6 +98,8 @@ import com.linkgrab.app.ui.theme.IOSCornerMedium
 import com.linkgrab.app.ui.theme.IOSCornerSmall
 import com.linkgrab.app.ui.theme.IOSRed
 import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosCardTitleSize
+import com.linkgrab.app.ui.theme.iosCardTitleWeight
 import com.linkgrab.app.ui.theme.iosDisclosureColor
 import com.linkgrab.app.ui.theme.iosGlass
 import com.linkgrab.app.ui.theme.iosGlassStroke
@@ -383,8 +385,8 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                             Text(
                                 "还没有历史记录",
                                 color = iosLabel(),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontSize = iosCardTitleSize(),
+                                fontWeight = iosCardTitleWeight(),
                                 letterSpacing = (-0.3).sp,
                             )
                             Text(
@@ -403,8 +405,8 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                             Text(
                                 "没有匹配的记录",
                                 color = iosLabel(),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontSize = iosCardTitleSize(),
+                                fontWeight = iosCardTitleWeight(),
                                 letterSpacing = (-0.3).sp,
                             )
                             Text(

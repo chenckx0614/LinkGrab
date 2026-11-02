@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,6 +64,11 @@ import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
+import com.linkgrab.app.ui.hyper.HyperIconButton
+import com.linkgrab.app.ui.hyper.HyperMenuRow
+import com.linkgrab.app.ui.hyper.HyperMenuTrigger
+import com.linkgrab.app.ui.hyper.LocalHyperMenuSelect
+import com.linkgrab.app.ui.theme.isHyperOsStyle
 import com.linkgrab.app.ui.theme.isInDarkTheme
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -198,6 +204,21 @@ fun LiquidGlassDropdownMenu(
     materialAlpha: Float = com.linkgrab.app.ui.theme.LocalTopBarMaterialAlpha.current,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (isHyperOsStyle()) {
+        // HyperOS：三点图标钮 + 白卡下拉，不走容器变换那套液态玻璃
+        HyperMenuTrigger(
+            show = show,
+            onDismiss = { onDismiss?.invoke() },
+            // 调用方按「含 24dp 阴影内缩」的占位来摆放本控件，HyperOS 版没有阴影，
+            // 但必须保留同样内缩，否则触发钮会整体上移/右移。
+            modifier = modifier.padding(LiquidGlassDropdownShadowPadding),
+            triggerIcon = triggerIcon ?: androidx.compose.material.icons.Icons.Filled.MoreVert,
+            triggerContentDescription = triggerContentDescription,
+            onExpand = onExpand,
+            content = content,
+        )
+        return
+    }
     val isLightTheme = !isInDarkTheme()
     // 基色与顶栏液态玻璃按钮同色：收起态即那颗按钮，形变过程中玻璃不突变。
     // 不透明度分两档：收起态用「按钮档」（42dp 小圆要压得住图标与描边）；
@@ -425,6 +446,15 @@ fun LiquidGlassCircleButton(
     modifier: Modifier = Modifier,
     materialAlpha: Float = 1f,
 ) {
+    if (isHyperOsStyle()) {
+        com.linkgrab.app.ui.hyper.HyperIconButton(
+            icon = icon,
+            onClick = onClick,
+            contentDescription = contentDescription,
+            modifier = modifier,
+        )
+        return
+    }
     val isLightTheme = !isInDarkTheme()
     val containerBase = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242424)
     val collapsedAlpha = if (isLightTheme) 0.76f else 0.84f
@@ -502,6 +532,11 @@ fun LiquidGlassDropdownMenuItem(
     modifier: Modifier = Modifier,
     icon: @Composable (() -> Unit)? = null,
 ) {
+    val hyperSelect = LocalHyperMenuSelect.current
+    if (hyperSelect != null) {
+        HyperMenuRow(text = text, onClick = { hyperSelect(onClick) }, icon = icon)
+        return
+    }
     val isLightTheme = !isInDarkTheme()
     val textColor = if (isLightTheme) Color(0xFF1A1A1A) else Color(0xFFE8E4DE)
 

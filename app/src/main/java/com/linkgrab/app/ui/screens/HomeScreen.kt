@@ -52,6 +52,8 @@ import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
 import com.linkgrab.app.ui.theme.IOS27TextField
 import com.linkgrab.app.ui.theme.iosBlue
+import com.linkgrab.app.ui.theme.iosCardTitleSize
+import com.linkgrab.app.ui.theme.iosCardTitleWeight
 import com.linkgrab.app.ui.theme.iosError
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
@@ -155,8 +157,8 @@ fun HomeScreen(
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     Text(
                         "粘贴一个分享链接",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = iosCardTitleSize(),
+                        fontWeight = iosCardTitleWeight(),
                         color = iosLabel(),
                         letterSpacing = (-0.3).sp,
                     )
@@ -235,8 +237,8 @@ fun HomeScreen(
                 IOS26Panel(Modifier.fillMaxWidth()) {
                     Text(
                         "最近解析",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.SemiBold,
+                        fontSize = iosCardTitleSize(),
+                        fontWeight = iosCardTitleWeight(),
                         color = iosLabel(),
                         letterSpacing = (-0.3).sp,
                     )
