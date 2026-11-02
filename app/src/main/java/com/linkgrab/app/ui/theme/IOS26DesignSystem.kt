@@ -1062,8 +1062,10 @@ fun IOS26BlurHeader(
                     )
                 }
         )
-        val buttonMaterialAlpha = ((progress - 0.28f) / 0.42f).coerceIn(0f, 1f)
-        CompositionLocalProvider(LocalTopBarMaterialAlpha provides buttonMaterialAlpha) {
+        // 顶栏圆钮的玻璃底常驻：以前这里跟着滚动进度从 0 淡入，页面停在顶部时
+        // alpha=0，按钮只剩一个光秃秃的箭头，像丢了圆形遮罩。滚动只该决定背后
+        // 那层模糊出不出，按钮本身不该消失。
+        CompositionLocalProvider(LocalTopBarMaterialAlpha provides 1f) {
         Row(
             Modifier
                 .fillMaxWidth()

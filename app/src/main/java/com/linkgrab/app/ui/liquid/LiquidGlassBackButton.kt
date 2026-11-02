@@ -93,11 +93,16 @@ fun LiquidGlassTopBarButton(
     // 与 Nexio 顶栏按钮同色：收起态与右上角菜单是同一颗玻璃，形变时不能突变
     val containerColor = when {
         darkBackground -> Color.White.copy(alpha = 0.12f)
+        // HyperOS 主题的页面底是 #F4F4F4（miuix surface），#FAFAFA 76% 压上去
+        // 只差几个色阶，圆钮等于看不见；用更实的白 + 描边把圆显出来
+        isLightTheme && com.linkgrab.app.ui.theme.isHyperOsStyle() -> Color.White.copy(alpha = 0.92f)
         isLightTheme -> Color(0xFFFAFAFA).copy(alpha = 0.76f)
         else -> Color(0xFF242424).copy(alpha = 0.84f)
     }
     val edgeStrokeColor = when {
         darkBackground -> Color.White.copy(alpha = 0.22f)
+        // 浅色白钮上白描边等于没有，改用极淡的黑线勾边（miuix 卡片靠底色分层，不用白边）
+        isLightTheme && com.linkgrab.app.ui.theme.isHyperOsStyle() -> Color.Black.copy(alpha = 0.06f)
         isLightTheme -> Color.White.copy(alpha = 0.50f)
         else -> Color.White.copy(alpha = 0.16f)
     }

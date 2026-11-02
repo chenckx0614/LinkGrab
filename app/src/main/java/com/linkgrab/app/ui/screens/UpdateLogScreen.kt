@@ -24,6 +24,10 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.2.25", "2026-11-02", listOf(
+        "修复返回键只剩一个箭头、底下没有那圈玻璃的问题",
+        "HyperOS 主题下顶栏的圆钮和白卡区分得更清楚",
+    )),
     UpdateLogItem("3.2.24", "2026-11-02", listOf(
         "返回键和右上角菜单恢复成原来的玻璃圆钮",
         "HyperOS 主题的深色页面改成黑底，卡片不再和背景糊在一起",

@@ -205,7 +205,10 @@ fun LiquidGlassDropdownMenu(
     // 展开成 200dp 大面板后必须降到「面板档」—— 0.76/0.84 的实色底会把
     // blur 采样出来的页面内容几乎完全盖住，玻璃退化成一块实色板。
     val containerBase = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242424)
-    val collapsedAlpha = if (isLightTheme) 0.76f else 0.84f
+    // HyperOS 页面底是 #F4F4F4，76% 的白几乎同色；收起态用更实的白才看得出圆
+    val collapsedAlpha = if (!isLightTheme) 0.84f
+    else if (com.linkgrab.app.ui.theme.isHyperOsStyle()) 0.92f
+    else 0.76f
     val expandedAlpha = if (isLightTheme) 0.32f else 0.44f
     val triggerIconTint = if (isLightTheme) Color.Black.copy(0.85f) else Color.White.copy(0.85f)
     val hapticFeedback = LocalHapticFeedback.current
@@ -428,7 +431,10 @@ fun LiquidGlassCircleButton(
 ) {
     val isLightTheme = !isInDarkTheme()
     val containerBase = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242424)
-    val collapsedAlpha = if (isLightTheme) 0.76f else 0.84f
+    // HyperOS 页面底是 #F4F4F4，76% 的白几乎同色；收起态用更实的白才看得出圆
+    val collapsedAlpha = if (!isLightTheme) 0.84f
+    else if (com.linkgrab.app.ui.theme.isHyperOsStyle()) 0.92f
+    else 0.76f
     val triggerIconTint = if (isLightTheme) Color.Black.copy(0.85f) else Color.White.copy(0.85f)
     val hapticFeedback = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
