@@ -80,6 +80,7 @@ fun LiquidGlassTopBarButton(
     iconTint: Color = Color.Unspecified,
     performHapticFeedback: Boolean = true,
     enabled: Boolean = true,
+    materialAlpha: Float = com.linkgrab.app.ui.theme.LocalTopBarMaterialAlpha.current,
 ) {
     val animationScope = rememberCoroutineScope()
     val interactiveHighlight = remember(animationScope) {
@@ -157,7 +158,7 @@ fun LiquidGlassTopBarButton(
                 }
                 val paint = Paint().apply {
                     color = android.graphics.Color.argb(
-                        (android.graphics.Color.alpha(shadowArgb) * 3.2f)
+                        (android.graphics.Color.alpha(shadowArgb) * 3.2f * materialAlpha)
                             .coerceAtMost(255f).toInt(),
                         android.graphics.Color.red(shadowArgb),
                         android.graphics.Color.green(shadowArgb),
@@ -197,15 +198,15 @@ fun LiquidGlassTopBarButton(
                                 effects = effects,
                                 highlight = null,
                                 shadow = null,
-                                layerBlock = { alpha = 1f },
+                                layerBlock = { alpha = materialAlpha },
                                 onDrawSurface = onDrawSurface,
                             )
-                            .border(1.dp, edgeStrokeColor, CircleShape)
+                            .border(1.dp, edgeStrokeColor.copy(alpha = edgeStrokeColor.alpha * materialAlpha), CircleShape)
                     } else {
                         Modifier
                             .clip(CircleShape)
-                            .drawBehind { drawRect(containerColor) }
-                            .border(1.dp, edgeStrokeColor, CircleShape)
+                            .drawBehind { drawRect(containerColor.copy(alpha = containerColor.alpha * materialAlpha)) }
+                            .border(1.dp, edgeStrokeColor.copy(alpha = edgeStrokeColor.alpha * materialAlpha), CircleShape)
                     }
                 )
                 .then(interactiveHighlight.modifier)

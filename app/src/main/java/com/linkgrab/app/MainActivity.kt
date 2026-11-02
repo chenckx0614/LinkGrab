@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val viewModel: MainViewModel = viewModel()
             val colorMode by viewModel.colorMode.collectAsState()
+            val visualStyle by viewModel.visualStyle.collectAsState()
             val shareText by pendingShareText
             val route by pendingRoute
 
@@ -46,7 +47,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            LinkGrabTheme(colorMode = colorMode) {
+            LinkGrabTheme(colorMode = colorMode, visualStyle = visualStyle) {
                 AppNavigation(
                     viewModel = viewModel,
                     initialShareText = shareText,

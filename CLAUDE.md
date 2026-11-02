@@ -8,9 +8,10 @@
 
 1. **更新 `app/build.gradle.kts`** 中的 `versionCode` 和 `versionName`
 2. **更新 `UpdateLogScreen.kt`** 中的 `updateLogs` 列表，添加新版本条目
-3. **构建 APK** 后复制为带版本号的文件名：
+3. **构建 APK** 后按 ABI 复制为带版本号的文件名：
    ```bash
-   cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/LinkGrab-v{版本号}.apk
+   cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk app/build/outputs/apk/debug/LinkGrab-v{版本号}-arm64-v8a.apk
+   cp app/build/outputs/apk/debug/app-armeabi-v7a-debug.apk app/build/outputs/apk/debug/LinkGrab-v{版本号}-armeabi-v7a.apk
    ```
 4. **更新 `CLAUDE.md`** 底部的版本历史表
 5. **Push 到 GitHub 和 Gitee**：
@@ -21,7 +22,7 @@
    ```
 6. **创建 GitHub Release 并上传 APK**：
    ```bash
-   gh release create v{版本号} app/build/outputs/apk/debug/LinkGrab-v{版本号}.apk \
+   gh release create v{版本号} app/build/outputs/apk/debug/LinkGrab-v{版本号}-arm64-v8a.apk app/build/outputs/apk/debug/LinkGrab-v{版本号}-armeabi-v7a.apk \
      --title "LinkGrab v{版本号}" \
      --notes "{更新内容列表}"
    ```
@@ -68,7 +69,7 @@ cd "c:/Users/chenc/Desktop/Claude Code/linkgrab"
 ./gradlew assembleDebug --no-daemon
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`
+APK: `app/build/outputs/apk/debug/app-{arm64-v8a,armeabi-v7a}-debug.apk`
 
 ## 项目结构
 
@@ -124,6 +125,7 @@ linkgrab/app/src/main/java/com/linkgrab/app/
 
 | 版本 | 日期 | 内容 |
 |------|------|------|
+| 3.2.15 | 2026-11-02 | **双界面主题**：设置→外观新增「类 iOS / 类 HyperOS」可视化选择，DataStore 持久化；类 HyperOS 切换背景、卡片、文字层级、按钮圆角和次级页转场，底栏沿用用户原有选择。转场参考 NexioSchedule 的 600ms 入场 / 320ms 返回、24% 底层视差与缓动曲线；预测性返回在 3.2.20 整体移除（`enableOnBackInvokedCallback` 回到 false），返回统一走 BackHandler + 滑动转场。类 HyperOS 的列表分隔线隐藏，顶栏返回与菜单继续使用此前移植的 Nexio 液态组件。主题与明暗模式独立，启动遮挡等主题读取完成再撤。参考来源：Gitee `com_haooz_account/hyper_schedule` / GitHub `HaoZai000/NexioSchedule`（AGPL-3.0）。 |
 | 3.2.0 | 2026-10-28 | Motion Photo 单文件封装（JPEG XMP + MP4，保留分开保存兼容选项；图片解码转为高质量 JPEG，超大图片限制 16MP；原视频不转码；相册识别需实机验证）；结果页/批量页接入下载队列；历史记录重构为 DataStore 单一数据源 + 作者搜索、组合筛选及元数据保留；队列清理修复；抖音 WebView 通道（风控时真浏览器直载分享页解析图集）+ 主界面滑动切页开关。规范：https://developer.android.com/media/platform/motion-photo-format |
 | 3.0.19 | 2026-10-19 | **能力扩展 A（B站 / 微博 / 通用网页 / 二维码 / 音乐多源）**：① **B站**（`BilibiliParser`）：BV/av/b23.tv 短链 → `x/web-interface/view` 取 title/pic/cid/author → `x/player/playurl` 取**progressive durl**。实测（2026-10）匿名也能拿到 `quality=64`（720P）带音轨的完整 mp4（`upos-sz-estgoss.bilivideo.com`，带 Referer 后 Range 请求 206）。**为什么不用 DASH**：`fnval=4048` 的 dash 视频/音频是两条流，只下 video 会得到无声文件，合并要改下载队列（一任务一 URL）→ 留作后续。番剧走 `pgc/view/web/season` + `pgc/player/web/playurl`（多数要登录，报错给明确提示）。接口必须带 `Referer/Origin: bilibili.com` + 随机 `buvid3` cookie，否则 412。② **微博**（`WeiboParser`）：访客校验 `passport.weibo.com/visitor/genvisitor → visitor?a=incarnate`（OkHttp 内存 CookieJar）→ `m.weibo.cn/statuses/show`；兜底解析详情页 HTML 的 `var $render_data`；两条都失败给「微博拦截了匿名访问」提示。③ **通用网页**（`GenericWebParser`）：og:video/twitter:player:stream → `<video src>`/`<source>` → JSON-LD contentUrl → og:image → 正文 `<img>`（过滤 avatar/icon/logo 等，去重取前 12 张）；`Platform` 新增 `WEB`，**任何 http(s) 链接都算可解析**（不再报"不支持"）。④ **二维码**：首页「二维码」按钮 → 相册选图 → `com.google.zxing:core:3.5.3` 解码（>1200px 先缩放，省内存）→ 解出的文本再过 `supportedLinkIn` 抽链接直接解析。不做相机预览，免 CAMERA 权限。⑤ **音乐多源**（`MusicParser` 门面）：酷我（原 `KuwoMusicParser`）+ 网易云（`api/song/detail` + `enhance/player/url` 320k→192k→128k 逐档降级 + `api/song/lyric`）+ QQ（`musicu.fcg` 的 `music.pf_song_detail_svr` + `vkey.GetVkeyServer` 拼 `sip+purl` + 歌词接口）；VIP/数字专辑接口返回空地址 → 明确提示需要会员。`MusicResult` 新增 `bitrateLabel`，`rid` 语义变为「平台内歌曲 id」。⑥ **防盗链**：`buildMediaRequest` 按域名补 Referer（bilivideo/hdslb→bilibili、sinaimg/weibocdn→weibo、music.163/126.net→netease、qq→y.qq.com、kuwo→kuwo），否则 403。⑦ 剪贴板提示改用 `clipboardLinkIn()`，**只对专门适配的平台弹**（不含 WEB），避免复制任意链接被骚扰；历史记录平台名补 B站/微博/网页。 |
 | 3.0.18 | 2026-10-18 | **按反馈回退 3.0.17 的部分动效**（用户点名丢弃 1/2/3/5 + 汇总里的第 8、10 项）：① 删掉四个列表的 `Modifier.animateItem()` 与 `StaggeredAppear` 包裹（历史/下载管理/批量结果/更新日志）；② 删掉历史记录 `SwipeToDismissBox` 左滑删除及 `SwipeDeleteBackground`，恢复长按多选；③ 删掉「我的」三组与工具箱/文件传输的逐行错峰入场；④ 删掉首页错误抖动（`shakeOnTrigger` + 触觉）与结果页骨架→内容交叉淡入（`contentFade`），恢复 `if (result == null) 骨架 else 内容` 的直切；⑤ `Animations.kt` 移除 `StaggeredAppear`（`ExpandableSection` 保留）。**保留**：4 卡片展开弹簧（关于页两处）、6 封面 `crossfade(true)`、7 保存成功「✓ 已保存」morph（含去掉 Toast）、9 勾选弹跳 + 选中描边（历史/批量）、13 已回退。 |

@@ -18,6 +18,7 @@ val LocalColorMode = compositionLocalOf { 0 }
 @Composable
 fun LinkGrabTheme(
     colorMode: Int = 0,
+    visualStyle: Int = 0,
     content: @Composable () -> Unit,
 ) {
     val view = LocalView.current
@@ -34,7 +35,44 @@ fun LinkGrabTheme(
         }
     }
 
-    val colorScheme = if (isDark) {
+    val style = if (visualStyle == 1) AppVisualStyle.HYPER_OS else AppVisualStyle.IOS
+    val colorScheme = if (style == AppVisualStyle.HYPER_OS && isDark) {
+        darkColorScheme(
+            primary = HyperBlueDark,
+            onPrimary = Color.White,
+            primaryContainer = HyperBlueDark.copy(alpha = 0.24f),
+            onPrimaryContainer = HyperBlueDark,
+            secondary = Color(0xFF9CB6EC),
+            onSecondary = Color(0xFF111C33),
+            secondaryContainer = Color(0xFF273650),
+            onSecondaryContainer = Color(0xFFD9E4FF),
+            background = HyperBackgroundDark,
+            onBackground = Color.White,
+            surface = HyperSurfaceDark,
+            onSurface = Color.White,
+            surfaceVariant = HyperSecondarySurfaceDark,
+            onSurfaceVariant = Color(0xFFADB0B9),
+            outline = Color(0xFF464851),
+        )
+    } else if (style == AppVisualStyle.HYPER_OS) {
+        lightColorScheme(
+            primary = HyperBlueLight,
+            onPrimary = Color.White,
+            primaryContainer = HyperBlueLight.copy(alpha = 0.13f),
+            onPrimaryContainer = HyperBlueLight,
+            secondary = Color(0xFF5977B2),
+            onSecondary = Color.White,
+            secondaryContainer = Color(0xFFE5EDFF),
+            onSecondaryContainer = Color(0xFF354E82),
+            background = HyperBackgroundLight,
+            onBackground = Color(0xFF17191E),
+            surface = HyperSurfaceLight,
+            onSurface = Color(0xFF17191E),
+            surfaceVariant = HyperSecondarySurfaceLight,
+            onSurfaceVariant = Color(0xFF777B85),
+            outline = Color(0xFFE3E5EA),
+        )
+    } else if (isDark) {
         darkColorScheme(
             primary = IOSBlueDark,
             onPrimary = Color.White,
@@ -68,7 +106,10 @@ fun LinkGrabTheme(
         )
     }
 
-    CompositionLocalProvider(LocalColorMode provides colorMode) {
+    CompositionLocalProvider(
+        LocalColorMode provides colorMode,
+        LocalAppVisualStyle provides style,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             content = content,

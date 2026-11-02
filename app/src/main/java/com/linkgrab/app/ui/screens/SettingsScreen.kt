@@ -6,6 +6,8 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -25,6 +28,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,10 +37,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +63,7 @@ import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.IOS26Switch
 import com.linkgrab.app.ui.theme.iosLabel
+import com.linkgrab.app.ui.theme.iosGroupedBackground
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosDisclosureColor
 import com.linkgrab.app.ui.theme.iosBlue
@@ -68,6 +79,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val colorMode by viewModel.colorMode.collectAsState()
+    val visualStyle by viewModel.visualStyle.collectAsState()
     val liveUpdates by viewModel.liveUpdatesEnabled.collectAsState()
     val bottomBarStyle by viewModel.bottomBarStyle.collectAsState()
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) viewModel.toggleLiveUpdates(true) }
@@ -106,6 +118,37 @@ fun SettingsScreen(
             item {
                 SectionLabel("外观")
                 IOS26Panel(Modifier.fillMaxWidth()) {
+                    Text("界面主题", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = iosLabel())
+                    Text(
+                        "切换整套界面、导航和动效风格",
+                        fontSize = 13.sp,
+                        color = iosSecondaryLabel(),
+                        modifier = Modifier.padding(top = 2.dp, bottom = 12.dp),
+                    )
+                    val styleHaptic = LocalHapticFeedback.current
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        VisualStyleCard(
+                            title = "类 iOS",
+                            description = "原来的液态玻璃",
+                            hyper = false,
+                            selected = visualStyle == 0,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            styleHaptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                            viewModel.setVisualStyle(0)
+                        }
+                        VisualStyleCard(
+                            title = "类 HyperOS",
+                            description = "Nexio 风格",
+                            hyper = true,
+                            selected = visualStyle == 1,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            styleHaptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                            viewModel.setVisualStyle(1)
+                        }
+                    }
+                    IOS26Divider(Modifier.padding(vertical = 12.dp))
                     // 深色模式：下载源同款下拉选择（点击展开、当前项打勾、选中即收起）
                     val modeName = when (colorMode) { 0 -> "跟随系统"; 2 -> "深色"; else -> "浅色" }
                     var modeExpanded by remember { mutableStateOf(false) }
@@ -163,7 +206,6 @@ fun SettingsScreen(
                         }
                     }
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
-                    // 底栏样式：二级页可视化选择
                     val styleName = when (bottomBarStyle) {
                         1 -> "HyperOS 4"; 2 -> "HarmonyOS 7"; 3 -> "Material 3"; else -> "iOS 27"
                     }
@@ -175,12 +217,7 @@ fun SettingsScreen(
                             onNavigateToBottomBarStyle()
                         },
                     ) {
-                        Text(
-                            styleName,
-                            color = iosSecondaryLabel(),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp,
-                        )
+                        Text(styleName, color = iosSecondaryLabel(), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                         Icon(
                             Icons.Default.ChevronRight,
                             contentDescription = null,
@@ -289,6 +326,72 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun VisualStyleCard(
+    title: String,
+    description: String,
+    hyper: Boolean,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val accent = if (hyper) Color(0xFF387BF6) else Color(0xFF007AFF)
+    val background = if (hyper) Color(0xFFF7F8FA) else Color(0xFFF2F2F7)
+    val cardShape = RoundedCornerShape(if (hyper) 22.dp else 18.dp)
+    val borderColor by androidx.compose.animation.animateColorAsState(
+        if (selected) accent else iosDisclosureColor().copy(alpha = 0.35f),
+        animationSpec = tween(220),
+        label = "styleCardBorder",
+    )
+    val scale by animateFloatAsState(
+        if (selected) 1f else 0.97f,
+        animationSpec = spring(dampingRatio = 0.78f, stiffness = 420f),
+        label = "styleCardScale",
+    )
+    Column(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(cardShape)
+            .border(if (selected) 2.dp else 1.dp, borderColor, cardShape)
+            .background(iosGroupedBackground(), cardShape)
+            .semantics { this.selected = selected }
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .padding(9.dp),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .height(74.dp)
+                .background(background, RoundedCornerShape(if (hyper) 16.dp else 13.dp))
+                .padding(10.dp),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(if (hyper) 0.48f else 0.64f)
+                    .height(7.dp)
+                    .background(Color(0xFF2B303A).copy(alpha = 0.70f), RoundedCornerShape(4.dp)),
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                repeat(3) { index ->
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .height(29.dp)
+                            .background(
+                                if (hyper) listOf(Color(0xFFD7E8FF), Color(0xFFFFE9D5), Color(0xFFE4E3FB))[index]
+                                else Color.White.copy(alpha = 0.82f),
+                                RoundedCornerShape(if (hyper) 8.dp else 11.dp),
+                            ),
+                    )
+                }
+            }
+        }
+        Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = iosLabel(), modifier = Modifier.padding(top = 8.dp))
+        Text(description, fontSize = 11.sp, color = iosSecondaryLabel(), maxLines = 1)
     }
 }
 

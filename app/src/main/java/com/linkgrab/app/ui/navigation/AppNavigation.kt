@@ -58,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -67,6 +68,7 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Alignment
 import kotlin.math.abs
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -178,9 +180,6 @@ sealed class Screen(val route: String, val title: String) {
 
 // MARK: - Page transitions (iOS 26 push / pop)
 
-private typealias EnterSpec = AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition
-private typealias ExitSpec = AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition
-
 /**
  * 转场窗口时长标记：v2.5.23 引入——转场期间摘掉全屏 layerBackdrop 录制，
  * 结束后恢复。
@@ -190,6 +189,15 @@ private const val PopMs = 400
 
 /** iOS system deceleration curve — fast start, long smooth tail. */
 private val iosEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
+
+/** NexioSchedule 的二级页缓动（AGPL-3.0）：温和起步、后段长减速。 */
+private val hyperEnterEasing = androidx.compose.animation.core.Easing { fraction ->
+    val t = fraction.coerceIn(0f, 1f)
+    val k = 0.48f
+    val shaped = if (t <= k) -t * t * t / (k * k) + 2f * t * t / k else t
+    1f - (1f - shaped).toDouble().pow(4.5).toFloat()
+}
+private val hyperExitEasing = CubicBezierEasing(0.36f, 0.18f, 0.3f, 0.85f)
 
 /** 承载 WebView 的页面：不套覆盖式模糊外壳，原因见 [IOSPageSurface]。 */
 private val WebViewHostRoutes = setOf(Screen.Game.route, Screen.ToolWeb.route)
@@ -263,25 +271,26 @@ private val popEnter: EnterTransition = slideInHorizontally(
     initialOffsetX = { -(it * 3 / 10) },
 )
 
+/** Nexio 式次级页：新页覆盖、下层让位 24%，返回更快。 */
+private val hyperPushEnter: EnterTransition = slideInHorizontally(
+    animationSpec = tween(600, easing = hyperEnterEasing),
+    initialOffsetX = { it },
+)
+private val hyperPushExit: ExitTransition = slideOutHorizontally(
+    animationSpec = tween(600, easing = hyperEnterEasing),
+    targetOffsetX = { -(it * 24 / 100) },
+)
+private val hyperPopEnter: EnterTransition = slideInHorizontally(
+    animationSpec = tween(320, easing = hyperExitEasing),
+    initialOffsetX = { -(it * 24 / 100) },
+)
+private val hyperPopExit: ExitTransition = slideOutHorizontally(
+    animationSpec = tween(320, easing = hyperExitEasing),
+    targetOffsetX = { it },
+)
+
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.isFromGuide(): Boolean =
     initialState.destination.route == Screen.Guide.route
-
-private fun iosEnter(transition: EnterTransition): EnterSpec =
-    {
-        when {
-            isFromGuide() -> guideFinishEnter
-            else -> transition
-        }
-    }
-
-private fun iosExit(transition: ExitTransition): ExitSpec =
-    {
-        when {
-            // 去引导页时首页直接让位，不要在后面横向滑走。
-            targetState.destination.route == Screen.Guide.route -> ExitTransition.None
-            else -> transition
-        }
-    }
 
 /**
  * 每个普通页面的外壳：左边缘投影 + **覆盖式模糊遮罩**。
@@ -305,6 +314,7 @@ private fun iosExit(transition: ExitTransition): ExitSpec =
  */
 @Composable
 private fun IOSPageSurface(content: @Composable () -> Unit) {
+    val hyper = com.linkgrab.app.ui.theme.isHyperOsStyle()
     val myRoute = LocalMyRoute.current
     if (myRoute in WebViewHostRoutes) {
         // WebView 是 Chromium 自己的合成表面（functor），外面再包 RenderEffect
@@ -321,7 +331,7 @@ private fun IOSPageSurface(content: @Composable () -> Unit) {
     LaunchedEffect(target) {
         lastTarget = target
         if (cover.value != target) {
-            cover.animateTo(target, tween(PushMs, easing = iosEasing))
+            cover.animateTo(target, tween(if (hyper) 600 else PushMs, easing = if (hyper) hyperEnterEasing else iosEasing))
         }
     }
     val coverValue = cover.value
@@ -330,16 +340,17 @@ private fun IOSPageSurface(content: @Composable () -> Unit) {
         Modifier
             .fillMaxSize()
             .shadow(
-                elevation = 16.dp,
+                elevation = if (hyper) 8.dp else 16.dp,
                 shape = RectangleShape,
                 clip = false,
             )
-            .blur(CoverBlurRadius * coverValue)
-            .drawBehind {
-                if (coverValue > 0.001f) {
-                    drawRect(Color.Black.copy(alpha = CoverDimAlpha * coverValue))
-                }
-            }
+            .blur(if (hyper) 0.dp else CoverBlurRadius * coverValue)
+            .then(if (hyper) Modifier.drawWithContent {
+                drawContent()
+                if (coverValue > 0.001f) drawRect(Color.Black.copy(alpha = 0.42f * coverValue))
+            } else Modifier.drawBehind {
+                if (coverValue > 0.001f) drawRect(Color.Black.copy(alpha = CoverDimAlpha * coverValue))
+            })
     ) {
         content()
     }
@@ -351,15 +362,16 @@ private fun IOSPageSurface(content: @Composable () -> Unit) {
  */
 private fun NavGraphBuilder.iosPage(
     route: String,
+    hyper: () -> Boolean,
     content: @Composable () -> Unit,
 ) = composable(
     route = route,
     // iOS 覆盖式：新页从右滑入（push）/ 旧页带模糊滑出（pop），
     // 底层页被推着左移让位（30% 视差）+ 渐糊，层次感由位移与模糊叠加。
-    enterTransition = iosEnter(pushEnter),
-    exitTransition = iosExit(pushExit),
-    popEnterTransition = iosEnter(popEnter),
-    popExitTransition = iosExit(popExit),
+    enterTransition = { if (isFromGuide()) guideFinishEnter else if (hyper()) hyperPushEnter else pushEnter },
+    exitTransition = { if (targetState.destination.route == Screen.Guide.route) ExitTransition.None else if (hyper()) hyperPushExit else pushExit },
+    popEnterTransition = { if (isFromGuide()) guideFinishEnter else if (hyper()) hyperPopEnter else popEnter },
+    popExitTransition = { if (targetState.destination.route == Screen.Guide.route) ExitTransition.None else if (hyper()) hyperPopExit else popExit },
 ) {
     CompositionLocalProvider(LocalMyRoute provides route) {
         IOSPageSurface { content() }
@@ -403,6 +415,7 @@ private fun MainTabs(
     viewModel: MainViewModel,
     pagerState: PagerState,
     initialShareText: String?,
+    modifier: Modifier = Modifier,
     onNavigateToHistory: () -> Unit,
     onNavigateToVideoToAudio: () -> Unit,
     onNavigateToImageConvert: () -> Unit,
@@ -419,7 +432,7 @@ private fun MainTabs(
     val swipeEnabled by viewModel.swipeSwitchPages.collectAsState()
     HorizontalPager(
         state = pagerState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         beyondViewportPageCount = 1,
         userScrollEnabled = swipeEnabled,
     ) { page ->
@@ -476,18 +489,21 @@ fun AppNavigation(
     }
 
     val onMainTabs = currentDestination?.route == Screen.MainTabs.route
+    val visualStyle by viewModel.visualStyle.collectAsState()
+    val hyperStyle = visualStyle == 1
+    val hyperStyleProvider = remember(viewModel) { { viewModel.visualStyle.value == 1 } }
 
     // 底栏退场/回归（v2.5.38）：barCover 0(就位)→1(退场)。与页面转场同一
     // 时点（导航提交）开始、同曲线同时长——push 时跟着底层页被推走渐隐，
     // pop 时从让位处滑回。退场动画完成后才摘除组合，告别"突然消失"。
     var barMounted by remember { mutableStateOf(onMainTabs) }
     val barCover = remember { Animatable(0f) }
-    LaunchedEffect(onMainTabs) {
+    LaunchedEffect(onMainTabs, hyperStyle) {
         if (onMainTabs) {
             barMounted = true
-            barCover.animateTo(0f, tween(PopMs, easing = iosEasing))
+            barCover.animateTo(0f, tween(if (hyperStyle) 320 else PopMs, easing = if (hyperStyle) hyperExitEasing else iosEasing))
         } else if (barMounted) {
-            barCover.animateTo(1f, tween(PushMs, easing = iosEasing))
+            barCover.animateTo(1f, tween(if (hyperStyle) 600 else PushMs, easing = if (hyperStyle) hyperEnterEasing else iosEasing))
             barMounted = false
         }
     }
@@ -519,9 +535,6 @@ fun AppNavigation(
         }
     }
 
-    // 预测式返回已关闭，系统返回手势会走 onBackPressed。这里接管它，
-    // 让手势返回执行应用内的 pop 转场（而不是直接退出应用）。
-    // 只有详情页才拦截；主标签页上保留"返回退出"的系统行为。
     BackHandler(
         enabled = currentDestination?.route != null &&
             currentDestination?.route != Screen.MainTabs.route &&
@@ -561,7 +574,7 @@ fun AppNavigation(
     LaunchedEffect(transitioning) {
         if (transitioning) {
             // 取最长的转场时长兜底，宁可多录一帧也别在动画中途反复开关
-            delay(PushMs.toLong() + 40)
+            delay((if (hyperStyle) 600L else PushMs.toLong()) + 40)
             transitioning = false
         }
     }
@@ -600,8 +613,7 @@ fun AppNavigation(
                 navController = navController,
                 startDestination = Screen.MainTabs.route,
                 modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (recordNavBackdrop) Modifier.layerBackdrop(liquidBackdrop) else Modifier),
+                    .fillMaxSize(),
             ) {
 
             composable(
@@ -627,9 +639,11 @@ fun AppNavigation(
 
             // 三个主标签页共用一个 pager 宿主：随手势 1:1 滑动 + 弹簧吸附；
             // 打开 / 离开详情页仍走 iOS 视差 push/pop（见 iosPage）。
-            iosPage(Screen.MainTabs.route) {
+            iosPage(Screen.MainTabs.route, hyperStyleProvider) {
+                Box(Modifier.fillMaxSize()) {
                 MainTabs(
                     viewModel = viewModel,
+                    modifier = if (recordNavBackdrop) Modifier.layerBackdrop(liquidBackdrop) else Modifier,
                     pagerState = mainPagerState,
                     initialShareText = initialShareText,
                     onNavigateToHistory = {
@@ -676,122 +690,7 @@ fun AppNavigation(
                         navController.navigate(Screen.BottomBarStyle.route)
                     },
                 )
-            }
-
-            // Detail pages — transitions come from the shared specs above.
-            iosPage(Screen.Result.route) {
-                ResultScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.UpdateLog.route) {
-                UpdateLogScreen(
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.UpdateSettings.route) {
-                UpdateSettingsScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.BottomBarStyle.route) {
-                BottomBarStyleScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.Downloads.route) {
-                DownloadsScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.BatchResult.route) {
-                BatchResultScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.About.route) {
-                AboutScreen(
-                    onBack = { navController.popBackStack() },
-                    onNavigateToUpdateLog = { navController.navigate(Screen.UpdateLog.route) },
-                    onNavigateToDonate = { navController.navigate(Screen.Donate.route) },
-                )
-            }
-            iosPage(Screen.Donate.route) {
-                DonateScreen(
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.Game.route) {
-                GameScreen(
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.FileTransfer.route) {
-                FileTransferScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenUrl = { url ->
-                        if (viewModel.toolboxOpenInBrowser.value) {
-                            // 「我的 → 通用」里开了开关：所有中转站都交给系统浏览器
-                            context.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse(url),
-                                )
-                            )
-                        } else {
-                            // 默认：应用内 WebView 打开（右上角菜单可随时改浏览器）
-                            toolWebUrl = url
-                            toolWebDesktop = false
-                            navController.navigate(Screen.ToolWeb.route)
-                        }
-                    },
-                )
-            }
-            iosPage(Screen.ToolWeb.route) {
-                ToolWebScreen(
-                    url = toolWebUrl ?: WenshushuUrl,
-                    // 用户反馈文叔叔用手机页面更正常，不再强制桌面版 UA；网盘登录走桌面版
-                    desktop = toolWebDesktop,
-                    onBack = { navController.popBackStack() },
-                )
-            }
-            iosPage(Screen.VideoToAudio.route) {
-                VideoToAudioScreen(onBack = { navController.popBackStack() })
-            }
-            iosPage(Screen.ImageConvert.route) {
-                ImageConvertScreen(onBack = { navController.popBackStack() })
-            }
-            iosPage(Screen.Music.route) {
-                MusicScreen(onBack = { navController.popBackStack() })
-            }
-            iosPage(Screen.PanDirect.route) {
-                PanDirectScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenLogin = { homeUrl ->
-                        // 夸克/UC 手机网页都强制引导下载 App，必须用桌面版 UA 才有网页登录
-                        toolWebUrl = homeUrl
-                        toolWebDesktop = true
-                        navController.navigate(Screen.ToolWeb.route)
-                    },
-                )
-            }
-            iosPage(Screen.History.route) {
-                HistoryScreen(
-                    viewModel = viewModel,
-                    onBack = { navController.popBackStack() },
-                    onParseUrl = { url ->
-                        viewModel.parseUrl(url)
-                        navController.popBackStack()
-                    },
-                )
-            }
-        }
-        if (barMounted) {
+                run {
             // 底栏退场/回归动画（v2.5.38）：push 时底栏不再瞬间消失，而是
             // 跟底层页一起被推走（左移 30% 屏宽）并渐隐——与页面转场同一
             // 时点、同一曲线；pop 回主界面时从让位处滑回原位。退场动画
@@ -840,10 +739,10 @@ fun AppNavigation(
                             )
                         }
                         .graphicsLayer {
-                            translationX = -barCover.value * 0.3f * screenWpx
+                            translationX = 0f
                             scaleX = barScale.value
                             scaleY = barScale.value
-                            alpha = barAlpha.value * (1f - barCover.value)
+                            alpha = barAlpha.value
                         }
                 ) {
                 // 选中项由 pager 当前页决定（手指拖 pager 时也会同步到这一帧）。
@@ -961,12 +860,128 @@ fun AppNavigation(
                 }
                 } // 落位动画层
             }
+                }
+            }
+
+            }
+            // Detail pages — transitions come from the shared specs above.
+            iosPage(Screen.Result.route, hyperStyleProvider) {
+                ResultScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.UpdateLog.route, hyperStyleProvider) {
+                UpdateLogScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.UpdateSettings.route, hyperStyleProvider) {
+                UpdateSettingsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.BottomBarStyle.route, hyperStyleProvider) {
+                BottomBarStyleScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.Downloads.route, hyperStyleProvider) {
+                DownloadsScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.BatchResult.route, hyperStyleProvider) {
+                BatchResultScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.About.route, hyperStyleProvider) {
+                AboutScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigateToUpdateLog = { navController.navigate(Screen.UpdateLog.route) },
+                    onNavigateToDonate = { navController.navigate(Screen.Donate.route) },
+                )
+            }
+            iosPage(Screen.Donate.route, hyperStyleProvider) {
+                DonateScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.Game.route, hyperStyleProvider) {
+                GameScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.FileTransfer.route, hyperStyleProvider) {
+                FileTransferScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenUrl = { url ->
+                        if (viewModel.toolboxOpenInBrowser.value) {
+                            // 「我的 → 通用」里开了开关：所有中转站都交给系统浏览器
+                            context.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse(url),
+                                )
+                            )
+                        } else {
+                            // 默认：应用内 WebView 打开（右上角菜单可随时改浏览器）
+                            toolWebUrl = url
+                            toolWebDesktop = false
+                            navController.navigate(Screen.ToolWeb.route)
+                        }
+                    },
+                )
+            }
+            iosPage(Screen.ToolWeb.route, hyperStyleProvider) {
+                ToolWebScreen(
+                    url = toolWebUrl ?: WenshushuUrl,
+                    // 用户反馈文叔叔用手机页面更正常，不再强制桌面版 UA；网盘登录走桌面版
+                    desktop = toolWebDesktop,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            iosPage(Screen.VideoToAudio.route, hyperStyleProvider) {
+                VideoToAudioScreen(onBack = { navController.popBackStack() })
+            }
+            iosPage(Screen.ImageConvert.route, hyperStyleProvider) {
+                ImageConvertScreen(onBack = { navController.popBackStack() })
+            }
+            iosPage(Screen.Music.route, hyperStyleProvider) {
+                MusicScreen(onBack = { navController.popBackStack() })
+            }
+            iosPage(Screen.PanDirect.route, hyperStyleProvider) {
+                PanDirectScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenLogin = { homeUrl ->
+                        // 夸克/UC 手机网页都强制引导下载 App，必须用桌面版 UA 才有网页登录
+                        toolWebUrl = homeUrl
+                        toolWebDesktop = true
+                        navController.navigate(Screen.ToolWeb.route)
+                    },
+                )
+            }
+            iosPage(Screen.History.route, hyperStyleProvider) {
+                HistoryScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    onParseUrl = { url ->
+                        viewModel.parseUrl(url)
+                        navController.popBackStack()
+                    },
+                )
+            }
+        }
             // 遮挡层（见 coveringSplash）：铺在 NavHost 之上，盖住还没轮到出场的内容。
             if (coveringSplash) {
                 Box(Modifier.fillMaxSize().background(iosBackground()))
             }
         }
-    }
     }
 
     val updateResult by viewModel.updateResult.collectAsState()

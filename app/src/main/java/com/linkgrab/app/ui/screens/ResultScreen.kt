@@ -205,7 +205,7 @@ fun ResultScreen(
     }
 
     // 系统返回：先处理弹窗/多选，否则暂停播放器再退出
-    BackHandler {
+    BackHandler(enabled = showPreview || showMenu || selectionMode) {
         when {
             showPreview -> showPreview = false
             showMenu -> showMenu = false

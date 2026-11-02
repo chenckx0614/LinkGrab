@@ -16,7 +16,7 @@ class SettingsRepository(private val context: Context) {
 
     companion object {
         private val COLOR_MODE_KEY = intPreferencesKey("color_mode")
-        private val PREDICTIVE_BACK_KEY = intPreferencesKey("predictive_back")
+        private val VISUAL_STYLE_KEY = intPreferencesKey("visual_style")
         private val LIVE_UPDATES_KEY = intPreferencesKey("live_updates")
         private val GUIDE_SHOWN_KEY = intPreferencesKey("guide_shown")
         private val BOTTOM_BAR_STYLE_KEY = intPreferencesKey("bottom_bar_style")
@@ -35,8 +35,8 @@ class SettingsRepository(private val context: Context) {
         preferences[COLOR_MODE_KEY] ?: 0
     }
 
-    val predictiveBack: Flow<Int> = context.dataStore.data.map { preferences ->
-        preferences[PREDICTIVE_BACK_KEY] ?: 2
+    val visualStyle: Flow<Int> = context.dataStore.data.map { preferences ->
+        (preferences[VISUAL_STYLE_KEY] ?: 0).coerceIn(0, 1)
     }
 
     val liveUpdatesEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -90,9 +90,9 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    suspend fun setPredictiveBack(mode: Int) {
+    suspend fun setVisualStyle(style: Int) {
         context.dataStore.edit { preferences ->
-            preferences[PREDICTIVE_BACK_KEY] = mode
+            preferences[VISUAL_STYLE_KEY] = style.coerceIn(0, 1)
         }
     }
 

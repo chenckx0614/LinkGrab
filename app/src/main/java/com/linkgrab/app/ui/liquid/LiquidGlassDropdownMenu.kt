@@ -195,7 +195,7 @@ fun LiquidGlassDropdownMenu(
     // 整块控件随页面一起平移（转场时页面横向移出屏幕）
     offsetPx: () -> Offset = { Offset.Zero },
     // 顶栏滚动材质透明度：收起态跟随它渐显渐隐
-    materialAlpha: Float = 1f,
+    materialAlpha: Float = com.linkgrab.app.ui.theme.LocalTopBarMaterialAlpha.current,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val isLightTheme = !isInDarkTheme()

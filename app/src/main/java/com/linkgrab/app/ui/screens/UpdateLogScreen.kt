@@ -24,6 +24,22 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.2.20", "2026-11-02", listOf(
+        "修复桌面图标被系统裁掉边缘的问题",
+        "修复顶部栏滚动后底色过淡的问题",
+    )),
+    UpdateLogItem("3.2.19", "2026-11-02", listOf(
+        "修复底栏玻璃采样包含自身导致的启动闪退",
+    )),
+    UpdateLogItem("3.2.17", "2026-11-02", listOf(
+        "类 HyperOS 二级页面改为从上层覆盖主页面底栏，并移除设置面板外框线",
+    )),
+    UpdateLogItem("3.2.16", "2026-11-02", listOf(
+        "优化类 HyperOS 顶栏的渐进模糊、按钮遮罩与页面退场效果",
+    )),
+    UpdateLogItem("3.2.15", "2026-11-02", listOf(
+        "新增类 iOS / 类 HyperOS 界面主题切换；类 HyperOS 加入分组卡片、页面转场和跟手返回，底栏沿用原样式",
+    )),
     UpdateLogItem("3.2.14", "2026-11-01", listOf(
         "修复部分抖音图文作品被当成视频、没法保存的问题",
     )),

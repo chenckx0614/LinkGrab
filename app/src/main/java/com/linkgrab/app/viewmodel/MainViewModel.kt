@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
@@ -60,6 +61,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _colorMode = MutableStateFlow(0)
     val colorMode: StateFlow<Int> = _colorMode.asStateFlow()
+    private val _visualStyle = MutableStateFlow(0)
+    val visualStyle: StateFlow<Int> = _visualStyle.asStateFlow()
 
     private val _downloadState = MutableStateFlow<DownloadState>(DownloadState.Idle)
     val downloadState: StateFlow<DownloadState> = _downloadState.asStateFlow()
@@ -67,8 +70,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _liveUpdatesEnabled = MutableStateFlow(false)
     val liveUpdatesEnabled: StateFlow<Boolean> = _liveUpdatesEnabled.asStateFlow()
 
-    private val _predictiveBack = MutableStateFlow(0)
-    val predictiveBack: StateFlow<Int> = _predictiveBack.asStateFlow()
 
     private val _bottomBarStyle = MutableStateFlow(0)
     val bottomBarStyle: StateFlow<Int> = _bottomBarStyle.asStateFlow()
@@ -177,7 +178,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.colorMode.collect { _colorMode.value = it }
         }
         viewModelScope.launch {
-            settingsRepository.predictiveBack.collect { _predictiveBack.value = it }
+            settingsRepository.visualStyle.collect { _visualStyle.value = it }
         }
         viewModelScope.launch {
             settingsRepository.liveUpdatesEnabled.collect { _liveUpdatesEnabled.value = it }
@@ -214,6 +215,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             settingsRepository.guideNeeded.collect {
+                // 主题先落到 UI，再撤掉启动遮挡，避免重启时闪一帧默认类 iOS。
+                _visualStyle.value = settingsRepository.visualStyle.first()
+                _colorMode.value = settingsRepository.colorMode.first()
                 // 只在第一次安装（本地无任何记录）时展示欢迎页
                 _guideShown.value = !it
                 _dataLoaded.value = true
@@ -238,8 +242,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsRepository.setColorMode(mode) }
     }
 
-    fun setPredictiveBack(mode: Int) {
-        viewModelScope.launch { settingsRepository.setPredictiveBack(mode) }
+    fun setVisualStyle(style: Int) {
+        viewModelScope.launch { settingsRepository.setVisualStyle(style) }
     }
 
     fun setBottomBarStyle(style: Int) {
