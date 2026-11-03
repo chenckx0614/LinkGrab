@@ -131,6 +131,8 @@ import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
+import com.kyant.capsule.ContinuousCapsule
+import com.kyant.capsule.ContinuousRoundedRectangle
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
 
@@ -291,7 +293,7 @@ fun iosError(): Color = when {
 
 /**
  * 圆角令牌。HyperOS 下一律换成连续曲率（squircle），半径同时收到系统设置的档位；
- * iOS 下保持原来的普通圆角。
+ * iOS 下用 Capsule 的 G2 连续曲率（比 RoundedCornerShape 更接近 iOS 真实圆角）。
  *
  * 写成 composable getter 而不是 val：Shape 要在**创建时**就知道当前主题，
  * `createOutline` 里读不到 CompositionLocal。调用点语法不用改。
@@ -300,28 +302,28 @@ val IOSCornerLarge: Shape
     @Composable get() = when {
         isHyperOsStyle() -> hyperSquircle(26.dp)
         isColorOsStyle() -> couiSquircle(CouiCorners.Large)
-        else -> RoundedCornerShape(32.dp)
+        else -> ContinuousRoundedRectangle(32.dp)
     }
 
 val IOSCornerMedium: Shape
     @Composable get() = when {
         isHyperOsStyle() -> hyperSquircle(20.dp)
         isColorOsStyle() -> couiSquircle(CouiCorners.Card)
-        else -> RoundedCornerShape(24.dp)
+        else -> ContinuousRoundedRectangle(24.dp)
     }
 
 val IOSCornerSmall: Shape
     @Composable get() = when {
         isHyperOsStyle() -> hyperSquircle(16.dp)
         isColorOsStyle() -> couiSquircle(CouiCorners.Small)
-        else -> RoundedCornerShape(16.dp)
+        else -> ContinuousRoundedRectangle(16.dp)
     }
 
 val IOSCornerXSmall: Shape
     @Composable get() = when {
         isHyperOsStyle() -> hyperSquircle(12.dp)
         isColorOsStyle() -> couiSquircle(CouiCorners.XSmall)
-        else -> RoundedCornerShape(12.dp)
+        else -> ContinuousRoundedRectangle(12.dp)
     }
 
 // MARK: - Icon Tokens
@@ -453,7 +455,7 @@ fun IOS26ListRow(
     val rowModifier = if (onClick != null) {
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(12.dp))
+            .clip(ContinuousRoundedRectangle(12.dp))
             .clickable(interactionSource = source, indication = null) {
                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 onClick()
@@ -560,7 +562,7 @@ fun IOS26Button(
                 translationX = drag.translationX
                 translationY = drag.translationY
             }
-            .clip(RoundedCornerShape(buttonCorner))
+            .clip(ContinuousRoundedRectangle(buttonCorner))
             .then(
                 if (backdrop != null) {
                     Modifier.drawBackdrop(
@@ -771,7 +773,7 @@ fun IOS26Choice(
  * 特性动画：① 滑块弹簧位移（NoBouncy / stiffness 987，k 值高、到位干脆不回弹）；
  * ② 按压/拖拽/悬停时滑块放大到 1.127× 的「挤缩」手感；③ 轨道颜色随状态淡变；
  * ④ 支持横向拖拽，拖到阈值翻状态，并在两端触发 ToggleOn/Off 触觉；⑤ 点击翻状态也带
- * ToggleOn/Off 触觉。capsule 用 RoundedCornerShape(50) 等价（项目未引入 kyant capsule 库）。
+ * ToggleOn/Off 触觉。胶囊形用 Capsule 库的 ContinuousCapsule（G2 连续）。
  */
 @Composable
 fun IOS26Switch(
@@ -860,7 +862,7 @@ fun IOS26Switch(
         modifier = modifier
             .wrapContentSize(Alignment.Center)
             .size(trackWidth, trackHeight)
-            .clip(RoundedCornerShape(50))
+            .clip(ContinuousCapsule)
             .drawBehind { drawRect(trackColor) }
             .hoverable(interactionSource = interactionSource, enabled = enabled)
             .then(toggleableModifier),

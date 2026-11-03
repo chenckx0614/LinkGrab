@@ -15,8 +15,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 384
-        versionName = "3.3.5"
+        versionCode = 385
+        versionName = "3.3.6"
     }
 
     // 永久签名：密钥在 app/linkgrab-sign.jks（已 gitignore），密码在 local.properties
@@ -99,6 +99,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("io.github.kyant0:backdrop:2.0.0")
     implementation("io.github.kyant0:shapes:1.2.0")
+    // Capsule = shapes 的升级版：G2 连续曲率可调、支持同心圆角，性能更好
+    implementation("io.github.kyant0:capsule:2.1.3")
 
     // Cronet = Chromium 网络栈（TLS 指纹与真实 Chrome 一致）。
     // 小红书 Shield 会按 TLS 指纹拦截普通 HTTP 客户端，高星项目
