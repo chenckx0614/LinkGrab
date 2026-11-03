@@ -82,6 +82,34 @@ fun LiquidGlassTopBarButton(
     enabled: Boolean = true,
     materialAlpha: Float = com.linkgrab.app.ui.theme.LocalTopBarMaterialAlpha.current,
 ) {
+    // 系统主题不走液态玻璃：HyperOS / ColorOS 的顶栏按钮是「实底圆钮 + 图标」，
+    // 材质、尺寸、按压方式都按各自系统来（见 SystemChrome / *Chrome.kt）。
+    val hyperChrome = com.linkgrab.app.ui.theme.isHyperOsStyle()
+    if (hyperChrome || com.linkgrab.app.ui.theme.isColorOsStyle()) {
+        val chromeStyle = if (hyperChrome) {
+            com.linkgrab.app.ui.hyper.hyperMenuStyle()
+        } else {
+            com.linkgrab.app.ui.coloros.couiMenuStyle()
+        }
+        SystemBarButton(
+            onClick = onClick,
+            style = chromeStyle,
+            modifier = modifier,
+            icon = icon,
+            contentDescription = contentDescription,
+            iconSize = iconSize,
+            tint = when {
+                iconTint != Color.Unspecified -> iconTint
+                darkBackground -> Color.White.copy(alpha = 0.92f)
+                else -> chromeStyle.iconTint
+            },
+            iconOffset = iconOffset,
+            // 深色图上白钮会糊成一片，退回半透明白底
+            backgroundOverride = if (darkBackground) Color.White.copy(alpha = 0.12f) else null,
+            enabled = enabled,
+        )
+        return
+    }
     val animationScope = rememberCoroutineScope()
     val interactiveHighlight = remember(animationScope) {
         InteractiveHighlight(animationScope = animationScope)

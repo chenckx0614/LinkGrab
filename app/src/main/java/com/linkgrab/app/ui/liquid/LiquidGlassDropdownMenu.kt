@@ -66,6 +66,7 @@ import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
 import com.linkgrab.app.ui.theme.isInDarkTheme
 import com.linkgrab.app.ui.theme.isColorOsStyle
+import com.linkgrab.app.ui.theme.isHyperOsStyle
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
@@ -200,6 +201,28 @@ fun LiquidGlassDropdownMenu(
     materialAlpha: Float = com.linkgrab.app.ui.theme.LocalTopBarMaterialAlpha.current,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // 系统主题：按钮常驻、菜单是独立浮层（不是同一块玻璃形变），交互仍可跟手滑选
+    val hyperChrome = isHyperOsStyle()
+    if (hyperChrome || isColorOsStyle()) {
+        SystemDropdownMenu(
+            show = show,
+            style = if (hyperChrome) {
+                com.linkgrab.app.ui.hyper.hyperMenuStyle()
+            } else {
+                com.linkgrab.app.ui.coloros.couiMenuStyle()
+            },
+            modifier = modifier,
+            fraction = fraction,
+            onExpand = onExpand,
+            onDismiss = onDismiss,
+            triggerIcon = triggerIcon,
+            triggerIconSize = triggerIconSize,
+            triggerContentDescription = triggerContentDescription,
+            offsetPx = offsetPx,
+            content = content,
+        )
+        return
+    }
     val isLightTheme = !isInDarkTheme()
     // 基色与顶栏液态玻璃按钮同色：收起态即那颗按钮，形变过程中玻璃不突变。
     // 不透明度分两档：收起态用「按钮档」（42dp 小圆要压得住图标与描边）；
@@ -435,6 +458,22 @@ fun LiquidGlassCircleButton(
     modifier: Modifier = Modifier,
     materialAlpha: Float = 1f,
 ) {
+    val hyperChrome = isHyperOsStyle()
+    if (hyperChrome || isColorOsStyle()) {
+        SystemBarButton(
+            onClick = onClick,
+            style = if (hyperChrome) {
+                com.linkgrab.app.ui.hyper.hyperMenuStyle()
+            } else {
+                com.linkgrab.app.ui.coloros.couiMenuStyle()
+            },
+            modifier = modifier,
+            icon = icon,
+            contentDescription = contentDescription,
+            iconSize = 24.dp,
+        )
+        return
+    }
     val isLightTheme = !isInDarkTheme()
     val containerBase = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242424)
     // HyperOS 页面底是 #F4F4F4，76% 的白几乎同色；收起态用更实的白才看得出圆
@@ -515,6 +554,21 @@ fun LiquidGlassDropdownMenuItem(
     modifier: Modifier = Modifier,
     icon: @Composable (() -> Unit)? = null,
 ) {
+    val hyperChrome = isHyperOsStyle()
+    if (hyperChrome || isColorOsStyle()) {
+        SystemMenuItem(
+            text = text,
+            onClick = onClick,
+            style = if (hyperChrome) {
+                com.linkgrab.app.ui.hyper.hyperMenuStyle()
+            } else {
+                com.linkgrab.app.ui.coloros.couiMenuStyle()
+            },
+            modifier = modifier,
+            icon = icon,
+        )
+        return
+    }
     val isLightTheme = !isInDarkTheme()
     val textColor = if (isLightTheme) Color(0xFF1A1A1A) else Color(0xFFE8E4DE)
 
