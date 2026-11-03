@@ -24,6 +24,9 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.2.27", "2026-11-03", listOf(
+        "HyperOS 主题下设置项之间不再画分割线",
+    )),
     UpdateLogItem("3.2.26", "2026-11-02", listOf(
         "修复抖音链接解析不出来的问题",
         "抖音接口换了字段后不再整批解析失败",

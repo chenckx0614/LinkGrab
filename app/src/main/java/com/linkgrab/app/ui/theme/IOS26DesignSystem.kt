@@ -72,7 +72,6 @@ import com.linkgrab.app.ui.hyper.HyperCard
 import com.linkgrab.app.ui.hyper.HyperRevealCursor
 import com.linkgrab.app.ui.hyper.LocalHyperRevealCursor
 import com.linkgrab.app.ui.hyper.HyperDimens
-import com.linkgrab.app.ui.hyper.HyperDivider
 import com.linkgrab.app.ui.hyper.HyperPrimaryButton
 import com.linkgrab.app.ui.hyper.HyperRow
 import com.linkgrab.app.ui.hyper.HyperSecondaryButton
@@ -925,7 +924,7 @@ fun IOS26IconCapsule(
 @Composable
 fun IOS26Divider(modifier: Modifier = Modifier) {
     if (isHyperOsStyle()) {
-        HyperDivider(modifier)
+        // HyperOS 主题下选项行之间不加分割线，靠行高和留白分隔
     } else {
         androidx.compose.material3.HorizontalDivider(
             modifier = modifier,

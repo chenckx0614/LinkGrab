@@ -306,18 +306,6 @@ fun HyperRow(
     }
 }
 
-/** 卡片内分隔线：miuix HorizontalDivider 厚 0.75dp，左侧从文字起始位置开始。 */
-@Composable
-fun HyperDivider(modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .fillMaxWidth()
-            .padding(start = HyperDimens.RowHorizontal)
-            .height(0.75.dp)
-            .background(hyperDivider()),
-    )
-}
-
 // MARK: - Buttons
 
 /** miuix 主按钮：蓝底白字，连续曲率圆角 16dp，最小高 40dp，17sp Medium。 */
