@@ -1,5 +1,9 @@
 package com.linkgrab.app.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.ExperimentalAnimationSpecApi
@@ -26,6 +30,25 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.linkgrab.app.ui.motion.morphClip
+import com.linkgrab.app.ui.motion.rememberMorphTransition
+import com.linkgrab.app.ui.motion.rememberScreenCornerRadiiPx
+import com.linkgrab.app.ui.theme.IOS26Button
+import com.linkgrab.app.ui.theme.IOS26OutlinedButton
+import com.linkgrab.app.ui.theme.iosBackground
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +64,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -148,6 +172,10 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
     var selectionMode by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf(setOf<Long>()) }
     var pendingDelete by remember { mutableStateOf<List<HistoryItem>?>(null) }
+    // 历史详情浮层：点击卡片 → 详情页从卡片长出来（卡片⇄全屏形变）
+    var detailItem by remember { mutableStateOf<HistoryItem?>(null) }
+    // 每张卡片的窗口坐标（onGloballyPositioned 持续更新），点开时取当前值做形变起点
+    val cardBounds = remember { mutableMapOf<Long, Rect>() }
     // 右上角菜单（液态玻璃容器变换：42dp 圆按钮 ↔ 200dp 面板）
     var showMenu by remember { mutableStateOf(false) }
     val menuFraction = remember { Animatable(0f) }
@@ -429,12 +457,13 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                         item = item,
                         selectionMode = selectionMode,
                         selected = item.id in selected,
+                        onBounds = { cardBounds[item.id] = it },
                         onClick = {
                             if (selectionMode) {
                                 selected = if (item.id in selected) selected - item.id
                                 else selected + item.id
                             } else {
-                                onParseUrl(item.url)
+                                detailItem = item
                             }
                         },
                         onLongClick = {
@@ -450,6 +479,18 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                 }
             }
         }
+        }
+        // 历史详情浮层：放在 IOS26Canvas Box 里（与页面同原点，窗口坐标才对得上）
+        detailItem?.let { item ->
+            HistoryDetailOverlay(
+                item = item,
+                cardBounds = cardBounds[item.id],
+                onClose = { detailItem = null },
+                onParseUrl = {
+                    detailItem = null
+                    onParseUrl(it)
+                },
+            )
         }
     }
 
@@ -473,6 +514,7 @@ private fun HistoryCard(
     item: HistoryItem,
     selectionMode: Boolean,
     selected: Boolean,
+    onBounds: (Rect) -> Unit = {},
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
@@ -497,6 +539,7 @@ private fun HistoryCard(
     Row(
         Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { onBounds(it.boundsInWindow()) }
             .clip(IOSCornerMedium)
             .background(cardBg)
             .border(0.5.dp, cardBorder, IOSCornerMedium)
@@ -661,6 +704,209 @@ private fun IOSDeleteConfirmDialog(
                 onClick = onConfirm,
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+}
+
+/**
+ * 历史详情浮层：从被点的那张卡片长成全屏（卡片⇄全屏形变，fork 自 NexioSchedule 的
+ * MorphTransition），返回时反向收回卡片。
+ */
+@Composable
+private fun HistoryDetailOverlay(
+    item: HistoryItem,
+    cardBounds: Rect?,
+    onClose: () -> Unit,
+    onParseUrl: (String) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val screenW = constraints.maxWidth.toFloat()
+        val screenH = constraints.maxHeight.toFloat()
+        val screenCorner = rememberScreenCornerRadiiPx()
+        val morph = rememberMorphTransition(
+            cardLeft = cardBounds?.left ?: 0f,
+            cardTop = cardBounds?.top ?: 0f,
+            cardWidth = cardBounds?.width ?: 0f,
+            cardHeight = cardBounds?.height ?: 0f,
+            screenWidth = screenW,
+            screenHeight = screenH,
+            screenCornerRadius = screenCorner,
+            startCornerRadiusDp = 24f,
+            onBack = onClose,
+        )
+        // 系统返回键：先播收起形变再关浮层
+        BackHandler { morph.close() }
+
+        val s = morph.state.value
+        // 压暗层：透明度跟随形变进度
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = s.bgAlpha))
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                ) { morph.close() },
+        )
+        // 内容页：跟随形变位移/缩放，绘制期按形变轮廓裁切
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    clip = false
+                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    scaleX = s.scale
+                    scaleY = s.scale
+                    translationX = s.translationX
+                    translationY = s.translationY
+                    alpha = s.contentAlpha
+                }
+                .morphClip(morph)
+                .background(iosBackground()),
+        ) {
+            HistoryDetailContent(
+                item = item,
+                onBack = { morph.close() },
+                onParse = { onParseUrl(item.url) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun HistoryDetailContent(
+    item: HistoryItem,
+    onBack: () -> Unit,
+    onParse: () -> Unit,
+) {
+    val context = LocalContext.current
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    val parseTimeText = remember(item.parseTime) {
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(item.parseTime))
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Box {
+            if (item.cover.isNotBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(item.cover).crossfade(true).build(),
+                    contentDescription = null,
+                    // 原比例展示，禁止拉伸
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .background(iosTertiaryBackground()),
+                )
+            }
+            // 返回钮：盖在封面左上角
+            Box(
+                Modifier
+                    .statusBarsPadding()
+                    .padding(12.dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .clickable { onBack() },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.ChevronLeft,
+                    contentDescription = "返回",
+                    tint = Color.White,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Text(
+                item.title,
+                color = iosLabel(),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.3).sp,
+            )
+            Text(
+                "${platformName(item.platform)} · ${historyTypeName(item.type)} · $parseTimeText" +
+                    if (item.downloaded) " · 已下载" else "",
+                color = iosSecondaryLabel(),
+                modifier = Modifier.padding(top = 8.dp),
+                fontSize = 14.sp,
+            )
+            if (item.author.isNotBlank()) {
+                Text(
+                    item.author,
+                    color = iosSecondaryLabel(),
+                    modifier = Modifier.padding(top = 4.dp),
+                    fontSize = 14.sp,
+                )
+            }
+            // 链接卡片
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+                    .clip(IOSCornerSmall)
+                    .background(iosTertiaryBackground())
+                    .clickable {
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("url", item.url))
+                        Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    item.url,
+                    color = iosSecondaryLabel(),
+                    fontSize = 13.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "复制链接",
+                    tint = iosDisclosureColor(),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            if (item.resultJson.isBlank()) {
+                Text(
+                    "这条记录没有缓存解析结果，重新解析后可获取下载信息",
+                    color = iosSecondaryLabel(),
+                    modifier = Modifier.padding(top = 12.dp),
+                    fontSize = 13.sp,
+                )
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                IOS26Button(
+                    text = "重新解析",
+                    onClick = onParse,
+                    modifier = Modifier.weight(1f),
+                )
+                IOS26OutlinedButton(
+                    text = "复制链接",
+                    onClick = {
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("url", item.url))
+                        Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

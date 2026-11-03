@@ -24,6 +24,10 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.3.8", "2026-11-03", listOf(
+        "历史记录可以点开看详情了",
+        "详情页从卡片位置展开，返回时收回",
+    )),
     UpdateLogItem("3.3.7", "2026-11-03", listOf(
         "类HyperOS主题底栏的边缘有了流光",
     )),
