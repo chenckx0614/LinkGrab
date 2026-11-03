@@ -160,3 +160,24 @@ ColorOS 的实际取值：
 - 聚光跟随手指：原版按触点扩散，这里只做了静态的选中态
 
 **以后要加**：升级到 Kotlin 2.4 + Compose 1.12 后，coui 可以整包替换掉 `ui/coloros/`（Apache-2.0，注意保留版权声明）；COUI-Kit 仍是 MPL-2.0，只能借算法。
+
+---
+
+## 五、3.3.1 追加的效果
+
+`ui/coloros/CouiSpotlight.kt` 把"凝光"里纯 Compose 能做的那几样补齐了：
+
+| Modifier | 做什么 | 参数出处 |
+|---|---|---|
+| `couiTouchLight` | 触点跟手光：按下亮起、跟手移动、松手扩散淡出 | `CouiSpotlight`：intensity 0.6/0.8、endRadius 500/800px、release 用 SpringForce |
+| `couiSheen` | 顶部 62% 高度的白色渐隐，模拟材质受光面 | `CouiMaterial` 的亮度混合降级版 |
+| `couiAmbientGlow` | 页面顶部一圈主色环境光 | 同上 |
+
+配套改动：
+
+- 开关按 coui 尺寸重做（38×24 轨道、18 拇指、内距 3、travel 14），补了拇指投影
+- 下拉弹入换成主菜单弹簧 `spring(0.8, 322.27)`
+- 按钮 = 缩放（`couiPressScale`）+ 触点光 + 高光；列表行 = 叠色 + 触点光（强度 0.5）；卡片 = 高光 + 轮廓光
+
+**仍然没做**：RuntimeShader 亮度混色、caustic 外光晕、自绘投影 Tessellator、metaball。
+这四样都要 API 33+ 的着色器管线，且必须在现有 backdrop 采样链里另开一层，收益只在一两个浮层上。
