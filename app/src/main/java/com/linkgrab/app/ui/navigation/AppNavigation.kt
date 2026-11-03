@@ -490,8 +490,9 @@ fun AppNavigation(
 
     val onMainTabs = currentDestination?.route == Screen.MainTabs.route
     val visualStyle by viewModel.visualStyle.collectAsState()
-    val hyperStyle = visualStyle == 1
-    val hyperStyleProvider = remember(viewModel) { { viewModel.visualStyle.value == 1 } }
+    // 两个系统主题（HyperOS / ColorOS）共用同一套"实底 + 短缓动"的底栏节奏
+    val hyperStyle = visualStyle != 0
+    val hyperStyleProvider = remember(viewModel) { { viewModel.visualStyle.value != 0 } }
 
     // 底栏退场/回归（v2.5.38）：barCover 0(就位)→1(退场)。与页面转场同一
     // 时点（导航提交）开始、同曲线同时长——push 时跟着底层页被推走渐隐，

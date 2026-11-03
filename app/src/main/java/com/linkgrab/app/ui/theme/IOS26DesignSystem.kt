@@ -73,6 +73,23 @@ import com.linkgrab.app.ui.hyper.HyperRevealCursor
 import com.linkgrab.app.ui.hyper.LocalHyperRevealCursor
 import com.linkgrab.app.ui.hyper.HyperDimens
 import com.linkgrab.app.ui.hyper.HyperPrimaryButton
+import com.linkgrab.app.ui.coloros.CouiCorners
+import com.linkgrab.app.ui.coloros.CouiCard
+import com.linkgrab.app.ui.coloros.CouiDimens
+import com.linkgrab.app.ui.coloros.CouiPrimaryButton
+import com.linkgrab.app.ui.coloros.CouiRow
+import com.linkgrab.app.ui.coloros.CouiSecondaryButton
+import com.linkgrab.app.ui.coloros.CouiSectionTitle
+import com.linkgrab.app.ui.coloros.couiBackground
+import com.linkgrab.app.ui.coloros.couiDivider
+import com.linkgrab.app.ui.coloros.couiError
+import com.linkgrab.app.ui.coloros.couiPrimary
+import com.linkgrab.app.ui.coloros.couiSquircle
+import com.linkgrab.app.ui.coloros.couiSummary
+import com.linkgrab.app.ui.coloros.couiSurface
+import com.linkgrab.app.ui.coloros.couiSurfaceVariant
+import com.linkgrab.app.ui.coloros.couiTertiary
+import com.linkgrab.app.ui.coloros.couiTitle
 import com.linkgrab.app.ui.hyper.HyperRow
 import com.linkgrab.app.ui.hyper.HyperSecondaryButton
 import com.linkgrab.app.ui.hyper.HyperSectionTitle
@@ -177,56 +194,99 @@ val IOSGlassStrokeDark = Color.White.copy(alpha = 0.10f)
 // MARK: - Theme Helpers
 
 @Composable
-fun iosBlue(): Color = if (isHyperOsStyle()) hyperPrimary()
-else if (isInDarkTheme()) IOSBlueDark else IOSBlue
+fun iosBlue(): Color = when {
+    isHyperOsStyle() -> hyperPrimary()
+    isColorOsStyle() -> couiPrimary()
+    isInDarkTheme() -> IOSBlueDark
+    else -> IOSBlue
+}
 
 @Composable
-fun iosBackground(): Color = if (isHyperOsStyle()) hyperBackground()
-else if (isInDarkTheme()) IOSBackgroundDark else IOSBackgroundLight
+fun iosBackground(): Color = when {
+    isHyperOsStyle() -> hyperBackground()
+    isColorOsStyle() -> couiBackground()
+    isInDarkTheme() -> IOSBackgroundDark
+    else -> IOSBackgroundLight
+}
 
 @Composable
-fun iosGroupedBackground(): Color = if (isHyperOsStyle()) hyperBackground()
-else if (isInDarkTheme()) IOSGroupedBackgroundDark else IOSGroupedBackgroundLight
+fun iosGroupedBackground(): Color = when {
+    isHyperOsStyle() -> hyperBackground()
+    isColorOsStyle() -> couiBackground()
+    isInDarkTheme() -> IOSGroupedBackgroundDark
+    else -> IOSGroupedBackgroundLight
+}
 
 @Composable
-fun iosSecondaryBackground(): Color = if (isHyperOsStyle()) hyperSurfaceVariant()
-else if (isInDarkTheme()) IOSSecondaryBackgroundDark else IOSSecondaryBackgroundLight
+fun iosSecondaryBackground(): Color = when {
+    isHyperOsStyle() -> hyperSurfaceVariant()
+    isColorOsStyle() -> couiSurfaceVariant()
+    isInDarkTheme() -> IOSSecondaryBackgroundDark
+    else -> IOSSecondaryBackgroundLight
+}
 
 @Composable
-fun iosTertiaryBackground(): Color = if (isHyperOsStyle()) hyperSurfaceVariant()
-else if (isInDarkTheme()) IOSTertiaryBackgroundDark else IOSTertiaryBackgroundLight
+fun iosTertiaryBackground(): Color = when {
+    isHyperOsStyle() -> hyperSurfaceVariant()
+    isColorOsStyle() -> couiSurfaceVariant()
+    isInDarkTheme() -> IOSTertiaryBackgroundDark
+    else -> IOSTertiaryBackgroundLight
+}
 
 @Composable
-fun iosLabel(): Color = if (isHyperOsStyle()) hyperTitle()
-else if (isInDarkTheme()) IOSLabelDark else IOSLabelLight
+fun iosLabel(): Color = when {
+    isHyperOsStyle() -> hyperTitle()
+    isColorOsStyle() -> couiTitle()
+    isInDarkTheme() -> IOSLabelDark
+    else -> IOSLabelLight
+}
 
 @Composable
-fun iosSecondaryLabel(): Color = if (isHyperOsStyle()) hyperSummary()
-else if (isInDarkTheme()) IOSSecondaryLabelDark else IOSSecondaryLabelLight
+fun iosSecondaryLabel(): Color = when {
+    isHyperOsStyle() -> hyperSummary()
+    isColorOsStyle() -> couiSummary()
+    isInDarkTheme() -> IOSSecondaryLabelDark
+    else -> IOSSecondaryLabelLight
+}
 
 @Composable
-fun iosTertiaryLabel(): Color = if (isHyperOsStyle()) {
+fun iosTertiaryLabel(): Color = when {
     // miuix onSurfaceContainerVariant
-    if (isInDarkTheme()) Color(0xFF737373) else Color(0xFF959595)
-} else if (isInDarkTheme()) IOSTertiaryLabelDark else IOSTertiaryLabelLight
+    isHyperOsStyle() -> if (isInDarkTheme()) Color(0xFF737373) else Color(0xFF959595)
+    isColorOsStyle() -> couiTertiary()
+    isInDarkTheme() -> IOSTertiaryLabelDark
+    else -> IOSTertiaryLabelLight
+}
 
 @Composable
-fun iosSeparator(): Color = if (isHyperOsStyle()) hyperDivider()
-else if (isInDarkTheme()) IOSSeparatorDark else IOSSeparatorLight
+fun iosSeparator(): Color = when {
+    isHyperOsStyle() -> hyperDivider()
+    isColorOsStyle() -> couiDivider()
+    isInDarkTheme() -> IOSSeparatorDark
+    else -> IOSSeparatorLight
+}
 
 @Composable
-fun iosGlass(): Color = if (isHyperOsStyle()) hyperSurface()
-else if (isInDarkTheme()) IOSGlassDark else IOSGlassLight
+fun iosGlass(): Color = when {
+    isHyperOsStyle() -> hyperSurface()
+    isColorOsStyle() -> couiSurface()
+    isInDarkTheme() -> IOSGlassDark
+    else -> IOSGlassLight
+}
 
 @Composable
 // HyperOS 的卡片没有描边（miuix Card 只有填充）。这里返回透明，
 // 调用点上的 border() 自然什么都不画，不必逐个页面去删。
-fun iosGlassStroke(): Color = if (isHyperOsStyle()) Color.Transparent
+fun iosGlassStroke(): Color = if (isSystemStyle()) Color.Transparent
 else if (isInDarkTheme()) IOSGlassStrokeDark else IOSGlassStrokeLight
 
 @Composable
-fun iosError(): Color = if (isHyperOsStyle()) hyperError()
-else if (isInDarkTheme()) IOSRedDark else IOSRed
+fun iosError(): Color = when {
+    isHyperOsStyle() -> hyperError()
+    isColorOsStyle() -> couiError()
+    isInDarkTheme() -> IOSRedDark
+    else -> IOSRed
+}
 
 // MARK: - Shape Tokens
 
@@ -238,16 +298,32 @@ else if (isInDarkTheme()) IOSRedDark else IOSRed
  * `createOutline` 里读不到 CompositionLocal。调用点语法不用改。
  */
 val IOSCornerLarge: Shape
-    @Composable get() = if (isHyperOsStyle()) hyperSquircle(26.dp) else RoundedCornerShape(32.dp)
+    @Composable get() = when {
+        isHyperOsStyle() -> hyperSquircle(26.dp)
+        isColorOsStyle() -> couiSquircle(CouiCorners.Large)
+        else -> RoundedCornerShape(32.dp)
+    }
 
 val IOSCornerMedium: Shape
-    @Composable get() = if (isHyperOsStyle()) hyperSquircle(20.dp) else RoundedCornerShape(24.dp)
+    @Composable get() = when {
+        isHyperOsStyle() -> hyperSquircle(20.dp)
+        isColorOsStyle() -> couiSquircle(CouiCorners.Card)
+        else -> RoundedCornerShape(24.dp)
+    }
 
 val IOSCornerSmall: Shape
-    @Composable get() = if (isHyperOsStyle()) hyperSquircle(16.dp) else RoundedCornerShape(16.dp)
+    @Composable get() = when {
+        isHyperOsStyle() -> hyperSquircle(16.dp)
+        isColorOsStyle() -> couiSquircle(CouiCorners.Small)
+        else -> RoundedCornerShape(16.dp)
+    }
 
 val IOSCornerXSmall: Shape
-    @Composable get() = if (isHyperOsStyle()) hyperSquircle(12.dp) else RoundedCornerShape(12.dp)
+    @Composable get() = when {
+        isHyperOsStyle() -> hyperSquircle(12.dp)
+        isColorOsStyle() -> couiSquircle(CouiCorners.XSmall)
+        else -> RoundedCornerShape(12.dp)
+    }
 
 // MARK: - Icon Tokens
 
@@ -289,7 +365,7 @@ fun iosDisclosureColor(): Color = iosSecondaryLabel()
 fun IOS26Canvas(content: @Composable () -> Unit) {
     val bg = iosBackground()
     Box(
-        modifier = if (isHyperOsStyle()) Modifier.background(bg) else Modifier.background(
+        modifier = if (isSystemStyle()) Modifier.background(bg) else Modifier.background(
             Brush.verticalGradient(listOf(bg, bg, bg.copy(alpha = 0.98f)))
         ),
         content = { content() },
@@ -303,6 +379,13 @@ fun IOS26Panel(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (isColorOsStyle()) {
+        // ColorOS：超椭圆 12dp 白卡，深色下是半透明白 + 顶边高光，内边距 16dp。
+        CouiCard(modifier = modifier) {
+            Column(Modifier.padding(CouiDimens.CardInner), content = content)
+        }
+        return
+    }
     if (isHyperOsStyle()) {
         // HyperOS：miuix Card，连续曲率 20dp、无描边、内边距 16dp。
         // 入场名额只在页面首屏发放（见 HyperRevealCursor），滚回来的卡片不重播。
@@ -346,6 +429,17 @@ fun IOS26ListRow(
     onClick: (() -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
+    if (isColorOsStyle()) {
+        // ColorOS：coui 行（最小 48dp、标题 17sp Medium、摘要 14sp、四边 16/10）
+        CouiRow(
+            title = title,
+            subtitle = subtitle,
+            modifier = modifier,
+            onClick = onClick,
+            trailing = trailing,
+        )
+        return
+    }
     if (isHyperOsStyle()) {
         // HyperOS：miuix 偏好行（最小 56dp、标题 17sp、摘要 14sp、四边 16dp）
         HyperRow(
@@ -418,6 +512,11 @@ fun IOS26Button(
     enabled: Boolean = true,
     backdrop: Backdrop? = null,
 ) {
+    if (isColorOsStyle()) {
+        // ColorOS：coui 主按钮（蓝底白字、高 44dp 胶囊、按面积缩放）
+        CouiPrimaryButton(text, onClick, modifier, enabled)
+        return
+    }
     if (isHyperOsStyle()) {
         // HyperOS：miuix 主按钮（蓝底白字、圆角 16dp、最小高 40dp）
         HyperPrimaryButton(text, onClick, modifier, enabled)
@@ -516,6 +615,10 @@ fun IOS26OutlinedButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    if (isColorOsStyle()) {
+        CouiSecondaryButton(text, onClick, modifier, enabled)
+        return
+    }
     if (isHyperOsStyle()) {
         HyperSecondaryButton(text, onClick, modifier, enabled)
         return
@@ -701,6 +804,7 @@ fun IOS26Switch(
     // miuix 的开关弹簧带一点点回弹（0.7 / 0.6），iOS 那边是不回弹。
     // 这是 fork 相对上游改过的地方之一，两个主题各自保留自己的手感。
     val hyperSwitch = isHyperOsStyle()
+    val colorSwitch = isColorOsStyle()
     val thumbOffsetSpring = remember(hyperSwitch) {
         spring<Dp>(dampingRatio = if (hyperSwitch) 0.7f else Spring.DampingRatioNoBouncy, stiffness = 987f)
     }
@@ -722,8 +826,10 @@ fun IOS26Switch(
             if (enabled) iosBlue() else iosBlue().copy(alpha = 0.4f)
         } else {
             if (enabled) {
-                // miuix 关态轨道：暗 #424242 / 亮 #ECECEC
-                if (hyperSwitch) {
+                // miuix 关态轨道：暗 #424242 / 亮 #ECECEC；coui 用 secondary #757575 / #E5E5E5
+                if (colorSwitch) {
+                    if (isInDarkTheme()) Color(0xFF757575) else Color(0xFFE5E5E5)
+                } else if (hyperSwitch) {
                     if (isInDarkTheme()) Color(0xFF424242) else Color(0xFFECECEC)
                 } else if (isInDarkTheme()) {
                     Color(0xFF48484A)
@@ -823,24 +929,33 @@ fun IOS26Switch(
 
 /** 卡片内标题：iOS 20sp SemiBold；HyperOS 16sp Medium（miuix 卡片内不放大标题）。 */
 @Composable
-fun iosCardTitleSize(): androidx.compose.ui.unit.TextUnit = if (isHyperOsStyle()) 16.sp else 20.sp
+fun iosCardTitleSize(): androidx.compose.ui.unit.TextUnit = when {
+    isHyperOsStyle() -> 16.sp
+    isColorOsStyle() -> 17.sp
+    else -> 20.sp
+}
 
 @Composable
-fun iosCardTitleWeight(): FontWeight = if (isHyperOsStyle()) FontWeight.Medium else FontWeight.SemiBold
+fun iosCardTitleWeight(): FontWeight = if (isSystemStyle()) FontWeight.Medium else FontWeight.SemiBold
 
 // MARK: - Typography
 
 @Composable
 fun IOS26LargeTitle(title: String, subtitle: String? = null) {
-    val hyper = isHyperOsStyle()
+    // miuix 大标题 30sp Normal；coui Title1 32sp Normal；iOS 34sp Bold
+    val titleSize = when {
+        isHyperOsStyle() -> 30.sp
+        isColorOsStyle() -> 32.sp
+        else -> 34.sp
+    }
+    val titleWeight = if (isSystemStyle()) FontWeight.Normal else FontWeight.Bold
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             title,
-            // miuix CollapsibleTopAppBar 的大标题：30sp Normal（iOS 是 34sp Bold）
-            fontSize = if (hyper) 30.sp else 34.sp,
-            fontWeight = if (hyper) FontWeight.Normal else FontWeight.Bold,
+            fontSize = titleSize,
+            fontWeight = titleWeight,
             color = iosLabel(),
-            letterSpacing = (if (hyper) 0.0 else -0.8).sp,
+            letterSpacing = (if (isSystemStyle()) 0.0 else -0.8).sp,
         )
         subtitle?.let {
             Text(
@@ -862,6 +977,20 @@ fun IOS26PageHeader(title: String, subtitle: String? = null, topPadding: android
 
 @Composable
 fun IOS26SectionHeader(title: String, subtitle: String? = null) {
+    if (isColorOsStyle()) {
+        Column {
+            CouiSectionTitle(title)
+            subtitle?.let {
+                Text(
+                    it,
+                    fontSize = 13.sp,
+                    color = couiSummary(),
+                    modifier = Modifier.padding(start = 12.dp, bottom = 6.dp),
+                )
+            }
+        }
+        return
+    }
     if (isHyperOsStyle()) {
         Column {
             HyperSectionTitle(title)
@@ -923,8 +1052,8 @@ fun IOS26IconCapsule(
 
 @Composable
 fun IOS26Divider(modifier: Modifier = Modifier) {
-    if (isHyperOsStyle()) {
-        // HyperOS 主题下选项行之间不加分割线，靠行高和留白分隔
+    if (isSystemStyle()) {
+        // 两个系统主题下选项行之间都不加分割线，靠行高和留白分隔
     } else {
         androidx.compose.material3.HorizontalDivider(
             modifier = modifier,
@@ -1070,7 +1199,7 @@ fun IOS26BlurHeader(
                 .fillMaxWidth()
                 .padding(top = topInset)
                 .height(IOS26HeaderHeight)
-                .padding(horizontal = if (isHyperOsStyle()) 16.dp else 20.dp),
+                .padding(horizontal = if (isSystemStyle()) 16.dp else 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
@@ -1080,10 +1209,15 @@ fun IOS26BlurHeader(
             Text(
                 title,
                 // miuix 折叠后的小标题是 19sp Medium（不是 title3 的 20sp）
-                fontSize = if (isHyperOsStyle()) 19.sp else 17.sp,
-                fontWeight = if (isHyperOsStyle()) FontWeight.Medium else FontWeight.SemiBold,
+                // miuix 折叠标题 19sp Medium；coui TopAppBar 用 Title3 20sp Medium
+                fontSize = when {
+                    isHyperOsStyle() -> 19.sp
+                    isColorOsStyle() -> 20.sp
+                    else -> 17.sp
+                },
+                fontWeight = if (isSystemStyle()) FontWeight.Medium else FontWeight.SemiBold,
                 color = titleColor,
-                letterSpacing = if (isHyperOsStyle()) 0.sp else (-0.2).sp,
+                letterSpacing = if (isSystemStyle()) 0.sp else (-0.2).sp,
                 maxLines = 1,
                 modifier = Modifier
                     .weight(1f)
@@ -1182,13 +1316,24 @@ fun IOS26StickyPage(
                     modifier = Modifier
                         .fillMaxSize()
                         .then(if (applyImePadding) Modifier.imePadding() else Modifier)
-                        .padding(horizontal = if (isHyperOsStyle()) HyperDimens.PageHorizontal else 20.dp),
+                        .padding(
+                            horizontal = when {
+                                isHyperOsStyle() -> HyperDimens.PageHorizontal
+                                isColorOsStyle() -> CouiDimens.PageHorizontal
+                                else -> 20.dp
+                            },
+                        ),
                     verticalArrangement = Arrangement.spacedBy(
-                        if (isHyperOsStyle()) spacedBy.coerceAtMost(12.dp) else spacedBy,
+                        if (isHyperOsStyle()) spacedBy.coerceAtMost(12.dp)
+                        else if (isColorOsStyle()) spacedBy.coerceAtMost(10.dp)
+                        else spacedBy,
                     ),
                     contentPadding = PaddingValues(
-                        top = topInset + (if (isHyperOsStyle()) HyperDimens.TopBarHeight else IOS26HeaderHeight) +
-                            if (isHyperOsStyle()) 8.dp else 10.dp,
+                        top = topInset + when {
+                            isHyperOsStyle() -> HyperDimens.TopBarHeight + 8.dp
+                            isColorOsStyle() -> CouiDimens.TopBarHeight + 8.dp
+                            else -> IOS26HeaderHeight + 10.dp
+                        },
                         bottom = bottomSpacing,
                     ),
                     content = content,

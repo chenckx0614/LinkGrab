@@ -15,6 +15,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -164,6 +166,10 @@ fun Modifier.dropdownPanelEntry(
     val selected = state != null && state.selected === entry
     // drawBehind 的 lambda 不是 @Composable，主题色必须在这里取好再传进去
     val highlightColor = dropdownPanelEntryHighlightColor(isInDarkTheme())
+    // ColorOS：命中项不铺满底色，改成从左侧散开的聚光（凝光视效的菜单态）
+    val colorOs = com.linkgrab.app.ui.theme.isColorOsStyle()
+    val spotlightColor = com.linkgrab.app.ui.coloros.couiPrimary()
+        .copy(alpha = if (isInDarkTheme()) 0.22f else 0.14f)
     this
         .onGloballyPositioned {
             // boundsInRoot 不含 graphicsLayer 变换，面板与项都取 root 坐标再作差
@@ -171,6 +177,17 @@ fun Modifier.dropdownPanelEntry(
             state?.updateBounds(entry, top, top + it.size.height)
         }
         .drawBehind {
-            if (selected) drawRect(highlightColor)
+            if (!selected) return@drawBehind
+            if (colorOs) {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(spotlightColor, spotlightColor.copy(alpha = 0f)),
+                        center = Offset(size.width * 0.28f, size.height * 0.5f),
+                        radius = size.width * 0.75f,
+                    ),
+                )
+            } else {
+                drawRect(highlightColor)
+            }
         }
 }
