@@ -180,43 +180,18 @@ object HyperDimens {
 fun HyperCard(
     modifier: Modifier = Modifier,
     corner: Dp = HyperDimens.CardCorner,
-    reveal: Boolean = false,
-    revealIndex: Int = 0,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // miuix 的 Card 就是一块连续曲率的纯色面：没有描边、没有投影。
     // 卡片和页面底色差本身就是分层，描边反而是 HyperOS 里不存在的东西。
     val shape = hyperSquircle(corner)
-    val revealState = rememberHyperRevealState(index = revealIndex, enabled = reveal)
     Column(
         modifier = modifier
-            .hyperRevealLayer(revealState)
             .clip(shape)
             .background(hyperSurface()),
         content = content,
     )
 }
-
-/**
- * 卡片入场的名额游标：一页只让前 [HyperRevealBudget] 张卡播入场。
- *
- * 为什么要有名额：`LazyColumn` 滚出屏幕的条目会被销毁，滚回来重新组合就会重播
- * 一次入场，整屏反复闪。限制名额后，只有页面刚进来那几张浮上来，后面滚动到的
- * 卡片直接呈现。
- */
-class HyperRevealCursor {
-    internal var next = 0
-
-    /** 取下一个名额；超出预算返回 -1（表示不播）。 */
-    internal fun take(): Int {
-        if (next >= HyperRevealBudget) return -1
-        return next++
-    }
-}
-
-private const val HyperRevealBudget = 8
-
-val LocalHyperRevealCursor = staticCompositionLocalOf<HyperRevealCursor?> { null }
 
 // MARK: - Section title
 

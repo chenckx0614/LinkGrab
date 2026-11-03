@@ -65,6 +65,7 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
 import com.linkgrab.app.ui.theme.isInDarkTheme
+import com.linkgrab.app.ui.theme.isColorOsStyle
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
@@ -230,19 +231,24 @@ fun LiquidGlassDropdownMenu(
         )
     }
 
-    LaunchedEffect(show) {
+    // ColorOS 的下拉是独立浮层，用自家主菜单那组弹簧（response 0.35 / bounce 0.2），
+    // 比液态玻璃那套更"脆"，弹到位就停。
+    val couiMenu = isColorOsStyle()
+    LaunchedEffect(show, couiMenu) {
         if (show) {
             hasOpened = true
             launch {
                 fraction.animateTo(
                     1f,
-                    spring(dampingRatio = 0.77f, stiffness = 220f, visibilityThreshold = 0.0001f),
+                    if (couiMenu) spring(dampingRatio = 0.8f, stiffness = 322.27f, visibilityThreshold = 0.0001f)
+                    else spring(dampingRatio = 0.77f, stiffness = 220f, visibilityThreshold = 0.0001f),
                 )
             }
             launch {
                 originProgress.animateTo(
                     1f,
-                    spring(dampingRatio = 0.77f, stiffness = 420f, visibilityThreshold = 0.0001f),
+                    if (couiMenu) spring(dampingRatio = 0.8f, stiffness = 322.27f, visibilityThreshold = 0.0001f)
+                    else spring(dampingRatio = 0.77f, stiffness = 420f, visibilityThreshold = 0.0001f),
                 )
             }
             settleBounce.snapTo(1f)

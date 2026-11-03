@@ -24,6 +24,11 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.3.1", "2026-11-03", listOf(
+        "去掉 HyperOS 主题里卡片逐个浮起的动效",
+        "修复类 ColorOS 主题切换后不生效",
+        "类 ColorOS 的按钮和列表行按下时触点会亮起来",
+    )),
     UpdateLogItem("3.3.0", "2026-11-03", listOf(
         "新增类 ColorOS 界面主题，外观里可以切",
         "类 ColorOS 的列表行是按下变色，按钮是按下缩放",

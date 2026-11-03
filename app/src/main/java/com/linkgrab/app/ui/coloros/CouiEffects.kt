@@ -1,6 +1,7 @@
 package com.linkgrab.app.ui.coloros
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -50,4 +51,24 @@ internal fun Outline.toPath(): Path = when (this) {
     is Outline.Generic -> path
     is Outline.Rounded -> Path().apply { addRoundRect(roundRect) }
     is Outline.Rectangle -> Path().apply { addRect(rect) }
+}
+
+/**
+ * 凝光环境光：页面顶部落一层极淡的主色，越往下越散。
+ *
+ * ColorOS 的界面不是纯平色块，顶部总有一点"光从上面打下来"的感觉。
+ * 亮度压得很低（暗 10% / 亮 6%），只在大面积留白和卡片边缘看得出来。
+ *
+ * 用法：接在页面底色之后、内容之前——`background(color).couiAmbientGlow(dark)`。
+ */
+fun Modifier.couiAmbientGlow(dark: Boolean): Modifier = drawBehind {
+    val tint = if (dark) Color(0xFF247CFF) else Color(0xFF0066FF)
+    val alpha = if (dark) 0.10f else 0.06f
+    drawRect(
+        brush = Brush.radialGradient(
+            colors = listOf(tint.copy(alpha = alpha), Color.Transparent),
+            center = Offset(size.width * 0.5f, -size.height * 0.08f),
+            radius = size.width * 1.15f,
+        ),
+    )
 }

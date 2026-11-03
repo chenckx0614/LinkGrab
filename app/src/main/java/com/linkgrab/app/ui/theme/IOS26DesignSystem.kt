@@ -69,8 +69,6 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import com.linkgrab.app.ui.hyper.HyperCard
-import com.linkgrab.app.ui.hyper.HyperRevealCursor
-import com.linkgrab.app.ui.hyper.LocalHyperRevealCursor
 import com.linkgrab.app.ui.hyper.HyperDimens
 import com.linkgrab.app.ui.hyper.HyperPrimaryButton
 import com.linkgrab.app.ui.coloros.CouiCorners
@@ -80,6 +78,7 @@ import com.linkgrab.app.ui.coloros.CouiPrimaryButton
 import com.linkgrab.app.ui.coloros.CouiRow
 import com.linkgrab.app.ui.coloros.CouiSecondaryButton
 import com.linkgrab.app.ui.coloros.CouiSectionTitle
+import com.linkgrab.app.ui.coloros.couiAmbientGlow
 import com.linkgrab.app.ui.coloros.couiBackground
 import com.linkgrab.app.ui.coloros.couiDivider
 import com.linkgrab.app.ui.coloros.couiError
@@ -388,15 +387,7 @@ fun IOS26Panel(
     }
     if (isHyperOsStyle()) {
         // HyperOS：miuix Card，连续曲率 20dp、无描边、内边距 16dp。
-        // 入场名额只在页面首屏发放（见 HyperRevealCursor），滚回来的卡片不重播。
-        val cursor = LocalHyperRevealCursor.current
-        // remember 保证重组不会重复领名额
-        val slot = remember(cursor) { cursor?.take() ?: -1 }
-        HyperCard(
-            modifier = modifier,
-            reveal = slot >= 0,
-            revealIndex = if (slot >= 0) slot else 0,
-        ) {
+        HyperCard(modifier = modifier) {
             Column(Modifier.padding(16.dp), content = content)
         }
         return
@@ -812,8 +803,17 @@ fun IOS26Switch(
         spring<Float>(dampingRatio = if (hyperSwitch) 0.6f else Spring.DampingRatioNoBouncy, stiffness = 987f)
     }
 
+    // coui 的开关比 iOS 小一圈：轨道 38×24、拇指 18、内边距 3（travel 14）；
+    // iOS 是 49×28、拇指 20、4 / 25（travel 21）。HyperOS 沿用 iOS 尺寸。
+    val trackWidth = if (colorSwitch) 38.dp else 49.dp
+    val trackHeight = if (colorSwitch) 24.dp else 28.dp
+    val thumbSize = if (colorSwitch) 18.dp else 20.dp
+    val thumbStart = if (colorSwitch) 3.dp else 4.dp
+    val thumbEnd = if (colorSwitch) 17.dp else 25.dp
+    val travel = if (colorSwitch) 14f else 21f
+
     val thumbOffset by animateDpAsState(
-        targetValue = (if (checked) 25.dp else 4.dp) + dragOffset.dp,
+        targetValue = (if (checked) thumbEnd else thumbStart) + dragOffset.dp,
         animationSpec = thumbOffsetSpring,
     )
     val thumbScale by animateFloatAsState(
@@ -859,7 +859,7 @@ fun IOS26Switch(
     Box(
         modifier = modifier
             .wrapContentSize(Alignment.Center)
-            .size(49.dp, 28.dp)
+            .size(trackWidth, trackHeight)
             .clip(RoundedCornerShape(50))
             .drawBehind { drawRect(trackColor) }
             .hoverable(interactionSource = interactionSource, enabled = enabled)
@@ -867,11 +867,21 @@ fun IOS26Switch(
     ) {
         Box(
             Modifier
-                .size(20.dp)
+                .size(thumbSize)
                 .align(Alignment.CenterStart)
                 .offset { IntOffset(thumbOffset.roundToPx(), 0) }
                 .graphicsLayer { scaleX = thumbScale; scaleY = thumbScale }
-                .drawBehind { drawCircle(thumbColor) }
+                .drawBehind {
+                    // coui 的拇指带一枚很浅的投影（#19000000、下移 1dp），没有它深色下是贴纸
+                    if (colorSwitch) {
+                        drawCircle(
+                            color = Color.Black.copy(alpha = 0.10f),
+                            radius = size.minDimension / 2f,
+                            center = center.copy(y = center.y + 1.dp.toPx() * 0.6f),
+                        )
+                    }
+                    drawCircle(thumbColor)
+                }
                 .then(
                     if (enabled) {
                         Modifier.draggable(
@@ -879,20 +889,21 @@ fun IOS26Switch(
                             state = rememberDraggableState { dragAmount ->
                                 rawDragOffset += dragAmount / 2f
                                 dragOffset = if (checked) {
-                                    rawDragOffset.coerceIn(-21f, 0f)
+                                    rawDragOffset.coerceIn(-travel, 0f)
                                 } else {
-                                    rawDragOffset.coerceIn(0f, 21f)
+                                    rawDragOffset.coerceIn(0f, travel)
                                 }
-                                if (dragOffset in -11f..-10f || dragOffset in 10f..11f) {
+                                val half = travel / 2f
+                                if (dragOffset in (-half - 1f)..(-half) || dragOffset in half..(half + 1f)) {
                                     hasVibratedOnce = false
-                                } else if (dragOffset in -20f..-1f || dragOffset in 1f..20f) {
+                                } else if (dragOffset in (-travel + 1f)..(-1f) || dragOffset in 1f..(travel - 1f)) {
                                     hasVibrated = false
                                 } else if (!hasVibrated) {
-                                    if ((checked && dragOffset == -21f) || (!checked && dragOffset == 0f)) {
+                                    if ((checked && dragOffset == -travel) || (!checked && dragOffset == 0f)) {
                                         hapticFeedback.performHapticFeedback(HapticFeedbackType.ToggleOff)
                                         hasVibrated = true
                                         hasVibratedOnce = true
-                                    } else if ((checked && dragOffset == 0f) || (!checked && dragOffset == 21f)) {
+                                    } else if ((checked && dragOffset == 0f) || (!checked && dragOffset == travel)) {
                                         hapticFeedback.performHapticFeedback(HapticFeedbackType.ToggleOn)
                                         hasVibrated = true
                                         hasVibratedOnce = true
@@ -906,11 +917,12 @@ fun IOS26Switch(
                                 rawDragOffset = 0f
                             },
                             onDragStopped = {
-                                if (dragOffset.absoluteValue > 21f / 2f) onCheckedChange(!checked)
+                                val half = travel / 2f
+                                if (dragOffset.absoluteValue > half) onCheckedChange(!checked)
                                 if (!hasVibratedOnce && dragOffset.absoluteValue >= 1f) {
-                                    if ((checked && dragOffset <= -11f) || (!checked && dragOffset <= 10f)) {
+                                    if ((checked && dragOffset <= -half) || (!checked && dragOffset <= half - 1f)) {
                                         hapticFeedback.performHapticFeedback(HapticFeedbackType.ToggleOff)
-                                    } else if ((checked && dragOffset >= -10f) || (!checked && dragOffset >= 11f)) {
+                                    } else if ((checked && dragOffset >= -half + 1f) || (!checked && dragOffset >= half)) {
                                         hapticFeedback.performHapticFeedback(HapticFeedbackType.ToggleOn)
                                     }
                                 }
@@ -1295,8 +1307,6 @@ fun IOS26StickyPage(
     val backdrop = rememberLayerBackdrop()
     val layerActive = rememberBackdropLayerActive(scrolled || recordBackdrop)
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    // 每次进入页面重置入场名额，卡片才会重新「浮上来」
-    val revealCursor = remember { HyperRevealCursor() }
     Box(modifier.fillMaxSize()) {
         // 内容层：页面底色 + 列表一起录进 backdrop。
         // 底色必须在录制层**内部**——列表顶部那段 contentPadding 在层里是
@@ -1308,37 +1318,37 @@ fun IOS26StickyPage(
                 .fillMaxSize()
                 .then(if (layerActive) Modifier.layerBackdrop(backdrop) else Modifier)
                 .then(if (contentBackdrop != null) Modifier.layerBackdrop(contentBackdrop) else Modifier)
-                .background(iosBackground()),
+                .background(iosBackground())
+                // ColorOS：顶部落一层极淡的主色环境光
+                .then(if (isColorOsStyle()) Modifier.couiAmbientGlow(isInDarkTheme()) else Modifier),
         ) {
-            CompositionLocalProvider(LocalHyperRevealCursor provides revealCursor) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(if (applyImePadding) Modifier.imePadding() else Modifier)
-                        .padding(
-                            horizontal = when {
-                                isHyperOsStyle() -> HyperDimens.PageHorizontal
-                                isColorOsStyle() -> CouiDimens.PageHorizontal
-                                else -> 20.dp
-                            },
-                        ),
-                    verticalArrangement = Arrangement.spacedBy(
-                        if (isHyperOsStyle()) spacedBy.coerceAtMost(12.dp)
-                        else if (isColorOsStyle()) spacedBy.coerceAtMost(10.dp)
-                        else spacedBy,
-                    ),
-                    contentPadding = PaddingValues(
-                        top = topInset + when {
-                            isHyperOsStyle() -> HyperDimens.TopBarHeight + 8.dp
-                            isColorOsStyle() -> CouiDimens.TopBarHeight + 8.dp
-                            else -> IOS26HeaderHeight + 10.dp
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (applyImePadding) Modifier.imePadding() else Modifier)
+                    .padding(
+                        horizontal = when {
+                            isHyperOsStyle() -> HyperDimens.PageHorizontal
+                            isColorOsStyle() -> CouiDimens.PageHorizontal
+                            else -> 20.dp
                         },
-                        bottom = bottomSpacing,
                     ),
-                    content = content,
-                )
-            }
+                verticalArrangement = Arrangement.spacedBy(
+                    if (isHyperOsStyle()) spacedBy.coerceAtMost(12.dp)
+                    else if (isColorOsStyle()) spacedBy.coerceAtMost(10.dp)
+                    else spacedBy,
+                ),
+                contentPadding = PaddingValues(
+                    top = topInset + when {
+                        isHyperOsStyle() -> HyperDimens.TopBarHeight + 8.dp
+                        isColorOsStyle() -> CouiDimens.TopBarHeight + 8.dp
+                        else -> IOS26HeaderHeight + 10.dp
+                    },
+                    bottom = bottomSpacing,
+                ),
+                content = content,
+            )
         }
         IOS26BlurHeader(
             title = title,

@@ -139,6 +139,7 @@ fun CouiCard(
         modifier = modifier
             .clip(shape)
             .background(couiSurface())
+            .couiSheen(alpha = if (dark) 0.06f else 0.10f)
             .then(
                 if (contour != null) {
                     Modifier.couiContour(shape = shape, color = contour, width = 1.dp)
@@ -202,11 +203,14 @@ fun CouiRow(
     )
     val titleColor = couiTitle()
     val tintColor = couiSurfaceHigh()
+    // 行面积大，光给到 0.5 就够；再亮整行会像被打了手电筒
+    val lightModifier = Modifier.couiTouchLight(dark = isInDarkTheme(), strength = 0.5f)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = CouiDimens.RowMinHeight)
             .background(tintColor.copy(alpha = tintColor.alpha * tint))
+            .then(lightModifier)
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
@@ -281,11 +285,14 @@ fun CouiPrimaryButton(
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val shape = couiButtonShape()
     val base = if (enabled) couiPrimary() else couiPrimary().copy(alpha = 0.30f)
+    val dark = isInDarkTheme()
     Box(
         modifier = modifier
             .couiPressScale(interaction, enabled)
             .clip(shape)
             .background(base)
+            .couiSheen(alpha = if (enabled) 0.18f else 0.06f)
+            .couiTouchLight(dark = dark)
             .clickable(
                 interactionSource = interaction,
                 indication = null,
@@ -319,11 +326,14 @@ fun CouiSecondaryButton(
     val interaction = remember { MutableInteractionSource() }
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val shape = couiButtonShape()
+    val dark = isInDarkTheme()
     Box(
         modifier = modifier
             .couiPressScale(interaction, enabled)
             .clip(shape)
             .background(couiSurfaceVariant())
+            .couiSheen(alpha = if (dark) 0.07f else 0.28f)
+            .couiTouchLight(dark = dark)
             .clickable(
                 interactionSource = interaction,
                 indication = null,

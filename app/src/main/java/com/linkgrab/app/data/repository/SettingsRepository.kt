@@ -36,7 +36,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     val visualStyle: Flow<Int> = context.dataStore.data.map { preferences ->
-        (preferences[VISUAL_STYLE_KEY] ?: 0).coerceIn(0, 1)
+        (preferences[VISUAL_STYLE_KEY] ?: 0).coerceIn(0, 2)
     }
 
     val liveUpdatesEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -92,7 +92,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setVisualStyle(style: Int) {
         context.dataStore.edit { preferences ->
-            preferences[VISUAL_STYLE_KEY] = style.coerceIn(0, 1)
+            preferences[VISUAL_STYLE_KEY] = style.coerceIn(0, 2)
         }
     }
 
