@@ -402,6 +402,11 @@ fun ResultScreen(
                                 interactionSource = remember { MutableInteractionSource() },
                             ) { showMenu = false },
                     )
+                    // 类 HyperOS 弹菜单时整窗压暗（miuix ListPopup 的 windowDimming）
+                    com.linkgrab.app.ui.liquid.HyperMenuDim(
+                        visible = menuVisible,
+                        onDismiss = { showMenu = false },
+                    )
                 }
                 Box(
                     Modifier

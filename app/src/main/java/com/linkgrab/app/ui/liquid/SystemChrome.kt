@@ -2,8 +2,10 @@ package com.linkgrab.app.ui.liquid
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
@@ -32,12 +35,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -53,6 +61,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.linkgrab.app.ui.theme.isInDarkTheme
+import kotlinx.coroutines.launch
 import androidx.compose.ui.semantics.onClick as onSemanticsClick
 
 /**
@@ -69,6 +79,23 @@ import androidx.compose.ui.semantics.onClick as onSemanticsClick
 
 /** 按钮与面板之间的间距。 */
 private val SystemMenuGap = 8.dp
+
+/** miuix `ListPopupDefaults.SinOutEasing`：sin(π/2·t)。 */
+private val SinOutEasing: Easing = Easing { fraction ->
+    kotlin.math.sin((fraction * Math.PI / 2).toFloat())
+}
+
+/** HyperOS 菜单弹出：miuix `ListPopupDefaults.FractionAnimationSpec`。 */
+private val HyperMenuFractionSpec = spring(dampingRatio = 0.82f, stiffness = 362.5f, visibilityThreshold = 0.0001f)
+
+/** ColorOS 菜单出场缩放：coui `ListPopupDefaults.FractionAnimationSpec`（response 0.35 / bounce 0.2）。 */
+private val CouiMenuEnterSpec = spring(dampingRatio = 0.8f, stiffness = 322.27f, visibilityThreshold = 0.0001f)
+
+/** ColorOS 菜单退场缩放：coui `FractionExitAnimationSpec`（response 0.3 / bounce 0）。 */
+private val CouiMenuExitScaleSpec = spring(dampingRatio = 1f, stiffness = 438.65f, visibilityThreshold = 0.0001f)
+
+/** ColorOS 菜单退场 alpha（主控卸载时机）：coui `AlphaExitAnimationSpec`（response 0.25 / bounce 0）。 */
+private val CouiMenuExitAlphaSpec = spring(dampingRatio = 1f, stiffness = 631.65f, visibilityThreshold = 0.0001f)
 
 /** 一套系统菜单的视觉参数。 */
 internal data class SystemMenuStyle(
@@ -169,10 +196,20 @@ internal fun SystemBarButton(
 }
 
 /**
- * 独立浮层式下拉菜单：按钮常驻，面板从按钮下方弹出（缩放 + 淡入）。
+ * 独立浮层式下拉菜单：按钮常驻，面板从按钮下方弹出。
+ *
+ * 两套动效各自照搬原库：
+ * - HyperOS（hyperReveal=true）＝ miuix `ListPopup`：spring(0.82, 362.5) 驱动
+ *   「缩放 0.15→1 + 从锚点侧向下的裁剪揭示（面板形状的超椭圆带）」，alpha
+ *   tween 200ms 入 / 150ms 出（alpha 是退场主控时机）。
+ * - ColorOS ＝ coui `ListPopup`：真 0→1 缩放，进 spring(0.8, 322.27)（response
+ *   0.35 / bounce 0.2）；退场不对称——缩放 spring(1, 438.65)（response 0.3 /
+ *   bounce 0），alpha spring(1, 631.65)（response 0.25 / bounce 0）主控。
  *
  * 和液态玻璃版的区别是「不形变」——玻璃版是同一块玻璃从 42dp 长成 200dp，
  * 系统版是两颗独立的东西：按钮不动，菜单是另一个浮层。
+ *
+ * @param hyperReveal 当前是否为类 HyperOS 主题（决定走哪套弹出动效与是否裁剪揭示）
  */
 @Composable
 internal fun SystemDropdownMenu(
@@ -180,6 +217,7 @@ internal fun SystemDropdownMenu(
     style: SystemMenuStyle,
     modifier: Modifier = Modifier,
     fraction: Animatable<Float, *> = remember { Animatable(0f) },
+    hyperReveal: Boolean = false,
     onExpand: (() -> Unit)? = null,
     onDismiss: (() -> Unit)? = null,
     triggerIcon: ImageVector? = null,
@@ -190,12 +228,28 @@ internal fun SystemDropdownMenu(
 ) {
     val haptic = LocalHapticFeedback.current
     val dragSelectState = remember { DropdownPanelDragSelectState() }
+    val menuAlpha = remember { Animatable(0f) }
 
-    LaunchedEffect(show) {
+    LaunchedEffect(show, hyperReveal) {
         if (show) {
-            fraction.animateTo(1f, style.enter)
+            launch {
+                fraction.animateTo(1f, if (hyperReveal) HyperMenuFractionSpec else CouiMenuEnterSpec)
+            }
+            if (hyperReveal) {
+                menuAlpha.animateTo(1f, tween(durationMillis = 200))
+            } else {
+                menuAlpha.animateTo(1f, CouiMenuEnterSpec)
+            }
         } else {
-            fraction.animateTo(0f, style.exit)
+            launch {
+                fraction.animateTo(0f, if (hyperReveal) HyperMenuFractionSpec else CouiMenuExitScaleSpec)
+            }
+            if (hyperReveal) {
+                // alpha 是退场主控：150ms 淡出完就算收起
+                menuAlpha.animateTo(0f, tween(durationMillis = 150))
+            } else {
+                menuAlpha.animateTo(0f, CouiMenuExitAlphaSpec)
+            }
         }
     }
 
@@ -208,7 +262,8 @@ internal fun SystemDropdownMenu(
                 .size(style.buttonSize),
         ) {
         val p = fraction.value
-        if (p > 0.002f) {
+        val a = menuAlpha.value
+        if (p > 0.002f || a > 0.01f) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -216,8 +271,9 @@ internal fun SystemDropdownMenu(
                     .requiredWidth(style.panelWidth)
                     .wrapContentHeight(unbounded = true)
                     .graphicsLayer {
-                        alpha = p.coerceIn(0f, 1f)
-                        val s = 0.92f + 0.08f * p
+                        alpha = a.coerceIn(0f, 1f)
+                        // HyperOS：0.15→1 的大力缩放；ColorOS：真 0→1
+                        val s = if (hyperReveal) 0.15f + 0.85f * p else p.coerceIn(0f, 1f)
                         scaleX = s
                         scaleY = s
                         // 从右上方（按钮所在角）长出来
@@ -231,6 +287,15 @@ internal fun SystemDropdownMenu(
                     .then(
                         if (style.panelBorder.alpha > 0.001f) {
                             Modifier.border(0.5.dp, style.panelBorder, style.panelShape)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    // HyperOS 的方向性裁剪揭示：可见带从锚点侧（上缘）向下生长，
+                    // 带本身用面板形状裁出，四个角始终跟着面板圆角走
+                    .then(
+                        if (hyperReveal) {
+                            Modifier.panelClipReveal(style.panelShape) { fraction.value }
                         } else {
                             Modifier
                         },
@@ -263,6 +328,72 @@ internal fun SystemDropdownMenu(
             enabled = if (show) onDismiss != null else onExpand != null,
         )
         }
+    }
+}
+
+/**
+ * miuix `popupClipReveal` 的移植：可见带从上缘向下生长（本 app 菜单只在锚点下方弹出），
+ * 带的形状用面板自己的 [shape] 在「宽 × 已见高度」上生成 outline 裁出，
+ * 四个角随面板圆角走；spring 过冲部分钳到 1，防止揭示路径越裁越大。
+ */
+private fun Modifier.panelClipReveal(shape: Shape, fraction: () -> Float): Modifier =
+    drawWithContent {
+        val progress = fraction().coerceIn(0f, 1f)
+        if (progress <= 0f) return@drawWithContent
+        if (progress >= 1f) {
+            drawContent()
+            return@drawWithContent
+        }
+        val bandHeight = size.height * progress
+        val outline = shape.createOutline(
+            Size(size.width, bandHeight),
+            layoutDirection,
+            this,
+        )
+        val bandPath = when (outline) {
+            is Outline.Generic -> outline.path
+            is Outline.Rounded -> Path().apply { addRoundRect(outline.roundRect) }
+            is Outline.Rectangle -> Path().apply { addRect(outline.rect) }
+        }
+        clipPath(bandPath) {
+            this@drawWithContent.drawContent()
+        }
+    }
+
+/**
+ * HyperOS 菜单的背景压暗：miuix `ListPopup` 弹出时整窗盖一层 windowDimming
+ * （亮 30% / 暗 60% 黑），tween 300ms 入 / 150ms 出，缓动 SinOutEasing。
+ * ColorOS 的浮层不压暗（coui `OverlayListPopup` 默认 enableWindowDim=false），
+ * 所以非 HyperOS 主题这里什么都不画。
+ */
+@Composable
+internal fun HyperMenuDim(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!com.linkgrab.app.ui.theme.isHyperOsStyle()) return
+    val dark = isInDarkTheme()
+    val dim = remember { Animatable(0f) }
+    LaunchedEffect(visible) {
+        if (visible) {
+            dim.animateTo(1f, tween(durationMillis = 300, easing = SinOutEasing))
+        } else {
+            dim.animateTo(0f, tween(durationMillis = 150, easing = SinOutEasing))
+        }
+    }
+    if (dim.value > 0.01f) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = dim.value }
+                .background(Color.Black.copy(alpha = if (dark) 0.6f else 0.3f))
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    onClick = onDismiss,
+                ),
+        )
     }
 }
 

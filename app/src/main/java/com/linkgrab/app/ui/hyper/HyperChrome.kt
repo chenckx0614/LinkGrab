@@ -18,13 +18,13 @@ import com.linkgrab.app.ui.theme.isInDarkTheme
  * 内容居中；颜色取 `surfaceContainer`（白 / #242424），没有描边——
  * HyperOS 的按钮靠底色和白卡分层，不画边框。
  *
- * 菜单是 miuix `ListPopup` 的规格：宽 200dp、连续曲率圆角 20dp、
- * 行高 48dp、15.6sp Medium、无投影（系统靠底色差，这里留 6dp 极淡投影托住浮层）。
+ * 菜单是 miuix `ListPopup` 的规格：宽 200dp、连续曲率圆角 16dp（ListPopupContent
+ * 的 cornerRadius）、行高 48dp、15.6sp Medium、无投影（系统靠底色差，这里留 6dp 极淡投影托住浮层）。
  */
 @Composable
 internal fun hyperMenuStyle(): SystemMenuStyle {
     val dark = isInDarkTheme()
-    val panelShape = remember { hyperSquircle(20.dp) }
+    val panelShape = remember { hyperSquircle(16.dp) }
     val itemShape = remember { hyperSquircle(12.dp) }
     return remember(dark) {
         SystemMenuStyle(

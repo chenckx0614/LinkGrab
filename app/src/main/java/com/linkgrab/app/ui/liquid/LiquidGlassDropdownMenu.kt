@@ -212,6 +212,7 @@ fun LiquidGlassDropdownMenu(
             } else {
                 com.linkgrab.app.ui.coloros.couiMenuStyle()
             },
+            hyperReveal = hyperChrome,
             modifier = modifier,
             fraction = fraction,
             onExpand = onExpand,

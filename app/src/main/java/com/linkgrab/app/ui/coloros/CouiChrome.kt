@@ -37,7 +37,7 @@ internal fun couiMenuStyle(): SystemMenuStyle {
             pressTint = if (dark) Color(0x33FFFFFF) else Color(0x1F000000),
             panelWidth = 210.dp,
             panelShape = panelShape,
-            panelBackground = if (dark) Color(0xFF2A2A2A) else Color.White,
+            panelBackground = if (dark) Color(0xFF333333) else Color.White,
             panelBorder = if (dark) Color(0x1AFFFFFF) else Color(0x0D000000),
             panelShadow = 12.dp,
             panelPadVertical = 6.dp,
