@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -329,7 +330,14 @@ fun LiquidGlassDropdownMenu(
     // 内容随容器等比缩放，同样保留过冲
     val contentScale = (width.value / PanelWidth.value).coerceAtLeast(0f)
 
+    // 占位恒为一颗按钮的尺寸：展开面板从 TopEnd 溢出绘制、不参与父布局，
+    // 同一 Row 里的搜索按钮等不会被长大的面板挤走
     Box(modifier = modifier.padding(LiquidGlassDropdownShadowPadding)) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(ButtonDiameter),
+        ) {
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -356,7 +364,8 @@ fun LiquidGlassDropdownMenu(
                     translationX = o.x - PanelWidth.toPx() * k + bouncePx + drag.translationX
                     translationY = o.y + targetHeight.toPx() * k - bouncePx + drag.translationY
                 }
-                .size(width = width, height = height)
+                .requiredWidth(width)
+                .requiredHeight(height)
                 // 面板自身的 root 位置：菜单项靠它把 boundsInRoot 换算成面板局部坐标
                 .onGloballyPositioned { dragSelectState.panelTopInRoot = it.boundsInRoot().top }
                 // 跟手滑选挂在面板上而非 42dp 触发图标：手指按下后要能一路滑到任意一项
@@ -441,6 +450,7 @@ fun LiquidGlassDropdownMenu(
                     )
                 }
             }
+        }
         }
     }
 }
