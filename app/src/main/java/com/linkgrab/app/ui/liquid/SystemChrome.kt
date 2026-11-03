@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
@@ -58,6 +59,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -79,6 +82,28 @@ import androidx.compose.ui.semantics.onClick as onSemanticsClick
 
 /** 按钮与面板之间的间距。 */
 private val SystemMenuGap = 8.dp
+
+/**
+ * 占位盒：向父布局报告 [placeholder] 的尺寸，但把可能更大的子内容按
+ * 「右缘对齐占位右缘、顶缘对齐占位顶缘」手工摆放——溢出方向恒为左、下。
+ * 不用 Box 的对齐溢出（ oversized child 的对齐偏移不可依赖），
+ * 面板锚点在这里是确定的：永远钉在按钮右上角。
+ */
+internal fun Modifier.dropdownOverflowPlacement(placeholder: DpSize): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(
+        Constraints(
+            minWidth = 0,
+            minHeight = 0,
+            maxWidth = Constraints.Infinity,
+            maxHeight = Constraints.Infinity,
+        ),
+    )
+    val w = placeholder.width.roundToPx().coerceIn(constraints.minWidth, constraints.maxWidth)
+    val h = placeholder.height.roundToPx().coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(w, h) {
+        placeable.placeRelative(x = w - placeable.width, y = 0)
+    }
+}
 
 /** miuix `ListPopupDefaults.SinOutEasing`：sin(π/2·t)。 */
 private val SinOutEasing: Easing = Easing { fraction ->
@@ -253,20 +278,19 @@ internal fun SystemDropdownMenu(
         }
     }
 
-    // 外层就占「一颗按钮」的尺寸：面板用 requiredWidth 突破布局约束，
+    // 外层就占「一颗按钮」的尺寸：面板用真实尺寸溢出摆放到占位左下，
     // 展开时不会把顶栏标题挤走（液态玻璃版因为要形变，做不到这点）。
     Box(modifier = modifier.padding(LiquidGlassDropdownShadowPadding)) {
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(style.buttonSize),
+                .dropdownOverflowPlacement(DpSize(style.buttonSize, style.buttonSize)),
         ) {
         val p = fraction.value
         val a = menuAlpha.value
         if (p > 0.002f || a > 0.01f) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
                     .offset(y = style.buttonSize + SystemMenuGap)
                     .requiredWidth(style.panelWidth)
                     .wrapContentHeight(unbounded = true)

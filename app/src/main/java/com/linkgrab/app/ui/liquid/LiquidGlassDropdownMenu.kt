@@ -55,6 +55,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
@@ -331,17 +332,16 @@ fun LiquidGlassDropdownMenu(
     // 内容随容器等比缩放，同样保留过冲
     val contentScale = (width.value / PanelWidth.value).coerceAtLeast(0f)
 
-    // 占位恒为一颗按钮的尺寸：展开面板从 TopEnd 溢出绘制、不参与父布局，
-    // 同一 Row 里的搜索按钮等不会被长大的面板挤走
+    // 占位恒为一颗按钮的尺寸：展开面板按「右缘对齐占位右缘」溢出摆放、不参与
+    // 父布局，同一 Row 里的搜索按钮等不会被长大的面板挤走
     Box(modifier = modifier.padding(LiquidGlassDropdownShadowPadding)) {
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(ButtonDiameter),
+                .dropdownOverflowPlacement(DpSize(ButtonDiameter, ButtonDiameter)),
         ) {
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
                 .graphicsLayer {
                     val o = offsetPx()
                     // 绕"右上角→正中心"迁移锚点缩放的位移
