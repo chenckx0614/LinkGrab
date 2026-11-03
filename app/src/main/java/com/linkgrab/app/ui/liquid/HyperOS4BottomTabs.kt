@@ -56,6 +56,8 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
 import com.kyant.shapes.Capsule
+import com.linkgrab.app.ui.glass.edgelight.edgeLight
+import com.linkgrab.app.ui.glass.edgelight.rememberDefaultEdgeLight
 import com.linkgrab.app.ui.theme.isInDarkTheme
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -88,13 +90,10 @@ fun HyperOS4BottomTabs(
 ) {
     val isLightTheme = !isInDarkTheme()
 
-    // 毛玻璃容器：半透明白 + 边缘亮描边(浅色模式)
+    // 毛玻璃容器：半透明白（描边光由 edgeLight 负责）
     val containerColor =
         if (isLightTheme) Color.White.copy(alpha = 0.55f)
         else Color(0xFF2C2C2E).copy(alpha = 0.65f)
-    val strokeColor =
-        if (isLightTheme) Color.White.copy(alpha = 0.65f)
-        else Color.White.copy(alpha = 0.10f)
     // 选中遮罩：浅灰椭圆；按下时加深
     val maskNormalColor =
         if (isLightTheme) Color(0xFF3C3C43).copy(alpha = 0.12f)
@@ -181,7 +180,9 @@ fun HyperOS4BottomTabs(
                     shadow = { null },
                     onDrawSurface = { drawRect(containerColor) },
                 )
-                .border(1.dp, strokeColor, RoundedCornerShape(28.dp)),
+                // HyperOS 17 玻璃描边光（fork 自 NexioSchedule 的 backdrop edgelight），
+                // 替代原来 1dp 实色 border：光带贴着轮廓内侧，亮部随深浅色自适应
+                .edgeLight(shape = Capsule(), edgeLight = rememberDefaultEdgeLight(isLightTheme = isLightTheme)),
         ) {
             // ---- 椭圆遮罩：跟随选中项，按压时跟到按压项并缩小加深 ----
             // 位置/缩放/颜色都在 draw 或 layout 阶段读 Animatable.value，
