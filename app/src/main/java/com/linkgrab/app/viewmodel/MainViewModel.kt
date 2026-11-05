@@ -30,7 +30,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
@@ -46,6 +49,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
     val liveUpdatesHelper = LiveUpdatesHelper(application)
     private val historyRepository = HistoryRepository(application)
+    private val downloadTaskStore = com.linkgrab.app.data.download.DownloadTaskStore(application)
 
     val allHistory = historyRepository.allHistory
 
@@ -174,6 +178,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        // 未完结下载任务持久化（3.3.10）：600ms 防抖写 DataStore，
+        // 进程被杀（用户直接退出）后重启能把任务捞回来接着下
+        viewModelScope.launch {
+            _downloadTasks
+                .map { list -> list.filter { task -> !task.status.isFinished } }
+                .distinctUntilChanged()
+                .sample(600)
+                .collect { unfinished -> downloadTaskStore.save(unfinished) }
+        }
+        // 启动恢复：上一次没下完（被打断）的任务自动接着下；显式暂停的保持暂停
+        viewModelScope.launch {
+            val saved = downloadTaskStore.load()
+            if (saved.isEmpty()) return@launch
+            val activeIds = saved
+                .filter { it.status == DownloadStatus.Queued || it.status == DownloadStatus.Downloading }
+                .map { it.id }
+                .toSet()
+            if (activeIds.isNotEmpty()) {
+                // 新下载的任务 id 不能和恢复回来的撞上
+                taskIdSeed = maxOf(taskIdSeed, saved.maxOf { it.id })
+            }
+            taskMutex.withLock {
+                if (_downloadTasks.value.isEmpty()) {
+                    _downloadTasks.value = saved.map {
+                        if (it.id in activeIds) it.copy(status = DownloadStatus.Paused, error = null) else it
+                    }
+                }
+            }
+            if (activeIds.isNotEmpty()) {
+                val semaphore = kotlinx.coroutines.sync.Semaphore(_downloadConcurrency.value)
+                val context = getApplication<Application>()
+                activeIds.forEach { id ->
+                    launch { semaphore.withPermit { runDownloadTask(context, id, fileIndex = 0, fileTotal = 1) } }
+                }
+            }
+        }
         viewModelScope.launch {
             settingsRepository.colorMode.collect { _colorMode.value = it }
         }
@@ -1169,6 +1209,7 @@ enum class DownloadStatus {
     val isFinished: Boolean get() = this == Success || this == Failed || this == Canceled
 }
 
+@kotlinx.serialization.Serializable
 data class DownloadTaskItem(
     val id: Long,
     val isVideo: Boolean,
