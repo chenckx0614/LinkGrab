@@ -12,7 +12,13 @@ import com.linkgrab.app.data.api.XhsParser
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.Platform
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -42,6 +48,12 @@ class ParseRepository(context: Context) {
 
         /** 抖音原生解析失败后，降级链（WebView 等）的总时间预算。 */
         const val DOUYIN_FALLBACK_BUDGET_MS = 24_000L
+
+        /**
+         * 抖音原生通道的宽限期：这段时间内出结果就不必起 WebView。
+         * 超时说明大概率被风控了，WebView 立刻并行接力。
+         */
+        const val DOUYIN_NATIVE_GRACE_MS = 1_500L
 
         /**
          * 笔记页的 SSR 数据标志。Shield 拦下来的页面（登录页 / 验证码页 / 404 页）
@@ -84,28 +96,7 @@ class ParseRepository(context: Context) {
     suspend fun parse(url: String): Result<MediaResult> {
         val cleanUrl = extractUrl(url)
         return when (detectPlatform(cleanUrl)) {
-            Platform.DOUYIN -> {
-                val native = douyinParser.parse(cleanUrl)
-                if (native.isSuccess) native
-                else {
-                    val nativeMessage = native.exceptionOrNull()?.message.orEmpty()
-                    // 降级链会起隐藏 WebView（真浏览器通道），单步最长十几秒。整条
-                    // 链给一个总预算：原生已经失败过一轮，不该再让用户干等半分钟。
-                    val fallback = runCatching {
-                        withTimeoutOrNull(DOUYIN_FALLBACK_BUDGET_MS) { legacyParser.parse(cleanUrl) }
-                    }.getOrNull()
-                    val fallbackResult = fallback?.getOrNull()
-                    if (fallback != null && fallback.isSuccess &&
-                        fallbackResult?.type == MediaType.VIDEO && "图集" in nativeMessage
-                    ) {
-                        // 原生解析已确认这是图集（接口被风控打薄）——降级链拿到的
-                        // 只可能是图集自带的预览视频。以 VIDEO 返回的话结果页只能
-                        // 看一张封面（用户反馈的「抖音解析后只显示封面」就是这条
-                        // 路径），宁可失败也别给假结果。
-                        native
-                    } else if (fallback?.isSuccess == true) fallback else native
-                }
-            }
+            Platform.DOUYIN -> parseDouyin(cleanUrl)
             Platform.XIAOHONGSHU -> withContext(Dispatchers.IO) {
                 // 注意：整个 XHS 分支必须在 IO 线程 —— expandShareLink 是阻塞
                 // 网络请求，在主线程协程里调用会抛 NetworkOnMainThreadException。
@@ -238,5 +229,70 @@ class ParseRepository(context: Context) {
             .replace("\\u002F", "/")
             .replace("\\u0026", "&")
             .replace("&amp;", "&")
+    }
+
+    /**
+     * 抖音解析：原生 HTTP 通道与 WebView 真浏览器通道并行赛跑。
+     *
+     * ① 原生 HTTP 一条 slidesinfo 就能出结果，通常 1 秒内；
+     * ② WebView 要装页面 + 跑 JS，慢，但被风控时最稳。
+     *
+     * 先给原生一个宽限期，它够快就根本不必惊动 WebView；超时（大概率被风控）
+     * 就让 WebView 并行接力，谁先给出成功结果用谁。旧实现是「原生把十几秒的
+     * 重试全部跑完 → 再串行起 WebView」，两段叠加就是「很慢很慢」。
+     *
+     * 独立作用域是为了**输家立刻收掉**：协程取消阻塞中的 OkHttp 调用不会即时
+     * 生效，若挂在调用方的作用域里，WebView 3 秒出结果也会被原生那条 12 秒
+     * 读超时拖到 12 秒才返回。
+     */
+    private suspend fun parseDouyin(cleanUrl: String): Result<MediaResult> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        try {
+            val native = scope.async { douyinParser.parse(cleanUrl) }
+            withTimeoutOrNull(DOUYIN_NATIVE_GRACE_MS) { native.await() }
+                ?.let { if (it.isSuccess) return it }
+            // 宽限期刚过、原生其实已经跑完了（只是慢了一点点）：没成功就直接看
+            // 它的结果，别为一个已经有结论的通道白起一个 WebView
+            if (native.isCompleted) {
+                runCatching { native.await() }.getOrNull()
+                    ?.let { if (it.isSuccess) return it }
+            }
+
+            val web = scope.async {
+                runCatching { legacyParser.parseDouyinInWebView(cleanUrl) }.getOrNull()
+            }
+            val results = Channel<MediaResult?>(Channel.UNLIMITED)
+            scope.launch { results.send(runCatching { native.await().getOrNull() }.getOrNull()) }
+            scope.launch { results.send(runCatching { web.await() }.getOrNull()) }
+            var received = 0
+            var winner: MediaResult? = null
+            while (winner == null && received < 2) {
+                winner = results.receive()
+                received++
+            }
+            if (winner != null) return Result.success(winner)
+
+            // 两条通道都没成功 → 旧降级链兜底（第三方接口）
+            val nativeResult = runCatching { native.await() }.getOrNull()
+                ?: Result.failure(Exception("抖音解析超时"))
+            val nativeMessage = nativeResult.exceptionOrNull()?.message.orEmpty()
+            val fallback = runCatching {
+                withTimeoutOrNull(DOUYIN_FALLBACK_BUDGET_MS) { legacyParser.parse(cleanUrl) }
+            }.getOrNull()
+            val fallbackResult = fallback?.getOrNull()
+            return if (fallback != null && fallback.isSuccess &&
+                fallbackResult?.type == MediaType.VIDEO && "图集" in nativeMessage
+            ) {
+                // 原生已确认这是图集（接口被风控打薄）——降级链拿到的只可能是
+                // 图集自带的预览视频，宁可失败也别给「点不动的下载视频」。
+                nativeResult
+            } else if (fallback?.isSuccess == true) {
+                fallback
+            } else {
+                nativeResult
+            }
+        } finally {
+            scope.cancel()
+        }
     }
 }

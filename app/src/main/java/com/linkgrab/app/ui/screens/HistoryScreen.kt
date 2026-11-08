@@ -3,6 +3,8 @@ package com.linkgrab.app.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -43,6 +45,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import com.linkgrab.app.ui.motion.morphClip
 import com.linkgrab.app.ui.motion.rememberMorphTransition
 import com.linkgrab.app.ui.motion.rememberScreenCornerRadiiPx
+import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.iosBackground
@@ -52,6 +55,8 @@ import java.util.Locale
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -67,6 +72,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
@@ -88,6 +94,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -96,6 +103,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
@@ -784,129 +792,246 @@ private fun HistoryDetailContent(
     val parseTimeText = remember(item.parseTime) {
         SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(item.parseTime))
     }
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-    ) {
-        Box {
-            if (item.cover.isNotBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(item.cover).crossfade(true).build(),
-                    contentDescription = null,
-                    // 原比例展示，禁止拉伸
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
+    // 封面最多占屏幕 42%：竖屏视频封面是 9:16，原比例铺满会把标题和操作
+    // 全挤到屏幕外，点开详情几乎只能看到一张图。
+    val coverMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.42f).dp
+    // 用缓存的结果快照补出「几张图 / 几档画质」这类真正有用的信息
+    val facts = remember(item.resultJson) { historyFacts(item) }
+
+    fun copyLink() {
+        clipboard?.setPrimaryClip(ClipData.newPlainText("url", item.url))
+        Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
+    }
+
+    fun openLink() {
+        runCatching {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(item.url))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure {
+            Toast.makeText(context, "没有能打开链接的应用", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Box(Modifier.fillMaxWidth()) {
+                if (item.cover.isNotBlank()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(item.cover).crossfade(true).build(),
+                        contentDescription = null,
+                        // 原比例展示，禁止拉伸；超出限高时裁掉底部
+                        contentScale = ContentScale.FillWidth,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = coverMaxHeight)
+                            .clipToBounds(),
+                    )
+                } else {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .background(iosTertiaryBackground()),
+                    )
+                }
+                // 顶部压一层渐变，保证返回钮在浅色封面上也看得清
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .height(180.dp)
-                        .background(iosTertiaryBackground()),
+                        .height(120.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Black.copy(alpha = 0.35f), Color.Transparent)
+                            )
+                        ),
                 )
+                // 返回钮
+                Box(
+                    Modifier
+                        .statusBarsPadding()
+                        .padding(12.dp)
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .clickable { onBack() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.ChevronLeft,
+                        contentDescription = "返回",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp),
+                    )
+                }
             }
-            // 返回钮：盖在封面左上角
-            Box(
-                Modifier
-                    .statusBarsPadding()
-                    .padding(12.dp)
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black.copy(alpha = 0.35f))
-                    .clickable { onBack() },
-                contentAlignment = Alignment.Center,
+
+            Column(
+                Modifier.padding(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = 18.dp,
+                    // 底部留出固定操作条的高度，避免最后一个元素被压住
+                    bottom = 96.dp,
+                ),
             ) {
-                Icon(
-                    Icons.Default.ChevronLeft,
-                    contentDescription = "返回",
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp),
+                Text(
+                    item.title,
+                    color = iosLabel(),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-0.3).sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                if (item.author.isNotBlank()) {
+                    Text(
+                        item.author,
+                        color = iosSecondaryLabel(),
+                        modifier = Modifier.padding(top = 6.dp),
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    "${platformName(item.platform)} · ${historyTypeName(item.type)} · $parseTimeText",
+                    color = iosSecondaryLabel(),
+                    modifier = Modifier.padding(top = 6.dp),
+                    fontSize = 13.sp,
+                )
+
+                // 关键信息用两列小卡：一眼能看出是图集还是视频、缓存在不在
+                if (facts.isNotEmpty()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        facts.forEach { (label, value) ->
+                            Column(
+                                Modifier
+                                    .weight(1f)
+                                    .clip(IOSCornerSmall)
+                                    .background(iosTertiaryBackground())
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                            ) {
+                                Text(
+                                    value,
+                                    color = iosLabel(),
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    label,
+                                    color = iosSecondaryLabel(),
+                                    modifier = Modifier.padding(top = 2.dp),
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 链接行：点一下复制（不再单设「复制链接」按钮，避免一个功能两个入口）
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp)
+                        .clip(IOSCornerSmall)
+                        .background(iosTertiaryBackground())
+                        .clickable { copyLink() }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        item.url,
+                        color = iosSecondaryLabel(),
+                        fontSize = 13.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "复制链接",
+                        tint = iosDisclosureColor(),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+
+                if (item.resultJson.isBlank()) {
+                    Text(
+                        "这条记录没有缓存解析结果，重新解析后可获取下载信息",
+                        color = iosSecondaryLabel(),
+                        modifier = Modifier.padding(top = 12.dp),
+                        fontSize = 13.sp,
+                    )
+                }
             }
         }
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-            Text(
-                item.title,
-                color = iosLabel(),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.3).sp,
+
+        // 底部固定操作条：不跟着内容滚，滚到哪儿都能直接点
+        Row(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.Transparent, iosBackground())
+                    )
+                )
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            IOS26Button(
+                text = "重新解析",
+                onClick = onParse,
+                modifier = Modifier.weight(1f),
             )
-            Text(
-                "${platformName(item.platform)} · ${historyTypeName(item.type)} · $parseTimeText" +
-                    if (item.downloaded) " · 已下载" else "",
-                color = iosSecondaryLabel(),
-                modifier = Modifier.padding(top = 8.dp),
-                fontSize = 14.sp,
+            IOS26OutlinedButton(
+                text = "打开原链接",
+                onClick = { openLink() },
+                modifier = Modifier.weight(1f),
             )
-            if (item.author.isNotBlank()) {
-                Text(
-                    item.author,
-                    color = iosSecondaryLabel(),
-                    modifier = Modifier.padding(top = 4.dp),
-                    fontSize = 14.sp,
-                )
-            }
-            // 链接卡片
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp)
-                    .clip(IOSCornerSmall)
-                    .background(iosTertiaryBackground())
-                    .clickable {
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("url", item.url))
-                        Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    item.url,
-                    color = iosSecondaryLabel(),
-                    fontSize = 13.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(8.dp))
-                Icon(
-                    Icons.Default.Check,
-                    contentDescription = "复制链接",
-                    tint = iosDisclosureColor(),
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-            if (item.resultJson.isBlank()) {
-                Text(
-                    "这条记录没有缓存解析结果，重新解析后可获取下载信息",
-                    color = iosSecondaryLabel(),
-                    modifier = Modifier.padding(top = 12.dp),
-                    fontSize = 13.sp,
-                )
-            }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                IOS26Button(
-                    text = "重新解析",
-                    onClick = onParse,
-                    modifier = Modifier.weight(1f),
-                )
-                IOS26OutlinedButton(
-                    text = "复制链接",
-                    onClick = {
-                        clipboard?.setPrimaryClip(ClipData.newPlainText("url", item.url))
-                        Toast.makeText(context, "链接已复制", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-            }
         }
     }
 }
+
+/**
+ * 详情页的两列小信息：只挑用户真正关心的（几张图 / 几档画质 / 是否已存本地）。
+ * 数据来自历史记录里的结果快照，解析不出来就干脆不显示，不留空占位。
+ */
+private fun historyFacts(item: HistoryItem): List<Pair<String, String>> {
+    val facts = mutableListOf<Pair<String, String>>()
+    val snapshot = item.resultJson.takeIf { it.isNotBlank() }?.let {
+        runCatching {
+            HistoryResultJson.decodeFromString<MediaResult>(it)
+        }.getOrNull()
+    }
+    when {
+        snapshot?.images?.isNotEmpty() == true ->
+            facts += "${snapshot.images.size} 张" to "图片"
+        snapshot?.videoQualities?.isNotEmpty() == true ->
+            facts += "${snapshot.videoQualities.size} 档" to "画质"
+        item.type.isNotBlank() ->
+            facts += historyTypeName(item.type) to "类型"
+    }
+    if (item.downloaded) facts += "已保存" to "本地"
+    return facts.take(2)
+}
+
+private val HistoryResultJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+

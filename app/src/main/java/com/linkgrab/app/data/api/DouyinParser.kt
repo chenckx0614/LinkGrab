@@ -69,12 +69,24 @@ class DouyinParser {
         private const val TTWID_COOLDOWN_MS = 90_000L
 
         /**
-         * 各层通道的时间预算（从解析开始算起）。到点就跳过后面的层，把时间让给
-         * 降级链 —— 用户等的是结果，不是「一定要在原生通道里成功」。
+         * 各层通道的时间预算（从解析开始算起）。到点就跳过后面的层 —— 原生通道
+         * 失败时 WebView 真浏览器通道会并行接力（见 ParseRepository），所以这里
+         * 不必再硬撑到底，多等只会让用户多看一眼 loading。
          */
-        private const val SESSION_RETRY_BUDGET_MS = 9_000L
-        private const val HTML_BUDGET_MS = 16_000L
-        private const val HTML_HARD_DEADLINE_MS = 22_000L
+        private const val SESSION_RETRY_BUDGET_MS = 5_000L
+        private const val HTML_BUDGET_MS = 9_000L
+        private const val HTML_HARD_DEADLINE_MS = 13_000L
+
+        /** 短链返回 200 页面时，最多扫这么多字节找作品 ID（命中即停）。 */
+        private const val SHORT_LINK_SCAN_BYTES = 512L * 1024
+
+        /**
+         * 页面里出现作品 ID 的几种形态：/video/123、/note/123、/share/video/123、
+         * aweme_id 字段。抖音 ID 是 19 位数字，这里放宽到 15 位以上防历史作品。
+         */
+        private val ID_IN_PAGE_REGEX = Regex(
+            """(?:/video/|/note/|/share/video/|/share/note/|aweme_id["'=:\s]{1,4})(\d{15,})"""
+        )
 
         /**
          * 全应用共用的 OkHttp 客户端。
@@ -799,49 +811,48 @@ class DouyinParser {
     private fun resolveVideoId(url: String): String? {
         val lower = url.lowercase()
         return when {
-            "v.douyin.com" in lower -> {
-                // Short link: GET without redirects and read the `location`
-                // header. Some responses carry a relative location, others
-                // answer with a JS-rendered page and no header at all — in
-                // that case fall back to the URL the client finally lands on.
-                val location = shortLinkLocation(url)
-                    ?: shortLinkFinalUrl(url)
-                    ?: return null
-                if ("ixigua.com" in location) return null
-                extractIdFromPath(location)
-            }
+            "v.douyin.com" in lower -> resolveShortLink(url)
             else -> extractIdFromPath(url)
         }
     }
 
-    /** Absolute `location` target of a short link, or null. */
-    private fun shortLinkLocation(url: String): String? {
+    /**
+     * 短链（v.douyin.com/xxx）→ 作品 ID，**一个请求**解决。
+     *
+     * 正常情况服务端返回 302，location 里就带 ID。但有些网络环境 / UA 下短链
+     * 返回 200 的 JS 页面，没有 location —— 旧实现这时会再重试一个 UA、再跟随
+     * 重定向把整页 HTML 拉下来，三个请求 + 一次大页面下载，移动网络下能拖好几秒。
+     * 现在改成：同一个请求读响应体前 512KB（分块检索，命中即停），从页面里正则
+     * 找 aweme_id —— 绝不把整个分享页下载完。
+     */
+    private fun resolveShortLink(url: String): String? {
         for (ua in listOf(mobileUa, defaultUa)) {
             try {
                 val request = Request.Builder().url(url).header("User-Agent", ua).build()
                 noRedirectClient.newCall(request).execute().use { resp ->
-                    val location = resp.header("location") ?: return@use null
-                    return resp.request.url.resolve(location)?.toString() ?: location
+                    // 1) 302：location 里直接有 ID
+                    resp.header("location")?.let { location ->
+                        val absolute = resp.request.url.resolve(location)?.toString() ?: location
+                        if ("ixigua.com" in absolute) return null
+                        extractIdFromPath(absolute)?.let { return it }
+                    }
+                    // 2) 200：从页面内容里找 ID（分块读，命中即停）
+                    val source = resp.body?.source() ?: return@use null
+                    val buffer = okio.Buffer()
+                    var total = 0L
+                    while (total < SHORT_LINK_SCAN_BYTES) {
+                        val read = source.read(buffer, 64L * 1024)
+                        if (read == -1L) break
+                        total += read
+                        val text = buffer.clone().readUtf8()
+                        ID_IN_PAGE_REGEX.find(text)?.let { return it.groupValues[1] }
+                    }
                 }
-            } catch (e: Exception) {
-                // try the next UA
+            } catch (_: Exception) {
+                // 换下一个 UA
             }
         }
         return null
-    }
-
-    /** Final URL after following the redirect chain (JS-rendered fallback). */
-    private fun shortLinkFinalUrl(url: String): String? {
-        return try {
-            val request = Request.Builder().url(url)
-                .header("User-Agent", mobileUa)
-                .build()
-            client.newCall(request).execute().use { resp ->
-                resp.request.url.toString().takeIf { it != url }
-            }
-        } catch (e: Exception) {
-            null
-        }
     }
 
     /**
