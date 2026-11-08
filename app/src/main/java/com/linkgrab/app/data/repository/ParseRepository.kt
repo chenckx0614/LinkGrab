@@ -14,14 +14,17 @@ import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.Platform
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Parse pipeline (v2):
@@ -51,10 +54,19 @@ class ParseRepository(context: Context) {
         const val DOUYIN_FALLBACK_BUDGET_MS = 8_000L
 
         /**
-         * 抖音原生通道的宽限期：这段时间内出结果就不必起 WebView。
-         * 超时说明大概率被风控了，WebView 立刻并行接力。
+         * 原生通道「还没有任何结论」时最多等多久再起 WebView。
+         *
+         * 正常情况下这个分支根本走不到 —— 原生第一层被风控打空会立刻发信号，
+         * 我们马上就起 WebView。只有网络本身慢（原生还卡在等响应）才会等满，
+         * 那种情况下 WebView 也一样慢，所以不必提前抢跑。
          */
-        const val DOUYIN_NATIVE_GRACE_MS = 1_500L
+        const val DOUYIN_PROBE_WAIT_MS = 4_000L
+
+        /**
+         * 原生通道的总预算。超过就按失败处理，不让它把用户时间拖到十几秒 ——
+         * 它后面还有 HTML SSR 完整重试这种长尾路径。
+         */
+        const val DOUYIN_NATIVE_TOTAL_BUDGET_MS = 10_000L
 
         /**
          * 笔记页的 SSR 数据标志。Shield 拦下来的页面（登录页 / 验证码页 / 404 页）
@@ -239,9 +251,10 @@ class ParseRepository(context: Context) {
      * ① 原生 HTTP 一条 slidesinfo 就能出结果，通常 1 秒内；
      * ② WebView 要装页面 + 跑 JS，慢，但被风控时最稳。
      *
-     * 先给原生一个宽限期，它够快就根本不必惊动 WebView；超时（大概率被风控）
-     * 就让 WebView 并行接力，谁先给出成功结果用谁。旧实现是「原生把十几秒的
-     * 重试全部跑完 → 再串行起 WebView」，两段叠加就是「很慢很慢」。
+     * 什么时候起 WebView 不再靠「等 N 秒没结果就猜它失败」——那个猜测两头都错：
+     * 猜早了（1.5s）正常链接也被拖上 WebView（反而更慢），猜晚了风控链接就得干等
+     * 原生把重试跑完。现在由原生自己在**第一层被风控打空的那一刻**发信号，WebView
+     * 立刻起跑，两边谁先出结果用谁。
      *
      * 独立作用域是为了**输家立刻收掉**：协程取消阻塞中的 OkHttp 调用不会即时
      * 生效，若挂在调用方的作用域里，WebView 3 秒出结果也会被原生那条 12 秒
@@ -250,21 +263,47 @@ class ParseRepository(context: Context) {
     private suspend fun parseDouyin(cleanUrl: String): Result<MediaResult> {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         try {
-            val native = scope.async { douyinParser.parse(cleanUrl) }
-            withTimeoutOrNull(DOUYIN_NATIVE_GRACE_MS) { native.await() }
-                ?.let { if (it.isSuccess) return it }
-            // 宽限期刚过、原生其实已经跑完了（只是慢了一点点）：没成功就直接看
-            // 它的结果，别为一个已经有结论的通道白起一个 WebView
-            if (native.isCompleted) {
-                runCatching { native.await() }.getOrNull()
-                    ?.let { if (it.isSuccess) return it }
+            val fastPathMissed = CompletableDeferred<Unit>()
+            val native = scope.async {
+                douyinParser.parse(cleanUrl) {
+                    if (!fastPathMissed.isCompleted) fastPathMissed.complete(Unit)
+                }
+            }
+
+            // 三种早期结局：0 = 原生已成功，1 = 原生第一层被截，2 = 原生已失败。
+            // 一个都没等到就说明是网络本身慢（原生还卡在等响应上），此时起 WebView
+            // 同样慢，先让它继续跑，最多再等 DOUYIN_PROBE_WAIT_MS。
+            val early = withTimeoutOrNull(DOUYIN_PROBE_WAIT_MS) {
+                select<Int> {
+                    native.onAwait { if (it.isSuccess) 0 else 2 }
+                    fastPathMissed.onAwait { 1 }
+                }
+            }
+            if (early == 0) return native.await()
+            if (early == 2) {
+                val done = runCatching { native.await() }.getOrNull()
+                if (done != null) {
+                    if (done.isSuccess) return done
+                    // 链接里根本没有作品 ID：WebView 也救不了，直接返回比白起一个
+                    // 隐藏 WebView 更快。其它失败原因仍然让 WebView 试一把。
+                    if (done.exceptionOrNull()?.message?.contains("作品 ID") == true) return done
+                }
             }
 
             val web = scope.async {
                 runCatching { legacyParser.parseDouyinInWebView(cleanUrl) }.getOrNull()
             }
             val results = Channel<MediaResult?>(Channel.UNLIMITED)
-            scope.launch { results.send(runCatching { native.await().getOrNull() }.getOrNull()) }
+            // 原生通道的最终结论存这里。不能在收尾时再 await 一次 —— 那条协程
+            // 已经被预算放弃，await 会重新挂起，等于把刚省下的时间又还回去。
+            val nativeOutcome = AtomicReference<Result<MediaResult>?>(null)
+            scope.launch {
+                // 原生到点还没结论就按失败算，别让它把用户的时间拖到十几秒
+                val r = withTimeoutOrNull(DOUYIN_NATIVE_TOTAL_BUDGET_MS) { native.await() }
+                val outcome = r ?: Result.failure(Exception("抖音解析超时"))
+                nativeOutcome.set(outcome)
+                results.send(outcome.getOrNull())
+            }
             scope.launch { results.send(runCatching { web.await() }.getOrNull()) }
             var received = 0
             var winner: MediaResult? = null
@@ -277,7 +316,7 @@ class ParseRepository(context: Context) {
             // 两条通道都没成功 → 第三方接口兜底。
             // 只打 ucmao 一家，不再走 legacyParser.parse 的整条链 —— 那条链
             // 开头的 WebView 通道刚刚已经失败过，再跑一遍等于把 12 秒超时又付一次。
-            val nativeResult = runCatching { native.await() }.getOrNull()
+            val nativeResult = nativeOutcome.get()
                 ?: Result.failure(Exception("抖音解析超时"))
             val nativeMessage = nativeResult.exceptionOrNull()?.message.orEmpty()
             val fallback = runCatching {

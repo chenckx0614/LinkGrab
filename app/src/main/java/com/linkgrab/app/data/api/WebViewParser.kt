@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.linkgrab.app.data.model.MediaResult
@@ -20,6 +22,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.ByteArrayInputStream
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import kotlin.coroutines.resume
@@ -52,6 +55,16 @@ class WebViewParser(private val context: Context) {
             // 分享文案会在降级链这里被误判成「不支持的链接格式」，把原生解析的
             // 真实错误盖住。
             """(https?://)?(www\.)?(xiaohongshu\.com|xhslink\.com|xhslink\.cn|xslink\.com|xhs\.link)/.+"""
+        )
+
+        /**
+         * 抓分享页时一律不下载的资源后缀。SSR 数据内联在 HTML 里，这些字节对
+         * 提取毫无用处，却占页面绝大部分体积（封面、头像、图标、字体、预览流）。
+         */
+        private val BLOCKED_SUFFIXES = listOf(
+            ".jpg", ".jpeg", ".png", ".webp", ".gif", ".heic", ".avif", ".svg", ".ico",
+            ".woff", ".woff2", ".ttf", ".otf", ".eot",
+            ".mp4", ".m4a", ".mp3", ".aac", ".m3u8",
         )
     }
 
@@ -135,6 +148,7 @@ class WebViewParser(private val context: Context) {
         val handler = Handler(Looper.getMainLooper())
         var webView: WebView? = null
         var resumed = false
+        var extractStarted = false
 
         // 分享页内嵌的 _ROUTER_DATA 原始字面量（SSR 直出）
         val extractRouterJs = """
@@ -169,7 +183,7 @@ class WebViewParser(private val context: Context) {
                 cont.resume(null)
             }
         }
-        // 12s：分享页 SSR 数据在 3s 内就该到，提取重试最多 5×900ms。
+        // 12s：分享页 SSR 数据在 3s 内就该到，提取重试最多 8×350ms。
         // 再等下去只会让用户干等——超时后由直连 HTML / 第三方接口接力。
         handler.postDelayed(timeout, 12_000)
 
@@ -221,7 +235,7 @@ class WebViewParser(private val context: Context) {
                         harvestTtwid()
                         finish(parsed)
                     }
-                    attempt < 5 -> handler.postDelayed({ tryExtract(view, attempt + 1) }, 900)
+                    attempt < 8 -> handler.postDelayed({ tryExtract(view, attempt + 1) }, 350)
                     else -> tryAlbumRegex(view)
                 }
             }
@@ -234,12 +248,41 @@ class WebViewParser(private val context: Context) {
                 settings.userAgentString =
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
                 webViewClient = object : WebViewClient() {
+                    /**
+                     * 分享页的 SSR 数据（`_ROUTER_DATA`）内联在 HTML 里，图片、字体、
+                     * 音视频对提取毫无用处 —— 它们却占了页面绝大部分字节。全部拦掉，
+                     * 页面能早一两秒到 onPageFinished，这是纯赚的时间。
+                     *
+                     * 不拦 JS/CSS：CSR 页面还要靠脚本渲染才出内容。
+                     */
+                    override fun shouldInterceptRequest(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                    ): WebResourceResponse? {
+                        val req = request ?: return null
+                        if (req.isForMainFrame) return null
+                        val path = req.url?.toString()?.lowercase()
+                            ?.substringBefore('?')?.substringBefore('#') ?: return null
+                        if (BLOCKED_SUFFIXES.none { path.endsWith(it) }) return null
+                        return WebResourceResponse(
+                            "text/plain",
+                            "utf-8",
+                            ByteArrayInputStream(ByteArray(0)),
+                        )
+                    }
+
                     override fun onPageFinished(view: WebView?, loadedUrl: String?) {
                         super.onPageFinished(view, loadedUrl)
                         // 页面 JS 在加载过程就会铸造 uifid/ttwid —— 无论 SSR
                         // 是否被风控打薄，先收割再提取（原生签名通道靠它）。
                         harvestTtwid()
-                        handler.postDelayed({ tryExtract(view, 0) }, 1_000)
+                        // 短链会连续触发多次 onPageFinished，只让第一次开工，
+                        // 否则几个提取循环并发跑，白耗时间还会互相打架。
+                        if (extractStarted) return
+                        extractStarted = true
+                        // SSR 的 _ROUTER_DATA 是页面首字节就有的，DOM 解析完即可读。
+                        // 原来等 1000ms，实测余量过大，白白多等将近一秒。
+                        handler.postDelayed({ tryExtract(view, 0) }, 200)
                     }
                 }
                 loadUrl(url)

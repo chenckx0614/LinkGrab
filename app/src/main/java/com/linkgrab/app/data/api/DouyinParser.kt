@@ -73,7 +73,6 @@ class DouyinParser {
          * 失败时 WebView 真浏览器通道会并行接力（见 ParseRepository），所以这里
          * 不必再硬撑到底，多等只会让用户多看一眼 loading。
          */
-        private const val SESSION_RETRY_BUDGET_MS = 5_000L
         private const val HTML_BUDGET_MS = 9_000L
         private const val HTML_HARD_DEADLINE_MS = 13_000L
 
@@ -266,7 +265,16 @@ class DouyinParser {
     }
     // endregion
 
-    suspend fun parse(shareUrl: String): Result<MediaResult> = withContext(Dispatchers.IO) {
+    /**
+     * @param onFastPathMiss 第一层（1~2 个请求的 slidesinfo）被风控打空时立即回调。
+     *        调用方据此**立刻**启动 WebView 真浏览器通道，而不是靠「等 N 秒没结果
+     *        就猜它失败」——猜早了会给正常链接白起一个 WebView（结果反而更慢），
+     *        猜晚了风控链接就得干等原生把重试全部跑完。
+     */
+    suspend fun parse(
+        shareUrl: String,
+        onFastPathMiss: (() -> Unit)? = null,
+    ): Result<MediaResult> = withContext(Dispatchers.IO) {
         sawNote = false
         val startedAt = SystemClock.elapsedRealtime()
         var lapAt = startedAt
@@ -284,7 +292,7 @@ class DouyinParser {
             // 图文 note 需要带 request_source=200 才返回数据）。接口被风控时
             // 换会话重打、并发带签名的官方 detail 接口（需要 WebView 铸造的
             // uifid），最后才是旧的 HTML SSR 解析。
-            val data = resolveDetail(videoId, startedAt)
+            val data = resolveDetail(videoId, startedAt, onFastPathMiss)
                 ?: return@withContext Result.failure(
                     Exception(
                         if (sawNote) "抖音图集未取到图片（接口被风控过滤）"
@@ -419,27 +427,34 @@ class DouyinParser {
     /**
      * 取作品 detail 的分层通道，按「便宜 → 贵」排列，任一层出结果即返回。
      *
-     * 层 1：无会话直打（0 额外往返，实测大多数命中）
-     * 层 2：换会话 + 换 UA 重打，**同时并发**带签名的官方 detail —— 风控命中时
-     *       这两条路互相兜底，串行跑等于把最慢的失败路径翻倍
-     * 层 3：HTML SSR 兜底
+     * 层 1：无会话直打（1~2 个往返，实测大多数命中）
+     * 层 2：风控命中后的三条路**并发**（换 UA 重打 / 签名 detail / 轻量 HTML 探测）
+     *       —— 原来是串行，一次风控要把最快 8s 的失败路径走三遍，这正是用户说的
+     *       「将近十秒」的主犯。并发后耗时是三者里最慢那条，不是总和。
      *
-     * `startedAt` 是整次解析的起点，用于给后两层设预算：宁可快点失败交给降级链，
-     * 也别让用户对着 loading 干等十几秒。
+     * 层 1 一落空就通过 [onFastPathMiss] 通知调用方起 WebView：真浏览器比这三条
+     * 原生路都稳，让它和层 2 并行跑，谁先出结果用谁。
      */
-    private suspend fun resolveDetail(videoId: String, startedAt: Long): JsonObject? {
+    private suspend fun resolveDetail(
+        videoId: String,
+        startedAt: Long,
+        onFastPathMiss: (() -> Unit)? = null,
+    ): JsonObject? {
         // 层 1：不带会话（有缓存会话就顺手带上，反正零成本）
         slidesinfo(videoId, cookie = cachedTtwidCookie())?.let { return it }
 
-        // 层 2：风控命中 —— 会话轮换与签名通道并发竞赛
-        if (SystemClock.elapsedRealtime() - startedAt < SESSION_RETRY_BUDGET_MS) {
-            val tasks = mutableListOf<suspend () -> JsonObject?>()
-            tasks += { slidesinfoWithRotatedSession(videoId) }
-            if (cachedUifid != null) tasks += { fetchAwemeDetailSigned(videoId) }
-            firstNonNull(tasks)?.let { return it }
-        }
+        // 层 1 落空 = 命中风控。立刻放行 WebView 通道，别等原生把重试跑完。
+        runCatching { onFastPathMiss?.invoke() }
 
-        // 层 3：HTML SSR
+        // 层 2：三条路并发
+        val tasks = mutableListOf<suspend () -> JsonObject?>(
+            { slidesinfoWithRotatedSession(videoId) },
+            { fetchAwemeDetailFromHtml(videoId, startedAt + HTML_HARD_DEADLINE_MS, light = true) },
+        )
+        if (cachedUifid != null) tasks += { fetchAwemeDetailSigned(videoId) }
+        firstNonNull(tasks)?.let { return it }
+
+        // 层 3：HTML SSR 完整重试（轻量探测已落空才走到这里）
         if (SystemClock.elapsedRealtime() - startedAt < HTML_BUDGET_MS) {
             return fetchAwemeDetailFromHtml(videoId, startedAt + HTML_HARD_DEADLINE_MS)
         }
@@ -447,19 +462,23 @@ class DouyinParser {
     }
 
     /**
-     * 用会话重打 slidesinfo：池里的会话先试移动 UA，仍被挡就丢掉换下一个会话
-     * 再来一轮。最多两轮，避免风控死循环式重试。
+     * 用会话重打 slidesinfo：移动 UA（与 ttwid 下发时自洽）与桌面 UA **并发**。
+     *
+     * 原来是一轮一轮串行（移动 UA 打两发 → 换会话 → 桌面 UA 再打两发），风控时
+     * 等于把最慢的失败路径走两遍。这里每个 UA 只打一发（图集变体在层 1 已经试过
+     * 了，重复打没有意义），两发并发。
      */
-    private fun slidesinfoWithRotatedSession(videoId: String): JsonObject? {
-        repeat(2) { round ->
-            val ttwid = acquireTtwid()
-            val cookie = ttwid?.let { "ttwid=$it" }
-            // 第一轮用移动 UA（与 ttwid 下发时的 UA 自洽），第二轮换桌面 UA
-            val ua = if (round == 0) mobileUa else defaultUa
-            slidesinfo(videoId, cookie, ua)?.let { return it }
-            rotateTtwid(ttwid)
-        }
-        return null
+    private suspend fun slidesinfoWithRotatedSession(videoId: String): JsonObject? = coroutineScope {
+        val ttwid = acquireTtwid()
+        val cookie = ttwid?.let { "ttwid=$it" }
+        val tasks = listOf<suspend () -> JsonObject?>(
+            { slidesinfoOnce(videoId, "", cookie, mobileUa) },
+            { slidesinfoOnce(videoId, "", cookie, defaultUa) },
+        )
+        val hit = firstNonNull(tasks)
+        // 两个 UA 都没拿到 → 这个会话多半已被标记，丢掉换下一个
+        if (hit == null && ttwid != null) rotateTtwid(ttwid)
+        hit
     }
 
     /**
@@ -744,8 +763,21 @@ class DouyinParser {
      * 拿到 302 时 body 是空的、判 !isSuccessful 直接丢——纯属白发请求。现在只跑
      * 跟随重定向的一遍，落空时换会话再试一轮（受 deadline 约束）。
      */
-    private fun fetchAwemeDetailFromHtml(videoId: String, deadlineAt: Long): JsonObject? {
+    private fun fetchAwemeDetailFromHtml(
+        videoId: String,
+        deadlineAt: Long,
+        light: Boolean = false,
+    ): JsonObject? {
         return try {
+            if (light) {
+                // 轻量探测：只打一发图文分享页（不用会话、不重试）。它和层 2
+                // 的其它通道并发跑，命中就是白赚；不中也不额外花时间。
+                val html = fetchShareHtml(
+                    "https://www.iesdouyin.com/share/note/$videoId/",
+                    cachedTtwidCookie(),
+                )
+                return html?.let { parseShareHtmlRouterData(it) }
+            }
             var round = 0
             while (round < 2 && SystemClock.elapsedRealtime() < deadlineAt) {
                 val ttwid = acquireTtwid()
