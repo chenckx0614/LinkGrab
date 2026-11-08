@@ -1,9 +1,15 @@
 package com.linkgrab.app.data.api
 
+import android.os.SystemClock
+import android.util.Log
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.VideoQuality
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -14,6 +20,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import okhttp3.Cookie
+import okhttp3.ConnectionPool
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -50,13 +57,64 @@ import java.util.concurrent.TimeUnit
 class DouyinParser {
 
     companion object {
+        private const val TAG = "DouyinParser"
+
         /** 图文作品的 aweme_type：2 普通图集 / 68 单图+配乐 / 150 图文。 */
         private val NOTE_TYPES = setOf("2", "68", "150")
+
+        /**
+         * 引导失败后的冷却时间：通道全灭时不必每次解析都再去白跑两三个请求，
+         * 冷却过后再试。这是「解析忽快忽慢」里最贵的一段浪费。
+         */
+        private const val TTWID_COOLDOWN_MS = 90_000L
+
+        /**
+         * 各层通道的时间预算（从解析开始算起）。到点就跳过后面的层，把时间让给
+         * 降级链 —— 用户等的是结果，不是「一定要在原生通道里成功」。
+         */
+        private const val SESSION_RETRY_BUDGET_MS = 9_000L
+        private const val HTML_BUDGET_MS = 16_000L
+        private const val HTML_HARD_DEADLINE_MS = 22_000L
+
+        /**
+         * 全应用共用的 OkHttp 客户端。
+         *
+         * 抖音解析每次要打好几个 HTTPS 端点，客户端按实例 new 出来会把连接池、
+         * HTTP/2 多路复用、TLS session 票据全部丢掉，每次解析都要重新握手
+         * （跨境网络下这笔开销能到几百毫秒 × 请求数）。这里全局单例，并且
+         * 连接保活 5 分钟，连续解析/续传都复用同一条连接。
+         */
+        private val sharedClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .connectTimeout(9, TimeUnit.SECONDS)
+                .readTimeout(12, TimeUnit.SECONDS)
+                .connectionPool(ConnectionPool(10, 5, TimeUnit.MINUTES))
+                .build()
+        }
+
+        private val sharedNoRedirectClient: OkHttpClient by lazy {
+            sharedClient.newBuilder()
+                .followRedirects(false)
+                .followSslRedirects(false)
+                .build()
+        }
 
         // 访客会话跨实例共享：WebView 通道拿到真浏览器会话后回填到这里，
         // 之后所有 DouyinParser 实例的原生请求都带上这些 cookie。
         @Volatile
         private var cachedTtwid: String? = null
+
+        /**
+         * ttwid 会话池（最多 3 个）。风控是按会话标记的，命中后换一个会话重打
+         * 比拿同一个 ttwid 死磕有效；WebView 通道回填的会话也进池。
+         */
+        private val ttwidPool = java.util.Collections.synchronizedList(mutableListOf<String>())
+
+        /** 上一次主动引导失败的时间点，用于冷却。 */
+        @Volatile
+        private var ttwidFailedAt = 0L
 
         /** uifid（页面 secsdk JS 铸造的访客 id）—— x-secsdk-web-signature 的绑定对象。 */
         @Volatile
@@ -72,7 +130,14 @@ class DouyinParser {
 
         /** WebView 真页面拿到 ttwid 后回填（原生解析从此风控概率大降）。 */
         fun injectTtwid(value: String) {
-            if (value.isNotBlank()) cachedTtwid = value
+            if (value.isBlank()) return
+            cachedTtwid = value
+            synchronized(ttwidPool) {
+                if (value !in ttwidPool) {
+                    if (ttwidPool.size >= 3) ttwidPool.removeAt(0)
+                    ttwidPool.add(value)
+                }
+            }
         }
 
         /** WebView 访问抖音页面后回填其余访客凭据（uifid 是签名通道的钥匙）。 */
@@ -93,17 +158,9 @@ class DouyinParser {
      */
     private var sawNote = false
 
-    private val client = OkHttpClient.Builder()
-        .followRedirects(true)
-        .followSslRedirects(true)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val client: OkHttpClient get() = sharedClient
 
-    private val noRedirectClient = client.newBuilder()
-        .followRedirects(false)
-        .followSslRedirects(false)
-        .build()
+    private val noRedirectClient: OkHttpClient get() = sharedNoRedirectClient
 
     private val defaultUa =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -117,24 +174,46 @@ class DouyinParser {
     // 返回空 aweme_details（这正是「偶尔解析失败」的主因）。浏览器访问任意
     // iesdouyin 页面都会下发 ttwid，这里引导一次并缓存复用（缓存移至 companion，
     // 供 WebView 通道回填共享）。
+    //
+    // 2026-11 提速调整：**第一发接口请求不再等会话**。实测 slidesinfo 干净请求
+    // （无 cookie）大多数时候就能拿到数据，而引导一个 ttwid 要额外 1~3 个往返
+    // （主页 Set-Cookie 拿不到时还得走 union register 两次请求）。所以现在的顺序是：
+    //   ① 无会话直打 → ② 命中风控才引导/轮换会话 + 换 UA 重打 → ③ HTML 兜底。
+    // 引导失败还会进 90s 冷却，避免每次解析都白跑一遍引导。
 
-    private fun ttwidCookie(): String {
-        cachedTtwid?.let { return "ttwid=$it" }
-        // 通道 1：访问分享主页，读响应 Set-Cookie。部分网络环境主页不下发
-        // ttwid（2026-10 实测），此时走通道 2。
-        bootstrapTtwidFromHomepage()?.let {
-            cachedTtwid = it
-            return "ttwid=$it"
+    /** 当前会话的 Cookie 头；没有会话返回 null（不发 Cookie 头，也不触发引导）。 */
+    private fun cachedTtwidCookie(): String? = cachedTtwid?.let { "ttwid=$it" }
+
+    /**
+     * 取一个可用会话：先用缓存，再翻会话池，都没有才现场引导（受冷却限制）。
+     * 返回 null 表示这一轮拿不到会话 —— 调用方应当继续裸打，不要卡住。
+     */
+    private fun acquireTtwid(): String? {
+        cachedTtwid?.let { return it }
+        val pooled = synchronized(ttwidPool) { ttwidPool.lastOrNull() }
+        if (pooled != null) {
+            cachedTtwid = pooled
+            return pooled
         }
-        // 通道 2：字节的 union register 接口主动注册一个 —— POST 拿
-        // redirect_url(ticket)，再 GET 回调地址读 Set-Cookie。实测（2026-10）
-        // 桌面与移动网络均可用，拿到 ttwid 后 SSR 分享页能带出完整图集数据。
-        bootstrapTtwidFromRegister()?.let {
-            cachedTtwid = it
-            return "ttwid=$it"
+        if (SystemClock.elapsedRealtime() - ttwidFailedAt < TTWID_COOLDOWN_MS) return null
+        val fresh = bootstrapTtwidFromHomepage() ?: bootstrapTtwidFromRegister()
+        if (fresh == null) {
+            ttwidFailedAt = SystemClock.elapsedRealtime()
+            Log.d(TAG, "ttwid 引导失败，${TTWID_COOLDOWN_MS / 1000}s 内不再尝试")
+            return null
         }
-        // 两条通道都失败不阻断解析：不带 cookie 直连仍有一定概率成功
-        return ""
+        injectTtwid(fresh)
+        return fresh
+    }
+
+    /**
+     * 当前会话疑似被风控标记：丢掉它并换池里的下一个。
+     * 池里没有别的会话时留空，下次 [acquireTtwid] 会重新引导（冷却期内则裸打）。
+     */
+    private fun rotateTtwid(bad: String?) {
+        if (bad == null) return
+        if (cachedTtwid == bad) cachedTtwid = null
+        synchronized(ttwidPool) { ttwidPool.removeAll { it == bad } }
     }
 
     private fun bootstrapTtwidFromHomepage(): String? {
@@ -177,23 +256,30 @@ class DouyinParser {
 
     suspend fun parse(shareUrl: String): Result<MediaResult> = withContext(Dispatchers.IO) {
         sawNote = false
+        val startedAt = SystemClock.elapsedRealtime()
+        var lapAt = startedAt
+        fun lap(stage: String) {
+            val now = SystemClock.elapsedRealtime()
+            Log.d(TAG, "$stage +${now - lapAt}ms / 累计 ${now - startedAt}ms")
+            lapAt = now
+        }
         try {
             val videoId = resolveVideoId(shareUrl)
                 ?: return@withContext Result.failure(Exception("无法从链接中提取抖音作品 ID"))
+            lap("解析作品 ID")
 
             // 优先走 slidesinfo 专用接口（SSR 页面的 videoInfoRes 字段已下线，
-            // 图文 note 需要带 request_source=200 才返回数据）。接口失败时
-            // 依次尝试带签名的官方 detail 接口（需要 WebView 铸造的 uifid）
-            // 和旧的 HTML SSR 解析。
-            val data = fetchAwemeDetail(videoId)
-                ?: fetchAwemeDetailSigned(videoId)
-                ?: fetchAwemeDetailFromHtml(videoId)
+            // 图文 note 需要带 request_source=200 才返回数据）。接口被风控时
+            // 换会话重打、并发带签名的官方 detail 接口（需要 WebView 铸造的
+            // uifid），最后才是旧的 HTML SSR 解析。
+            val data = resolveDetail(videoId, startedAt)
                 ?: return@withContext Result.failure(
                     Exception(
                         if (sawNote) "抖音图集未取到图片（接口被风控过滤）"
                         else "未找到作品信息"
                     )
                 )
+            lap("接口取到作品数据")
 
             // ---- images (图集) + LivePhoto ----
             // 注意用 as? JsonArray：风控打薄时常给 `"images": null`，
@@ -254,8 +340,11 @@ class DouyinParser {
                 return@withContext Result.failure(Exception("未找到视频或图片地址"))
             }
 
-            // Follow the 302 to the final mp4 (西瓜视频 may have no redirect).
-            val finalUrl = resolveRedirect(playUrl)
+            // Follow the 302 to the final mp4. 已经是 CDN 直链（bit_rate 档位大多
+            // 是 v3-web.douyinvod.com 的 .mp4）时跳过这一趟 —— 每个解析省一次
+            // 往返，而下载器本来就会自己跟 302。
+            val finalUrl = if (isDirectMediaUrl(playUrl)) playUrl else resolveRedirect(playUrl)
+            lap("解析播放地址")
 
             val cover = bestCoverUrl(data)
 
@@ -274,49 +363,116 @@ class DouyinParser {
         }
     }
 
-    /**
-     * Web API: /web/api/v2/aweme/slidesinfo/ — supports both videos and
-     * image albums (albums need `request_source=200`).
-     *
-     * 2026-10 实测：`iteminfo` 已下线（恒定返回 encrypt_data_miss），不再浪费一趟；
-     * slidesinfo 本体健康（干净请求连 ttwid 都不需要），但风控可能间歇性过滤
-     * （aweme_details 为 null + filter_list）。此时强制刷新 ttwid 换新会话重试一次。
-     */
-    private fun fetchAwemeDetail(videoId: String): JsonObject? {
-        // `request_source=200` is required for image albums but returns an
-        // empty list for videos, so both variants are tried and the first
-        // response that actually carries media wins.
-        //
+    /** 单发 slidesinfo；`rsParam` 决定是否带 `request_source=200`（图集必需）。 */
+    private fun slidesinfoOnce(
+        videoId: String,
+        rsParam: String,
+        cookie: String?,
+        ua: String,
+    ): JsonObject? {
         // 打薄（风控过滤）的 detail 一律不返回：它 images 为空却常保留
-        // video.play_addr（图文作品的 BGM mp3），会被 hasMedia 之外任何
-        // 「有字段就算数」的宽容判定误收，从而挡住后面的签名 detail 通道
+        // video.play_addr（图文作品的 BGM mp3），会被任何「有字段就算数」的宽容
+        // 判定误收，从而挡住后面的签名 detail 通道
         // （实测 7700942408430718115：slidesinfo 打薄 → 假成功 → 解析失败）。
-        fun trySlidesinfo(): JsonObject? {
-            for (rsParam in listOf("", "&request_source=200")) {
-                val detail = try {
-                    val body = get(
-                        "https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/?aweme_ids=%5B$videoId%5D$rsParam",
-                        followRedirects = true,
-                    )
-                    json.parseToJsonElement(body).jsonObject["aweme_details"]?.jsonArray
-                        ?.firstOrNull()?.jsonObject
-                } catch (e: Exception) {
-                    null
-                } ?: continue
+        val detail = try {
+            val body = get(
+                "https://www.iesdouyin.com/web/api/v2/aweme/slidesinfo/?aweme_ids=%5B$videoId%5D$rsParam",
+                followRedirects = true,
+                cookie = cookie,
+                ua = ua,
+            )
+            json.parseToJsonElement(body).jsonObject["aweme_details"]?.jsonArray
+                ?.firstOrNull()?.jsonObject
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        return detail.takeIf { hasMedia(it) }
+    }
 
-                if (hasMedia(detail)) return detail
-            }
-            return null
+    /**
+     * 一发完整 slidesinfo：先打无 `request_source`（视频），不中再打图集变体。
+     *
+     * `request_source=200` 对视频恒定返回空列表，所以只有第一发没拿到媒体才补打，
+     * 不会给每次视频解析都多塞一个注定失败的请求。
+     */
+    private fun slidesinfo(
+        videoId: String,
+        cookie: String?,
+        ua: String = defaultUa,
+    ): JsonObject? {
+        slidesinfoOnce(videoId, "", cookie, ua)?.let { return it }
+        return slidesinfoOnce(videoId, "&request_source=200", cookie, ua)
+    }
+
+    /**
+     * 取作品 detail 的分层通道，按「便宜 → 贵」排列，任一层出结果即返回。
+     *
+     * 层 1：无会话直打（0 额外往返，实测大多数命中）
+     * 层 2：换会话 + 换 UA 重打，**同时并发**带签名的官方 detail —— 风控命中时
+     *       这两条路互相兜底，串行跑等于把最慢的失败路径翻倍
+     * 层 3：HTML SSR 兜底
+     *
+     * `startedAt` 是整次解析的起点，用于给后两层设预算：宁可快点失败交给降级链，
+     * 也别让用户对着 loading 干等十几秒。
+     */
+    private suspend fun resolveDetail(videoId: String, startedAt: Long): JsonObject? {
+        // 层 1：不带会话（有缓存会话就顺手带上，反正零成本）
+        slidesinfo(videoId, cookie = cachedTtwidCookie())?.let { return it }
+
+        // 层 2：风控命中 —— 会话轮换与签名通道并发竞赛
+        if (SystemClock.elapsedRealtime() - startedAt < SESSION_RETRY_BUDGET_MS) {
+            val tasks = mutableListOf<suspend () -> JsonObject?>()
+            tasks += { slidesinfoWithRotatedSession(videoId) }
+            if (cachedUifid != null) tasks += { fetchAwemeDetailSigned(videoId) }
+            firstNonNull(tasks)?.let { return it }
         }
 
-        trySlidesinfo()?.let { return it }
-
-        // 空结果 → 缓存的 ttwid 可能已被风控标记，丢弃强制重新引导后再试一轮
-        if (cachedTtwid != null) {
-            cachedTtwid = null
-            return trySlidesinfo()
+        // 层 3：HTML SSR
+        if (SystemClock.elapsedRealtime() - startedAt < HTML_BUDGET_MS) {
+            return fetchAwemeDetailFromHtml(videoId, startedAt + HTML_HARD_DEADLINE_MS)
         }
         return null
+    }
+
+    /**
+     * 用会话重打 slidesinfo：池里的会话先试移动 UA，仍被挡就丢掉换下一个会话
+     * 再来一轮。最多两轮，避免风控死循环式重试。
+     */
+    private fun slidesinfoWithRotatedSession(videoId: String): JsonObject? {
+        repeat(2) { round ->
+            val ttwid = acquireTtwid()
+            val cookie = ttwid?.let { "ttwid=$it" }
+            // 第一轮用移动 UA（与 ttwid 下发时的 UA 自洽），第二轮换桌面 UA
+            val ua = if (round == 0) mobileUa else defaultUa
+            slidesinfo(videoId, cookie, ua)?.let { return it }
+            rotateTtwid(ttwid)
+        }
+        return null
+    }
+
+    /**
+     * 并发跑多个候选通道，返回第一个非空结果（其余取消）；全部落空返回 null。
+     * 通道内部抛异常按「没拿到」处理，不影响其它通道。
+     */
+    private suspend fun <T : Any> firstNonNull(tasks: List<suspend () -> T?>): T? = coroutineScope {
+        val winner = CompletableDeferred<T>()
+        val jobs = tasks.map { task ->
+            launch(Dispatchers.IO) {
+                runCatching { task() }.getOrNull()?.let { winner.complete(it) }
+            }
+        }
+        launch {
+            jobs.joinAll()
+            // 全部跑完仍无结果 → 唤醒等待方（用普通异常，避免把作用域取消掉）
+            winner.completeExceptionally(NoSuchElementException("no channel returned data"))
+        }
+        try {
+            winner.await()
+        } catch (_: Exception) {
+            null
+        } finally {
+            jobs.forEach { it.cancel() }
+        }
     }
 
     private fun hasMedia(detail: JsonObject): Boolean {
@@ -571,30 +727,31 @@ class DouyinParser {
      * （无 cookie 的页面是纯客户端渲染壳，_ROUTER_DATA 里没有 item_list）；
      * 搜索引擎蜘蛛 UA 会被 302 封锁，不能走假 UA 的路。
      * 图文作品的分享路径是 /share/note/，视频是 /share/video/，两条都试。
-     * 页面行为不稳定：多数情况 200 直出；风控时 302 —— 两种策略都试。
+     *
+     * 2026-11 提速：原来每条路径都要跑「不跟随 / 跟随重定向」两遍，但不跟随那次
+     * 拿到 302 时 body 是空的、判 !isSuccessful 直接丢——纯属白发请求。现在只跑
+     * 跟随重定向的一遍，落空时换会话再试一轮（受 deadline 约束）。
      */
-    private fun fetchAwemeDetailFromHtml(videoId: String): JsonObject? {
+    private fun fetchAwemeDetailFromHtml(videoId: String, deadlineAt: Long): JsonObject? {
         return try {
-            // 图文作品的分享路径是 /share/note/，必须先试 —— /share/video/{noteId}
-            // 会返回图集的预览视频变体，导致图集被当成视频解析。
-            for (path in listOf("share/note", "share/video")) {
-                val pageUrl = "https://www.iesdouyin.com/$path/$videoId/"
-                for (followRedirects in listOf(false, true)) {
-                    val html = fetchShareHtml(pageUrl, followRedirects) ?: continue
-                    parseShareHtmlRouterData(html)?.let { return it }
-                }
-            }
-            // 全部落空 → ttwid 可能已被风控标记，刷新后再试一轮
-            if (cachedTtwid != null) {
-                cachedTtwid = null
+            var round = 0
+            while (round < 2 && SystemClock.elapsedRealtime() < deadlineAt) {
+                val ttwid = acquireTtwid()
+                val cookie = ttwid?.let { "ttwid=$it" }
+                // 图文作品的分享路径是 /share/note/，必须先试 —— /share/video/{noteId}
+                // 会返回图集的预览视频变体，导致图集被当成视频解析。
                 for (path in listOf("share/note", "share/video")) {
                     val pageUrl = "https://www.iesdouyin.com/$path/$videoId/"
-                    val html = fetchShareHtml(pageUrl, followRedirects = false) ?: continue
+                    val html = fetchShareHtml(pageUrl, cookie) ?: continue
                     parseShareHtmlRouterData(html)?.let { return it }
                 }
+                // 全部落空 → 会话可能已被风控标记，换一个再试一轮
+                if (ttwid == null) break
+                rotateTtwid(ttwid)
+                round++
             }
             null
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -621,18 +778,17 @@ class DouyinParser {
         return null
     }
 
-    /** 分享页 HTML 抓取：可选跟随重定向，失败返回 null。 */
-    private fun fetchShareHtml(pageUrl: String, followRedirects: Boolean): String? {
+    /** 分享页 HTML 抓取（客户端自己跟 302），失败返回 null。 */
+    private fun fetchShareHtml(pageUrl: String, cookie: String?): String? {
         return try {
             val builder = Request.Builder().url(pageUrl)
                 .header("User-Agent", mobileUa)
                 .header("Referer", "https://www.douyin.com/")
-            ttwidCookie().takeIf { it.isNotEmpty() }?.let { builder.header("Cookie", it) }
-            val http = if (followRedirects) client else noRedirectClient
-            http.newCall(builder.build()).execute().use { resp ->
+            cookie?.let { builder.header("Cookie", it) }
+            client.newCall(builder.build()).execute().use { resp ->
                 if (!resp.isSuccessful) null else resp.body?.string()
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -758,19 +914,52 @@ class DouyinParser {
         urls.firstOrNull { !isWebp(it) } ?: urls.firstOrNull()
 
     /**
-     * GET helper with explicit redirect policy control.
+     * GET helper.
+     *
+     * `cookie` 由调用方显式给出（null = 不发 Cookie 头），这样「无会话直打」
+     * 这条快路子不会被 ttwid 引导拖住。
      */
-    private fun get(url: String, followRedirects: Boolean): String {
+    private fun get(
+        url: String,
+        followRedirects: Boolean,
+        cookie: String? = cachedTtwidCookie(),
+        ua: String = defaultUa,
+    ): String {
         val builder = Request.Builder().url(url)
-            .header("User-Agent", defaultUa)
+            .header("User-Agent", ua)
             .header("Referer", "https://www.douyin.com/")
-        // ttwid 显著降低风控返回空数据的概率（见 ttwidCookie 注释）
-        ttwidCookie().takeIf { it.isNotEmpty() }?.let { builder.header("Cookie", it) }
+        cookie?.let { builder.header("Cookie", it) }
         val http = if (followRedirects) client else noRedirectClient
         http.newCall(builder.build()).execute().use { resp ->
             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
             return resp.body?.string() ?: throw Exception("空响应")
         }
+    }
+
+    /**
+     * 已经是 CDN 直链时不必再探一次 302。
+     *
+     * bit_rate 档位给的地址基本都是 CDN 上的真实媒体文件（实测
+     * `v11-default.365yg.com/.../video/tos/...?mime_type=video_mp4`，直接 200，
+     * 没有跳转；`v3-web.douyinvod.com` 同理）。只有 `/aweme/v1/play` 这类
+     * 播放网关才需要跟一次重定向。下载器本来就跟随 302，所以这里省下的是
+     * 每个视频解析一次完整往返（还要多建一条到 CDN 的连接）。
+     */
+    private fun isDirectMediaUrl(url: String): Boolean {
+        val lower = url.lowercase()
+        if ("mime_type=video_mp4" in lower) return true
+        val host = try {
+            url.toHttpUrl().host.lowercase()
+        } catch (_: Exception) {
+            return false
+        }
+        if (host.contains("douyinvod.com") || host.contains("bytevcdn") ||
+            host.contains("volccdn") || host.contains("bytecdn") ||
+            host.contains("365yg.com")
+        ) {
+            return true
+        }
+        return url.substringBefore('?').substringBefore('#').endsWith(".mp4", ignoreCase = true)
     }
 
     /**

@@ -24,6 +24,10 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.3.11", "2026-11-08", listOf(
+        "抖音解析更快了",
+        "抖音解析被拦时会自动换个身份重试",
+    )),
     UpdateLogItem("3.3.10", "2026-11-05", listOf(
         "下载到一半退出，重新打开会接着下",
     )),

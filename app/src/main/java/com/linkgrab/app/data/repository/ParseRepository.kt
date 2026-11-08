@@ -14,6 +14,7 @@ import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.Platform
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Parse pipeline (v2):
@@ -38,6 +39,9 @@ class ParseRepository(context: Context) {
             """https?://(?:(?:www\.|m\.)?weibo\.com|m\.weibo\.cn|weibo\.cn|t\.cn)(?:/[^\s\u3000\"'<>()（）【】\[\]{}]*)?""".toRegex(),
         )
         val GENERIC_URL_PATTERN = """https?://[^\s\u3000\"'<>()（）【】\[\]{}]+""".toRegex()
+
+        /** 抖音原生解析失败后，降级链（WebView 等）的总时间预算。 */
+        const val DOUYIN_FALLBACK_BUDGET_MS = 24_000L
 
         /**
          * 笔记页的 SSR 数据标志。Shield 拦下来的页面（登录页 / 验证码页 / 404 页）
@@ -85,15 +89,21 @@ class ParseRepository(context: Context) {
                 if (native.isSuccess) native
                 else {
                     val nativeMessage = native.exceptionOrNull()?.message.orEmpty()
-                    val fallback = legacyParser.parse(cleanUrl)
-                    val fallbackResult = fallback.getOrNull()
-                    if (fallback.isSuccess && fallbackResult?.type == MediaType.VIDEO && "图集" in nativeMessage) {
+                    // 降级链会起隐藏 WebView（真浏览器通道），单步最长十几秒。整条
+                    // 链给一个总预算：原生已经失败过一轮，不该再让用户干等半分钟。
+                    val fallback = runCatching {
+                        withTimeoutOrNull(DOUYIN_FALLBACK_BUDGET_MS) { legacyParser.parse(cleanUrl) }
+                    }.getOrNull()
+                    val fallbackResult = fallback?.getOrNull()
+                    if (fallback != null && fallback.isSuccess &&
+                        fallbackResult?.type == MediaType.VIDEO && "图集" in nativeMessage
+                    ) {
                         // 原生解析已确认这是图集（接口被风控打薄）——降级链拿到的
                         // 只可能是图集自带的预览视频。以 VIDEO 返回的话结果页只能
                         // 看一张封面（用户反馈的「抖音解析后只显示封面」就是这条
                         // 路径），宁可失败也别给假结果。
                         native
-                    } else if (fallback.isSuccess) fallback else native
+                    } else if (fallback?.isSuccess == true) fallback else native
                 }
             }
             Platform.XIAOHONGSHU -> withContext(Dispatchers.IO) {
