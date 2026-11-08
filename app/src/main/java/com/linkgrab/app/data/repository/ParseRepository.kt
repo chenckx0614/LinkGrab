@@ -5,6 +5,7 @@ import com.linkgrab.app.data.api.BilibiliParser
 import com.linkgrab.app.data.api.CronetFetcher
 import com.linkgrab.app.data.api.CronetPage
 import com.linkgrab.app.data.api.DouyinParser
+import com.linkgrab.app.data.api.UcmaoParser
 import com.linkgrab.app.data.api.GenericWebParser
 import com.linkgrab.app.data.api.WebViewParser
 import com.linkgrab.app.data.api.WeiboParser
@@ -46,8 +47,8 @@ class ParseRepository(context: Context) {
         )
         val GENERIC_URL_PATTERN = """https?://[^\s\u3000\"'<>()（）【】\[\]{}]+""".toRegex()
 
-        /** 抖音原生解析失败后，降级链（WebView 等）的总时间预算。 */
-        const val DOUYIN_FALLBACK_BUDGET_MS = 24_000L
+        /** 抖音两条通道都失败后，第三方接口兜底的时间预算。 */
+        const val DOUYIN_FALLBACK_BUDGET_MS = 8_000L
 
         /**
          * 抖音原生通道的宽限期：这段时间内出结果就不必起 WebView。
@@ -68,6 +69,7 @@ class ParseRepository(context: Context) {
     private val weiboParser = WeiboParser()
     private val genericWebParser = GenericWebParser()
     private val legacyParser = WebViewParser(context)
+    private val ucmaoParser = UcmaoParser()
     private val cronetFetcher = CronetFetcher(context)
 
     /**
@@ -272,12 +274,14 @@ class ParseRepository(context: Context) {
             }
             if (winner != null) return Result.success(winner)
 
-            // 两条通道都没成功 → 旧降级链兜底（第三方接口）
+            // 两条通道都没成功 → 第三方接口兜底。
+            // 只打 ucmao 一家，不再走 legacyParser.parse 的整条链 —— 那条链
+            // 开头的 WebView 通道刚刚已经失败过，再跑一遍等于把 12 秒超时又付一次。
             val nativeResult = runCatching { native.await() }.getOrNull()
                 ?: Result.failure(Exception("抖音解析超时"))
             val nativeMessage = nativeResult.exceptionOrNull()?.message.orEmpty()
             val fallback = runCatching {
-                withTimeoutOrNull(DOUYIN_FALLBACK_BUDGET_MS) { legacyParser.parse(cleanUrl) }
+                withTimeoutOrNull(DOUYIN_FALLBACK_BUDGET_MS) { ucmaoParser.parse(cleanUrl) }
             }.getOrNull()
             val fallbackResult = fallback?.getOrNull()
             return if (fallback != null && fallback.isSuccess &&
