@@ -35,15 +35,14 @@ import android.graphics.Canvas
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.ContentScale
+import com.kyant.capsule.ContinuousRoundedRectangle
 import com.linkgrab.app.ui.designsystem.LocalUnifiedUi
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.foundation.clickable
 import com.linkgrab.app.BuildConfig
 import com.linkgrab.app.R
 import com.linkgrab.app.ui.theme.IOS26Canvas
@@ -108,17 +107,23 @@ fun AboutScreen(
                     Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    if (LocalUnifiedUi.current) Image(
-                        painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = "LinkGrab 图标",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(88.dp),
-                    ) else Image(
+                    // 两种主题都用合成后的 adaptive icon（背景铺满 + logo 居中），
+                    // 再按各自的设计语言裁圆角。直接用 foreground 前景层会得到一张
+                    // 直角方图 —— 前景只占视口中间约 96%，四周是透明边距，没有圆角
+                    // 也没有背景，看起来就是个切方的方块。
+                    Image(
                         bitmap = launcherBitmap,
                         contentDescription = "LinkGrab 图标",
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .size(88.dp)
-                            .clip(RoundedCornerShape(22.dp)),
+                            .clip(
+                                if (LocalUnifiedUi.current) {
+                                    ContinuousRoundedRectangle(20.dp)
+                                } else {
+                                    RoundedCornerShape(22.dp)
+                                }
+                            ),
                     )
                     Text(
                         "LinkGrab",
