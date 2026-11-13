@@ -820,11 +820,6 @@ fun WebPageScreen(
                         interactionSource = remember { MutableInteractionSource() },
                     ) { menuVisible = false },
             )
-            // 类 HyperOS 弹菜单时整窗压暗（miuix ListPopup 的 windowDimming）
-            com.linkgrab.app.ui.liquid.HyperMenuDim(
-                visible = menuVisible,
-                onDismiss = { menuVisible = false },
-            )
         }
 
         // ---- 菜单覆盖层：全屏、约束宽松，展开不撑动顶栏 ----

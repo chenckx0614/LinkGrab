@@ -6,6 +6,8 @@ import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.VideoQuality
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.joinAll
@@ -167,7 +169,9 @@ class DouyinParser {
      * 只影响失败文案：带「图集」二字时 [ParseRepository] 会拒绝降级链给出的
      * 视频结果（那只是图集预览流），避免用户拿到一个点不动的「下载视频」。
      */
-    private var sawNote = false
+    @Volatile
+    internal var sawNote = false
+        private set
 
     private val client: OkHttpClient get() = sharedClient
 
@@ -199,7 +203,7 @@ class DouyinParser {
      * 取一个可用会话：先用缓存，再翻会话池，都没有才现场引导（受冷却限制）。
      * 返回 null 表示这一轮拿不到会话 —— 调用方应当继续裸打，不要卡住。
      */
-    private fun acquireTtwid(): String? {
+    private suspend fun acquireTtwid(): String? {
         cachedTtwid?.let { return it }
         val pooled = synchronized(ttwidPool) { ttwidPool.lastOrNull() }
         if (pooled != null) {
@@ -227,21 +231,23 @@ class DouyinParser {
         synchronized(ttwidPool) { ttwidPool.removeAll { it == bad } }
     }
 
-    private fun bootstrapTtwidFromHomepage(): String? {
+    private suspend fun bootstrapTtwidFromHomepage(): String? {
         return try {
             val request = Request.Builder().url("https://www.iesdouyin.com/")
                 .header("User-Agent", mobileUa)
                 .build()
-            client.newCall(request).execute().use { resp ->
+            client.newCall(request).readCancellable { resp ->
                 Cookie.parseAll("https://www.iesdouyin.com/".toHttpUrl(), resp.headers)
                     .firstOrNull { it.name == "ttwid" }?.value
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         }
     }
 
-    private fun bootstrapTtwidFromRegister(): String? {
+    private suspend fun bootstrapTtwidFromRegister(): String? {
         return try {
             val body = """{"region":"cn","aid":6383,"needFid":false,"service":"www.douyin.com",""" +
                 """"migrate_info":{"ticket":"","source":"node"},"cbUrlProtocol":"https","union":true}"""
@@ -249,16 +255,18 @@ class DouyinParser {
                 .header("User-Agent", defaultUa)
                 .post(body.toRequestBody("application/json".toMediaType()))
                 .build()
-            val callback = client.newCall(request).execute().use { resp ->
-                json.parseToJsonElement(resp.body?.string() ?: return null)
+            val callback = client.newCall(request).readCancellable { resp ->
+                json.parseToJsonElement(resp.body?.string() ?: return@readCancellable null)
                     .jsonObject["redirect_url"]?.let { it as? JsonPrimitive }?.contentOrNull
             } ?: return null
             noRedirectClient.newCall(
                 Request.Builder().url(callback).header("User-Agent", defaultUa).build()
-            ).execute().use { resp ->
+            ).readCancellable { resp ->
                 Cookie.parseAll(callback.toHttpUrl(), resp.headers)
                     .firstOrNull { it.name == "ttwid" }?.value
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         }
@@ -275,7 +283,7 @@ class DouyinParser {
         shareUrl: String,
         onFastPathMiss: (() -> Unit)? = null,
     ): Result<MediaResult> = withContext(Dispatchers.IO) {
-        sawNote = false
+        sawNote = "/note/" in shareUrl
         val startedAt = SystemClock.elapsedRealtime()
         var lapAt = startedAt
         fun lap(stage: String) {
@@ -363,7 +371,8 @@ class DouyinParser {
             // Follow the 302 to the final mp4. 已经是 CDN 直链（bit_rate 档位大多
             // 是 v3-web.douyinvod.com 的 .mp4）时跳过这一趟 —— 每个解析省一次
             // 往返，而下载器本来就会自己跟 302。
-            val finalUrl = if (isDirectMediaUrl(playUrl)) playUrl else resolveRedirect(playUrl)
+            val finalUrl = if (isDirectMediaUrl(playUrl)) playUrl
+            else withTimeoutOrNull(1_000) { resolveRedirect(playUrl) } ?: playUrl
             lap("解析播放地址")
 
             val cover = bestCoverUrl(data)
@@ -378,13 +387,15 @@ class DouyinParser {
                     videoQualities = qualities,
                 )
             )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(Exception("抖音解析失败: ${e.message}"))
         }
     }
 
     /** 单发 slidesinfo；`rsParam` 决定是否带 `request_source=200`（图集必需）。 */
-    private fun slidesinfoOnce(
+    private suspend fun slidesinfoOnce(
         videoId: String,
         rsParam: String,
         cookie: String?,
@@ -403,6 +414,8 @@ class DouyinParser {
             )
             json.parseToJsonElement(body).jsonObject["aweme_details"]?.jsonArray
                 ?.firstOrNull()?.jsonObject
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         } ?: return null
@@ -415,7 +428,7 @@ class DouyinParser {
      * `request_source=200` 对视频恒定返回空列表，所以只有第一发没拿到媒体才补打，
      * 不会给每次视频解析都多塞一个注定失败的请求。
      */
-    private fun slidesinfo(
+    private suspend fun slidesinfo(
         videoId: String,
         cookie: String?,
         ua: String = defaultUa,
@@ -489,7 +502,13 @@ class DouyinParser {
         val winner = CompletableDeferred<T>()
         val jobs = tasks.map { task ->
             launch(Dispatchers.IO) {
-                runCatching { task() }.getOrNull()?.let { winner.complete(it) }
+                try {
+                    task()?.let { winner.complete(it) }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // Other candidates can still return media.
+                }
             }
         }
         launch {
@@ -499,6 +518,8 @@ class DouyinParser {
         }
         try {
             winner.await()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         } finally {
@@ -570,7 +591,7 @@ class DouyinParser {
     // 参考实现 2026-09-08/09 实测 24/24 通过；缺 uifid 时该端点一律 403
     // "Uifid Not Found"，所以没有 uifid 时直接跳过本通道不浪费请求。
 
-    private fun fetchAwemeDetailSigned(videoId: String): JsonObject? {
+    private suspend fun fetchAwemeDetailSigned(videoId: String): JsonObject? {
         val uifid = cachedUifid ?: return null
         return try {
             val msToken = cachedMsToken ?: fakeMsToken()
@@ -605,13 +626,15 @@ class DouyinParser {
                 .header("x-secsdk-web-signature", signHeaders.getValue("x-secsdk-web-signature"))
                 .header("x-secsdk-web-expire", signHeaders.getValue("x-secsdk-web-expire"))
                 .build()
-            client.newCall(request).execute().use { resp ->
-                if (!resp.isSuccessful) return null
-                val body = resp.body?.string() ?: return null
+            client.newCall(request).readCancellable { resp ->
+                if (!resp.isSuccessful) return@readCancellable null
+                val body = resp.body?.string() ?: return@readCancellable null
                 val detail = json.parseToJsonElement(body).jsonObject["aweme_detail"]?.jsonObject
-                    ?: return null
+                    ?: return@readCancellable null
                 detail.takeIf { hasMedia(it) }
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         }
@@ -763,7 +786,7 @@ class DouyinParser {
      * 拿到 302 时 body 是空的、判 !isSuccessful 直接丢——纯属白发请求。现在只跑
      * 跟随重定向的一遍，落空时换会话再试一轮（受 deadline 约束）。
      */
-    private fun fetchAwemeDetailFromHtml(
+    private suspend fun fetchAwemeDetailFromHtml(
         videoId: String,
         deadlineAt: Long,
         light: Boolean = false,
@@ -795,6 +818,8 @@ class DouyinParser {
                 round++
             }
             null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         }
@@ -823,15 +848,17 @@ class DouyinParser {
     }
 
     /** 分享页 HTML 抓取（客户端自己跟 302），失败返回 null。 */
-    private fun fetchShareHtml(pageUrl: String, cookie: String?): String? {
+    private suspend fun fetchShareHtml(pageUrl: String, cookie: String?): String? {
         return try {
             val builder = Request.Builder().url(pageUrl)
                 .header("User-Agent", mobileUa)
                 .header("Referer", "https://www.douyin.com/")
             cookie?.let { builder.header("Cookie", it) }
-            client.newCall(builder.build()).execute().use { resp ->
+            client.newCall(builder.build()).readCancellable { resp ->
                 if (!resp.isSuccessful) null else resp.body?.string()
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
             null
         }
@@ -840,7 +867,7 @@ class DouyinParser {
     /**
      * Resolve an aweme id from any supported share link form.
      */
-    private fun resolveVideoId(url: String): String? {
+    private suspend fun resolveVideoId(url: String): String? {
         val lower = url.lowercase()
         return when {
             "v.douyin.com" in lower -> resolveShortLink(url)
@@ -857,19 +884,20 @@ class DouyinParser {
      * 现在改成：同一个请求读响应体前 512KB（分块检索，命中即停），从页面里正则
      * 找 aweme_id —— 绝不把整个分享页下载完。
      */
-    private fun resolveShortLink(url: String): String? {
+    private suspend fun resolveShortLink(url: String): String? {
         for (ua in listOf(mobileUa, defaultUa)) {
             try {
                 val request = Request.Builder().url(url).header("User-Agent", ua).build()
-                noRedirectClient.newCall(request).execute().use { resp ->
+                val resolved = noRedirectClient.newCall(request).readCancellable { resp ->
                     // 1) 302：location 里直接有 ID
                     resp.header("location")?.let { location ->
                         val absolute = resp.request.url.resolve(location)?.toString() ?: location
-                        if ("ixigua.com" in absolute) return null
-                        extractIdFromPath(absolute)?.let { return it }
+                        if ("/note/" in absolute) sawNote = true
+                        if ("ixigua.com" in absolute) return@readCancellable null
+                        extractIdFromPath(absolute)?.let { return@readCancellable it }
                     }
                     // 2) 200：从页面内容里找 ID（分块读，命中即停）
-                    val source = resp.body?.source() ?: return@use null
+                    val source = resp.body?.source() ?: return@readCancellable null
                     val buffer = okio.Buffer()
                     var total = 0L
                     while (total < SHORT_LINK_SCAN_BYTES) {
@@ -877,9 +905,13 @@ class DouyinParser {
                         if (read == -1L) break
                         total += read
                         val text = buffer.clone().readUtf8()
-                        ID_IN_PAGE_REGEX.find(text)?.let { return it.groupValues[1] }
+                        ID_IN_PAGE_REGEX.find(text)?.let { return@readCancellable it.groupValues[1] }
                     }
+                    null
                 }
+                if (resolved != null) return resolved
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (_: Exception) {
                 // 换下一个 UA
             }
@@ -962,7 +994,7 @@ class DouyinParser {
      * `cookie` 由调用方显式给出（null = 不发 Cookie 头），这样「无会话直打」
      * 这条快路子不会被 ttwid 引导拖住。
      */
-    private fun get(
+    private suspend fun get(
         url: String,
         followRedirects: Boolean,
         cookie: String? = cachedTtwidCookie(),
@@ -973,9 +1005,9 @@ class DouyinParser {
             .header("Referer", "https://www.douyin.com/")
         cookie?.let { builder.header("Cookie", it) }
         val http = if (followRedirects) client else noRedirectClient
-        http.newCall(builder.build()).execute().use { resp ->
+        return http.newCall(builder.build()).readCancellable { resp ->
             if (!resp.isSuccessful) throw Exception("HTTP ${resp.code}")
-            return resp.body?.string() ?: throw Exception("空响应")
+            resp.body?.string() ?: throw Exception("空响应")
         }
     }
 
@@ -1008,15 +1040,17 @@ class DouyinParser {
     /**
      * Resolve the final location of a (possibly relative, possibly 302) video url.
      */
-    private fun resolveRedirect(url: String): String {
+    private suspend fun resolveRedirect(url: String): String {
         return try {
             val request = Request.Builder().url(url)
                 .header("User-Agent", defaultUa)
                 .build()
-            noRedirectClient.newCall(request).execute().use { resp ->
-                val location = resp.header("location") ?: return url
+            noRedirectClient.newCall(request).readCancellable { resp ->
+                val location = resp.header("location") ?: return@readCancellable url
                 resp.request.url.resolve(location)?.toString() ?: location
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             url
         }

@@ -246,11 +246,6 @@ fun HistoryScreen(viewModel: MainViewModel, onBack: () -> Unit, onParseUrl: (Str
                                 interactionSource = remember { MutableInteractionSource() },
                             ) { showMenu = false },
                     )
-                    // 类 HyperOS 弹菜单时整窗压暗（miuix ListPopup 的 windowDimming）
-                    com.linkgrab.app.ui.liquid.HyperMenuDim(
-                        visible = menuVisible,
-                        onDismiss = { showMenu = false },
-                    )
                 }
                 // 与吸顶栏里的按钮同一条基线：栏高 52dp、按钮 42dp → 顶边内缩 5dp。
                 // 菜单根 Box 自带 24dp 阴影内缩，这里先减掉再对齐到栏内。

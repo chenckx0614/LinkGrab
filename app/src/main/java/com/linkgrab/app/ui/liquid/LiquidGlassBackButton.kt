@@ -82,34 +82,6 @@ fun LiquidGlassTopBarButton(
     enabled: Boolean = true,
     materialAlpha: Float = com.linkgrab.app.ui.theme.LocalTopBarMaterialAlpha.current,
 ) {
-    // 系统主题不走液态玻璃：HyperOS / ColorOS 的顶栏按钮是「实底圆钮 + 图标」，
-    // 材质、尺寸、按压方式都按各自系统来（见 SystemChrome / *Chrome.kt）。
-    val hyperChrome = com.linkgrab.app.ui.theme.isHyperOsStyle()
-    if (hyperChrome || com.linkgrab.app.ui.theme.isColorOsStyle()) {
-        val chromeStyle = if (hyperChrome) {
-            com.linkgrab.app.ui.hyper.hyperMenuStyle()
-        } else {
-            com.linkgrab.app.ui.coloros.couiMenuStyle()
-        }
-        SystemBarButton(
-            onClick = onClick,
-            style = chromeStyle,
-            modifier = modifier,
-            icon = icon,
-            contentDescription = contentDescription,
-            iconSize = iconSize,
-            tint = when {
-                iconTint != Color.Unspecified -> iconTint
-                darkBackground -> Color.White.copy(alpha = 0.92f)
-                else -> chromeStyle.iconTint
-            },
-            iconOffset = iconOffset,
-            // 深色图上白钮会糊成一片，退回半透明白底
-            backgroundOverride = if (darkBackground) Color.White.copy(alpha = 0.12f) else null,
-            enabled = enabled,
-        )
-        return
-    }
     val animationScope = rememberCoroutineScope()
     val interactiveHighlight = remember(animationScope) {
         InteractiveHighlight(animationScope = animationScope)
@@ -121,16 +93,11 @@ fun LiquidGlassTopBarButton(
     // 与 Nexio 顶栏按钮同色：收起态与右上角菜单是同一颗玻璃，形变时不能突变
     val containerColor = when {
         darkBackground -> Color.White.copy(alpha = 0.12f)
-        // HyperOS 主题的页面底是 #F4F4F4（miuix surface），#FAFAFA 76% 压上去
-        // 只差几个色阶，圆钮等于看不见；用更实的白 + 描边把圆显出来
-        isLightTheme && com.linkgrab.app.ui.theme.isHyperOsStyle() -> Color.White.copy(alpha = 0.92f)
         isLightTheme -> Color(0xFFFAFAFA).copy(alpha = 0.76f)
         else -> Color(0xFF242424).copy(alpha = 0.84f)
     }
     val edgeStrokeColor = when {
         darkBackground -> Color.White.copy(alpha = 0.22f)
-        // 浅色白钮上白描边等于没有，改用极淡的黑线勾边（miuix 卡片靠底色分层，不用白边）
-        isLightTheme && com.linkgrab.app.ui.theme.isHyperOsStyle() -> Color.Black.copy(alpha = 0.06f)
         isLightTheme -> Color.White.copy(alpha = 0.50f)
         else -> Color.White.copy(alpha = 0.16f)
     }
@@ -147,11 +114,12 @@ fun LiquidGlassTopBarButton(
     // drawBackdrop 靠引用比较 shape/effects/onDrawSurface：lambda 每次新建会让节点
     // 每帧 update → 重新录制采样层。这里全部 remember 住。
     val shapeBlock: () -> androidx.compose.ui.graphics.Shape = remember { { CircleShape } }
-    val effects: com.kyant.backdrop.BackdropEffectScope.() -> Unit = remember {
+    val unified = com.linkgrab.app.ui.designsystem.LocalUnifiedUi.current
+    val effects: com.kyant.backdrop.BackdropEffectScope.() -> Unit = remember(unified) {
         {
             vibrancy()
             blur(8.dp.toPx())
-            lens(8f.dp.toPx(), 24f.dp.toPx())
+            if (!unified) lens(8f.dp.toPx(), 24f.dp.toPx())
         }
     }
     val onDrawSurface: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit =
@@ -234,12 +202,12 @@ fun LiquidGlassTopBarButton(
                                 layerBlock = { alpha = materialAlpha },
                                 onDrawSurface = onDrawSurface,
                             )
-                            .border(1.dp, edgeStrokeColor.copy(alpha = edgeStrokeColor.alpha * materialAlpha), CircleShape)
+                            .then(if (com.linkgrab.app.ui.designsystem.LocalUnifiedUi.current) Modifier else Modifier.border(1.dp, edgeStrokeColor.copy(alpha = edgeStrokeColor.alpha * materialAlpha), CircleShape))
                     } else {
                         Modifier
                             .clip(CircleShape)
                             .drawBehind { drawRect(containerColor.copy(alpha = containerColor.alpha * materialAlpha)) }
-                            .border(1.dp, edgeStrokeColor.copy(alpha = edgeStrokeColor.alpha * materialAlpha), CircleShape)
+                            .then(if (com.linkgrab.app.ui.designsystem.LocalUnifiedUi.current) Modifier else Modifier.border(1.dp, edgeStrokeColor.copy(alpha = edgeStrokeColor.alpha * materialAlpha), CircleShape))
                     }
                 )
                 .then(interactiveHighlight.modifier)

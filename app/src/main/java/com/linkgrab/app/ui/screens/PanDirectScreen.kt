@@ -59,7 +59,7 @@ import com.linkgrab.app.data.api.QuarkFile
 import com.linkgrab.app.data.api.QuarkPan
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
-import com.linkgrab.app.ui.theme.IOS26HeaderHeight
+import com.linkgrab.app.ui.theme.pageHeaderHeight
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
@@ -222,7 +222,7 @@ fun PanDirectScreen(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = topInset + IOS26HeaderHeight)
+                    .padding(top = topInset + pageHeaderHeight())
                     .layerBackdrop(headerBackdrop),
                 contentPadding = PaddingValues(
                     start = 20.dp, end = 20.dp, top = 20.dp, bottom = 60.dp,

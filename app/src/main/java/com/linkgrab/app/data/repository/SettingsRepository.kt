@@ -36,7 +36,7 @@ class SettingsRepository(private val context: Context) {
     }
 
     val visualStyle: Flow<Int> = context.dataStore.data.map { preferences ->
-        (preferences[VISUAL_STYLE_KEY] ?: 0).coerceIn(0, 2)
+        if ((preferences[VISUAL_STYLE_KEY] ?: 0) in 1..2) 1 else 0
     }
 
     val liveUpdatesEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -52,8 +52,11 @@ class SettingsRepository(private val context: Context) {
     }
 
     val bottomBarStyle: Flow<Int> = context.dataStore.data.map { preferences ->
-        // 默认 Nexio 液态玻璃（0）；1-3 为 HyperOS4 / HarmonyOS7 / Material3
-        preferences[BOTTOM_BAR_STYLE_KEY] ?: 0
+        // Keep existing IDs for the remaining styles. Removed styles use the default dock.
+        when (val style = preferences[BOTTOM_BAR_STYLE_KEY]) {
+            2, 3 -> style
+            else -> 0
+        }
     }
 
     val autoCheckUpdate: Flow<Boolean> = context.dataStore.data.map { preferences ->
@@ -92,7 +95,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setVisualStyle(style: Int) {
         context.dataStore.edit { preferences ->
-            preferences[VISUAL_STYLE_KEY] = style.coerceIn(0, 2)
+            preferences[VISUAL_STYLE_KEY] = if (style in 1..2) 1 else 0
         }
     }
 
@@ -110,7 +113,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setBottomBarStyle(style: Int) {
         context.dataStore.edit { preferences ->
-            preferences[BOTTOM_BAR_STYLE_KEY] = style
+            preferences[BOTTOM_BAR_STYLE_KEY] = if (style in 2..3) style else 0
         }
     }
 

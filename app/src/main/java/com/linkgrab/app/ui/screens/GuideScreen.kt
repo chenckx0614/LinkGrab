@@ -454,7 +454,6 @@ private fun StylePickPage(
 ) {
     val styles = listOf(
         Triple("iOS 27", R.drawable.bottom_style_ios27, 0),
-        Triple("HyperOS 4", R.drawable.bottom_style_hyperos4, 1),
         Triple("HarmonyOS 7", R.drawable.bottom_style_harmonyos7, 2),
         Triple("Material 3", R.drawable.bottom_style_material3, 3),
     )

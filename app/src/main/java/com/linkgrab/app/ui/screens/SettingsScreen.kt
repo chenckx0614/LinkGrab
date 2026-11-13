@@ -67,7 +67,6 @@ import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosGroupedBackground
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.iosDisclosureColor
-import com.linkgrab.app.ui.theme.isHyperOsStyle
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.viewmodel.MainViewModel
 
@@ -130,8 +129,8 @@ fun SettingsScreen(
                     val styleHaptic = LocalHapticFeedback.current
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         VisualStyleCard(
-                            title = "类 iOS",
-                            description = "液态玻璃",
+                            title = "液态玻璃",
+                            description = "默认 · 通透折射",
                             styleIndex = 0,
                             selected = visualStyle == 0,
                             modifier = Modifier.weight(1f),
@@ -140,24 +139,14 @@ fun SettingsScreen(
                             viewModel.setVisualStyle(0)
                         }
                         VisualStyleCard(
-                            title = "类 HyperOS",
-                            description = "MIUI 分组",
+                            title = "柔光玻璃",
+                            description = "中性表面 · 渐进模糊",
                             styleIndex = 1,
                             selected = visualStyle == 1,
                             modifier = Modifier.weight(1f),
                         ) {
                             styleHaptic.performHapticFeedback(HapticFeedbackType.Confirm)
                             viewModel.setVisualStyle(1)
-                        }
-                        VisualStyleCard(
-                            title = "类 ColorOS",
-                            description = "凝光材质",
-                            styleIndex = 2,
-                            selected = visualStyle == 2,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            styleHaptic.performHapticFeedback(HapticFeedbackType.Confirm)
-                            viewModel.setVisualStyle(2)
                         }
                     }
                     IOS26Divider(Modifier.padding(vertical = 12.dp))
@@ -219,7 +208,7 @@ fun SettingsScreen(
                     }
                     IOS26Divider(Modifier.padding(vertical = 4.dp))
                     val styleName = when (bottomBarStyle) {
-                        1 -> "HyperOS 4"; 2 -> "HarmonyOS 7"; 3 -> "Material 3"; else -> "iOS 27"
+                        2 -> "HarmonyOS 7"; 3 -> "Material 3"; else -> "默认悬浮胶囊"
                     }
                     IOS26ListRow(
                         "底栏样式",
@@ -352,33 +341,26 @@ private fun VisualStyleCard(
 ) {
     val accent = when (styleIndex) {
         1 -> Color(0xFF3482FF)
-        2 -> Color(0xFF0066FF)
         else -> Color(0xFF007AFF)
     }
     val background = when (styleIndex) {
-        1 -> Color(0xFFF4F4F4)
-        2 -> Color(0xFFF0F1F2)
+        1 -> Color(0xFFF7F7F7)
         else -> Color(0xFFF2F2F7)
     }
     val cardShape: androidx.compose.ui.graphics.Shape = when (styleIndex) {
         1 -> RoundedCornerShape(22.dp)
-        // ColorOS 用超椭圆，预览卡也跟着换，不然和装上的样子不像
-        2 -> com.linkgrab.app.ui.coloros.couiSquircle(14.dp)
         else -> RoundedCornerShape(18.dp)
     }
     val miniShape: androidx.compose.ui.graphics.Shape = when (styleIndex) {
         1 -> RoundedCornerShape(8.dp)
-        2 -> com.linkgrab.app.ui.coloros.couiSquircle(7.dp)
         else -> RoundedCornerShape(11.dp)
     }
     val innerShape: androidx.compose.ui.graphics.Shape = when (styleIndex) {
         1 -> RoundedCornerShape(16.dp)
-        2 -> com.linkgrab.app.ui.coloros.couiSquircle(10.dp)
         else -> RoundedCornerShape(13.dp)
     }
     val miniColors = when (styleIndex) {
-        1 -> listOf(Color(0xFFD7E8FF), Color(0xFFFFE9D5), Color(0xFFE4E3FB))
-        2 -> listOf(Color(0xFFD9E4FF), Color(0xFFE6EEF9), Color(0xFFDDE6F5))
+        1 -> listOf(Color.White, Color(0xFFEAF2FF), Color.White)
         else -> List(3) { Color.White.copy(alpha = 0.82f) }
     }
     val borderColor by androidx.compose.animation.animateColorAsState(
@@ -395,8 +377,13 @@ private fun VisualStyleCard(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(cardShape)
-            .border(if (selected) 2.dp else 1.dp, borderColor, cardShape)
-            .background(iosGroupedBackground(), cardShape)
+            .then(if (com.linkgrab.app.ui.designsystem.LocalUnifiedUi.current) Modifier
+                else Modifier.border(if (selected) 2.dp else 1.dp, borderColor, cardShape))
+            .background(
+                if (selected && com.linkgrab.app.ui.designsystem.LocalUnifiedUi.current)
+                    androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer else iosGroupedBackground(),
+                cardShape,
+            )
             .semantics { this.selected = selected }
             .clickable(role = Role.RadioButton, onClick = onClick)
             .padding(9.dp),
@@ -442,16 +429,6 @@ private fun VisualStyleCard(
 /** 分组小标题：与更新设置/关于应用二级页同一语言（panel 外、14sp、中性色）。 */
 @Composable
 private fun SectionLabel(text: String) {
-    if (com.linkgrab.app.ui.theme.isColorOsStyle()) {
-        // ColorOS：coui SmallTitle（12sp Medium / 54% 字色 / 左 12dp）
-        com.linkgrab.app.ui.coloros.CouiSectionTitle(text, Modifier.padding(top = 2.dp))
-        return
-    }
-    if (isHyperOsStyle()) {
-        // HyperOS：miuix SmallTitle（14sp / #8F9CAE / 左 12dp，页面 16dp 叠加后 28dp）
-        com.linkgrab.app.ui.hyper.HyperSectionTitle(text, Modifier.padding(top = 4.dp))
-        return
-    }
     Text(
         text,
         fontSize = 14.sp,

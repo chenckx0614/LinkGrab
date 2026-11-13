@@ -35,6 +35,9 @@ import android.graphics.Canvas
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import com.linkgrab.app.ui.designsystem.LocalUnifiedUi
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -105,7 +108,12 @@ fun AboutScreen(
                     Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Image(
+                    if (LocalUnifiedUi.current) Image(
+                        painter = painterResource(R.drawable.ic_launcher_foreground),
+                        contentDescription = "LinkGrab 图标",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(88.dp),
+                    ) else Image(
                         bitmap = launcherBitmap,
                         contentDescription = "LinkGrab 图标",
                         modifier = Modifier
@@ -114,8 +122,8 @@ fun AboutScreen(
                     )
                     Text(
                         "LinkGrab",
-                        fontSize = if (com.linkgrab.app.ui.theme.isHyperOsStyle()) 30.sp else 34.sp,
-                        fontWeight = if (com.linkgrab.app.ui.theme.isHyperOsStyle()) FontWeight.Normal else FontWeight.Bold,
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.Bold,
                         color = iosLabel(),
                         modifier = Modifier.padding(top = 12.dp, bottom = 5.dp),
                     )

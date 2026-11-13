@@ -37,6 +37,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
+import com.linkgrab.app.ui.designsystem.LinkGrabUi
+import com.linkgrab.app.ui.designsystem.SoftGlassBlur
+import com.linkgrab.app.ui.designsystem.softGlassDockInset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
@@ -135,12 +139,11 @@ import com.linkgrab.app.ui.screens.UpdateSettingsScreen
 import com.linkgrab.app.ui.liquid.HarmonyOS7BottomTabs
 import com.linkgrab.app.ui.liquid.HarmonyOS7TabItem
 import com.linkgrab.app.ui.liquid.IOS26UpdateDialog
-import com.linkgrab.app.ui.liquid.HyperOS4BottomTabs
-import com.linkgrab.app.ui.liquid.HyperOS4TabItem
 import com.linkgrab.app.ui.liquid.Md3BottomTabs
 import com.linkgrab.app.ui.liquid.Md3TabItem
 import com.linkgrab.app.ui.liquid.NexioBottomTabs
 import com.linkgrab.app.ui.liquid.NexioBottomTab
+import com.linkgrab.app.ui.designsystem.LocalUnifiedUi
 import com.linkgrab.app.ui.screens.VideoToAudioScreen
 import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
@@ -314,7 +317,7 @@ private fun AnimatedContentTransitionScope<NavBackStackEntry>.isFromGuide(): Boo
  */
 @Composable
 private fun IOSPageSurface(content: @Composable () -> Unit) {
-    val hyper = com.linkgrab.app.ui.theme.isHyperOsStyle()
+    val hyper = LocalUnifiedUi.current
     val myRoute = LocalMyRoute.current
     if (myRoute in WebViewHostRoutes) {
         // WebView 是 Chromium 自己的合成表面（functor），外面再包 RenderEffect
@@ -331,7 +334,9 @@ private fun IOSPageSurface(content: @Composable () -> Unit) {
     LaunchedEffect(target) {
         lastTarget = target
         if (cover.value != target) {
-            cover.animateTo(target, tween(if (hyper) 600 else PushMs, easing = if (hyper) hyperEnterEasing else iosEasing))
+            val duration = if (!hyper) PushMs else if (target == 1f) 600 else 320
+            val easing = if (!hyper) iosEasing else if (target == 1f) hyperEnterEasing else hyperExitEasing
+            cover.animateTo(target, tween(duration, easing = easing))
         }
     }
     val coverValue = cover.value
@@ -490,7 +495,6 @@ fun AppNavigation(
 
     val onMainTabs = currentDestination?.route == Screen.MainTabs.route
     val visualStyle by viewModel.visualStyle.collectAsState()
-    // 两个系统主题（HyperOS / ColorOS）共用同一套"实底 + 短缓动"的底栏节奏
     val hyperStyle = visualStyle != 0
     val hyperStyleProvider = remember(viewModel) { { viewModel.visualStyle.value != 0 } }
 
@@ -691,6 +695,23 @@ fun AppNavigation(
                         navController.navigate(Screen.BottomBarStyle.route)
                     },
                 )
+                val dockInset = softGlassDockInset()
+                val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+                val dockHidden by animateFloatAsState(
+                    targetValue = if (hyperStyle && keyboardVisible) 1f else 0f,
+                    animationSpec = spring(dampingRatio = 1f, stiffness = 580f, visibilityThreshold = 0.001f),
+                    label = "Soft glass dock visibility",
+                )
+                if (hyperStyle && bottomBarStyle != 3 && recordNavBackdrop && dockHidden < 0.999f) {
+                    SoftGlassBlur(
+                        backdrop = liquidBackdrop,
+                        height = LinkGrabUi.DockHeight + dockInset + 32.dp,
+                        tint = iosBackground(),
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                        fromBottom = true,
+                        alpha = { 1f - dockHidden },
+                    )
+                }
                 run {
             // 底栏退场/回归动画（v2.5.38）：push 时底栏不再瞬间消失，而是
             // 跟底层页一起被推走（左移 30% 屏宽）并渐隐——与页面转场同一
@@ -721,7 +742,7 @@ fun AppNavigation(
                 barEntryFrom = null
             }
 
-            Box(
+            if (dockHidden < 0.999f) Box(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .onGloballyPositioned { coords ->
@@ -740,10 +761,10 @@ fun AppNavigation(
                             )
                         }
                         .graphicsLayer {
-                            translationX = 0f
+                            translationY = size.height * dockHidden
                             scaleX = barScale.value
                             scaleY = barScale.value
-                            alpha = barAlpha.value
+                            alpha = barAlpha.value * (1f - dockHidden)
                         }
                 ) {
                 // 选中项由 pager 当前页决定（手指拖 pager 时也会同步到这一帧）。
@@ -751,42 +772,12 @@ fun AppNavigation(
                 val onTabSelected: (Int) -> Unit = { index ->
                     pagerScope.launch { mainPagerState.animateMainTabTo(index) }
                 }
-                val bottomModifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 12.dp)
-                    .navigationBarsPadding()
+                val bottomModifier = Modifier.padding(horizontal = 16.dp).then(
+                    if (hyperStyle) Modifier.padding(bottom = dockInset)
+                    else Modifier.padding(bottom = 12.dp).navigationBarsPadding(),
+                )
 
                 when (bottomBarStyle) {
-                    1 -> HyperOS4BottomTabs(
-                        selectedTabIndex = { selectedIndex },
-                        onTabSelected = onTabSelected,
-                        backdrop = liquidBackdrop,
-                        tabsCount = 3,
-                        // 参考图（HyperOS 文件管理器）：胶囊比通栏窄一截，更小巧
-                        modifier = bottomModifier.fillMaxWidth(0.86f),
-                    ) { selectIndex, reportPress ->
-                        HyperOS4TabItem(
-                            Icons.Default.Home,
-                            "首页",
-                            selected = selectedIndex == 0,
-                            onPress = { reportPress(0, it) },
-                            modifier = Modifier.weight(1f),
-                        ) { selectIndex(0) }
-                        HyperOS4TabItem(
-                            Icons.Default.Person,
-                            "我的",
-                            selected = selectedIndex == 1,
-                            onPress = { reportPress(1, it) },
-                            modifier = Modifier.weight(1f),
-                        ) { selectIndex(1) }
-                        HyperOS4TabItem(
-                            Icons.Default.Build,
-                            "工具箱",
-                            selected = selectedIndex == 2,
-                            onPress = { reportPress(2, it) },
-                            modifier = Modifier.weight(1f),
-                        ) { selectIndex(2) }
-                    }
                     2 -> HarmonyOS7BottomTabs(
                         selectedTabIndex = { selectedIndex },
                         onTabSelected = onTabSelected,

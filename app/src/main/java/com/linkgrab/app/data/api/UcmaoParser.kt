@@ -4,6 +4,7 @@ import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.Platform
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -61,6 +62,8 @@ class UcmaoParser {
                 else -> throw Exception("不支持的平台")
             }
             Result.success(result)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -69,7 +72,7 @@ class UcmaoParser {
     /**
      * Parse Douyin via ucmao API
      */
-    private fun parseDouyin(text: String): MediaResult {
+    private suspend fun parseDouyin(text: String): MediaResult {
         val apiResult = callApi(text)
         // 图文作品的第三方结果常常只有封面、没有可下载的视频地址。
         // 以前这里无条件返回 VIDEO，结果页就成了「douyin · 视频」+ 下载必失败。
@@ -87,7 +90,7 @@ class UcmaoParser {
     /**
      * Parse Xiaohongshu via API (returns single image)
      */
-    private fun parseXiaohongshu(text: String): MediaResult {
+    private suspend fun parseXiaohongshu(text: String): MediaResult {
         val apiResult = callApi(text)
 
         val images = mutableListOf<String>()
@@ -107,7 +110,7 @@ class UcmaoParser {
     /**
      * Call the ucmao parse API
      */
-    private fun callApi(text: String): ApiData {
+    private suspend fun callApi(text: String): ApiData {
         val timestamp = System.currentTimeMillis()
         val tsStr = timestamp.toString()
         val originalText = generateRandomText(32)
@@ -126,8 +129,9 @@ class UcmaoParser {
             .header("User-Agent", "LinkGrab/1.0")
             .build()
 
-        val response = client.newCall(request).execute()
-        val body = response.body?.string() ?: throw Exception("空响应")
+        val body = client.newCall(request).readCancellable { response ->
+            response.body?.string() ?: throw Exception("空响应")
+        }
 
         val apiResponse = json.decodeFromString<ApiResponse>(body)
 

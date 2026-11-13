@@ -57,8 +57,8 @@ import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
-import com.linkgrab.app.ui.theme.IOS26HeaderHeight
-import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
+import com.linkgrab.app.ui.theme.pageHeaderHeight
+import com.linkgrab.app.ui.theme.pageHeaderScrollThresholdPx
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
@@ -116,7 +116,7 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
 
     val headerBackdrop = rememberLayerBackdrop()
     val scrollState = rememberScrollState()
-    val headerScrolled = scrollState.value > with(LocalDensity.current) { IOS26HeaderScrollThreshold.roundToPx() }
+    val headerScrolled = scrollState.value > pageHeaderScrollThresholdPx()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Scaffold(
@@ -127,7 +127,7 @@ fun VideoToAudioScreen(onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = topInset + IOS26HeaderHeight)
+                .padding(top = topInset + pageHeaderHeight())
                 .padding(horizontal = 20.dp)
                 .layerBackdrop(headerBackdrop)
                 .verticalScroll(scrollState),

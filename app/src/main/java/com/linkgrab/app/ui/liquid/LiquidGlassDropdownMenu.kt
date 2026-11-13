@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -56,6 +57,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
@@ -67,13 +69,18 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.shapes.RoundedCornerStyle
 import com.kyant.shapes.RoundedRectangle
 import com.linkgrab.app.ui.theme.isInDarkTheme
-import com.linkgrab.app.ui.theme.isColorOsStyle
-import com.linkgrab.app.ui.theme.isHyperOsStyle
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 
+/** Reserve the trigger's space while the menu expands toward its start edge. */
+private fun Modifier.dropdownOverflowPlacement(placeholder: DpSize): Modifier = layout { measurable, constraints ->
+    val panel = measurable.measure(Constraints())
+    val width = placeholder.width.roundToPx().coerceIn(constraints.minWidth, constraints.maxWidth)
+    val height = placeholder.height.roundToPx().coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(width, height) { panel.placeRelative(width - panel.width, 0) }
+}
 /**
  * 右上角「更多」按钮与下拉菜单是**同一个控件**（容器变换），移植自 Nexio 课程表
  * （gitee.com/com_haooz_account/hyper_schedule，AGPL-3.0）的 LiquidGlassDropdownMenu：
@@ -116,12 +123,13 @@ private fun LiquidGlassMaterial(
     modifier: Modifier = Modifier,
 ) {
     val blurDp = 8f + 16f * (blurStep / 8f)
+    val softGlass = com.linkgrab.app.ui.designsystem.LocalUnifiedUi.current
     val glassEffects: com.kyant.backdrop.BackdropEffectScope.() -> Unit =
-        remember(blurStep) {
+        remember(blurStep, softGlass) {
             {
                 vibrancy()
                 blur(blurDp.dp.toPx())
-                lens(8.dp.toPx(), 24.dp.toPx())
+                if (!softGlass) lens(8.dp.toPx(), 24.dp.toPx())
             }
         }
     val onDrawSurface: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit =
@@ -203,39 +211,13 @@ fun LiquidGlassDropdownMenu(
     materialAlpha: Float = com.linkgrab.app.ui.theme.LocalTopBarMaterialAlpha.current,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // 系统主题：按钮常驻、菜单是独立浮层（不是同一块玻璃形变），交互仍可跟手滑选
-    val hyperChrome = isHyperOsStyle()
-    if (hyperChrome || isColorOsStyle()) {
-        SystemDropdownMenu(
-            show = show,
-            style = if (hyperChrome) {
-                com.linkgrab.app.ui.hyper.hyperMenuStyle()
-            } else {
-                com.linkgrab.app.ui.coloros.couiMenuStyle()
-            },
-            hyperReveal = hyperChrome,
-            modifier = modifier,
-            fraction = fraction,
-            onExpand = onExpand,
-            onDismiss = onDismiss,
-            triggerIcon = triggerIcon,
-            triggerIconSize = triggerIconSize,
-            triggerContentDescription = triggerContentDescription,
-            offsetPx = offsetPx,
-            content = content,
-        )
-        return
-    }
     val isLightTheme = !isInDarkTheme()
     // 基色与顶栏液态玻璃按钮同色：收起态即那颗按钮，形变过程中玻璃不突变。
     // 不透明度分两档：收起态用「按钮档」（42dp 小圆要压得住图标与描边）；
     // 展开成 200dp 大面板后必须降到「面板档」—— 0.76/0.84 的实色底会把
     // blur 采样出来的页面内容几乎完全盖住，玻璃退化成一块实色板。
     val containerBase = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242424)
-    // HyperOS 页面底是 #F4F4F4，76% 的白几乎同色；收起态用更实的白才看得出圆
-    val collapsedAlpha = if (!isLightTheme) 0.84f
-    else if (com.linkgrab.app.ui.theme.isHyperOsStyle()) 0.92f
-    else 0.76f
+    val collapsedAlpha = if (isLightTheme) 0.76f else 0.84f
     val expandedAlpha = if (isLightTheme) 0.32f else 0.44f
     val triggerIconTint = if (isLightTheme) Color.Black.copy(0.85f) else Color.White.copy(0.85f)
     val hapticFeedback = LocalHapticFeedback.current
@@ -257,24 +239,19 @@ fun LiquidGlassDropdownMenu(
         )
     }
 
-    // ColorOS 的下拉是独立浮层，用自家主菜单那组弹簧（response 0.35 / bounce 0.2），
-    // 比液态玻璃那套更"脆"，弹到位就停。
-    val couiMenu = isColorOsStyle()
-    LaunchedEffect(show, couiMenu) {
+    LaunchedEffect(show) {
         if (show) {
             hasOpened = true
             launch {
                 fraction.animateTo(
                     1f,
-                    if (couiMenu) spring(dampingRatio = 0.8f, stiffness = 322.27f, visibilityThreshold = 0.0001f)
-                    else spring(dampingRatio = 0.77f, stiffness = 220f, visibilityThreshold = 0.0001f),
+                    spring(dampingRatio = 0.77f, stiffness = 220f, visibilityThreshold = 0.0001f),
                 )
             }
             launch {
                 originProgress.animateTo(
                     1f,
-                    if (couiMenu) spring(dampingRatio = 0.8f, stiffness = 322.27f, visibilityThreshold = 0.0001f)
-                    else spring(dampingRatio = 0.77f, stiffness = 420f, visibilityThreshold = 0.0001f),
+                    spring(dampingRatio = 0.77f, stiffness = 420f, visibilityThreshold = 0.0001f),
                 )
             }
             settleBounce.snapTo(1f)
@@ -469,28 +446,9 @@ fun LiquidGlassCircleButton(
     modifier: Modifier = Modifier,
     materialAlpha: Float = 1f,
 ) {
-    val hyperChrome = isHyperOsStyle()
-    if (hyperChrome || isColorOsStyle()) {
-        SystemBarButton(
-            onClick = onClick,
-            style = if (hyperChrome) {
-                com.linkgrab.app.ui.hyper.hyperMenuStyle()
-            } else {
-                com.linkgrab.app.ui.coloros.couiMenuStyle()
-            },
-            modifier = modifier,
-            icon = icon,
-            contentDescription = contentDescription,
-            iconSize = 24.dp,
-        )
-        return
-    }
     val isLightTheme = !isInDarkTheme()
     val containerBase = if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF242424)
-    // HyperOS 页面底是 #F4F4F4，76% 的白几乎同色；收起态用更实的白才看得出圆
-    val collapsedAlpha = if (!isLightTheme) 0.84f
-    else if (com.linkgrab.app.ui.theme.isHyperOsStyle()) 0.92f
-    else 0.76f
+    val collapsedAlpha = if (isLightTheme) 0.76f else 0.84f
     val triggerIconTint = if (isLightTheme) Color.Black.copy(0.85f) else Color.White.copy(0.85f)
     val hapticFeedback = LocalHapticFeedback.current
     val coroutineScope = rememberCoroutineScope()
@@ -565,21 +523,6 @@ fun LiquidGlassDropdownMenuItem(
     modifier: Modifier = Modifier,
     icon: @Composable (() -> Unit)? = null,
 ) {
-    val hyperChrome = isHyperOsStyle()
-    if (hyperChrome || isColorOsStyle()) {
-        SystemMenuItem(
-            text = text,
-            onClick = onClick,
-            style = if (hyperChrome) {
-                com.linkgrab.app.ui.hyper.hyperMenuStyle()
-            } else {
-                com.linkgrab.app.ui.coloros.couiMenuStyle()
-            },
-            modifier = modifier,
-            icon = icon,
-        )
-        return
-    }
     val isLightTheme = !isInDarkTheme()
     val textColor = if (isLightTheme) Color(0xFF1A1A1A) else Color(0xFFE8E4DE)
 

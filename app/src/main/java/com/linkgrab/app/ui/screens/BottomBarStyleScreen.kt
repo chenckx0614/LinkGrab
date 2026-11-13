@@ -75,16 +75,6 @@ fun BottomBarStyleScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                         },
                     )
                     StyleCard(
-                        title = "HyperOS 4",
-                        description = "小米 HyperOS 小巧胶囊",
-                        imageRes = R.drawable.bottom_style_hyperos4,
-                        selected = bottomBarStyle == 1,
-                        onClick = {
-                            hapticFeedback.performHapticFeedback(HapticFeedbackType.ContextClick)
-                            viewModel.setBottomBarStyle(1)
-                        },
-                    )
-                    StyleCard(
                         title = "HarmonyOS 7",
                         description = "鸿蒙系统圆润胶囊",
                         imageRes = R.drawable.bottom_style_harmonyos7,

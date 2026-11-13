@@ -9,6 +9,15 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.widget.Toast
 import kotlin.math.roundToInt
+import kotlin.math.pow
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.positionInRoot
+import com.linkgrab.app.ui.designsystem.LocalUnifiedUi
+import com.linkgrab.app.ui.designsystem.SoftGlassBlur
+import com.linkgrab.app.ui.designsystem.softGlassDockInset
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -138,8 +147,8 @@ import com.linkgrab.app.ui.liquid.LiquidGlassDropdownMenuItem
 import com.linkgrab.app.ui.liquid.LiquidGlassDropdownShadowPadding
 import com.linkgrab.app.ui.theme.IOS26BlurHeader
 import com.linkgrab.app.ui.theme.IOS26Button
-import com.linkgrab.app.ui.theme.IOS26HeaderHeight
-import com.linkgrab.app.ui.theme.IOS26HeaderScrollThreshold
+import com.linkgrab.app.ui.theme.pageHeaderHeight
+import com.linkgrab.app.ui.theme.pageHeaderScrollThresholdPx
 import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26IconSize
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
@@ -250,12 +259,12 @@ fun ResultScreen(
     val contentBackdrop = rememberLayerBackdrop()
     val gridState = rememberLazyGridState()
     val videoScrollState = rememberScrollState()
-    val scrollThreshold = with(LocalDensity.current) { IOS26HeaderScrollThreshold.roundToPx() }
+    val scrollThreshold = pageHeaderScrollThresholdPx()
     val headerScrolled by remember(scrollThreshold) {
         derivedStateOf {
             gridState.firstVisibleItemIndex > 0 ||
-                gridState.firstVisibleItemScrollOffset > scrollThreshold ||
-                videoScrollState.value > scrollThreshold
+                gridState.firstVisibleItemScrollOffset >= scrollThreshold ||
+                videoScrollState.value >= scrollThreshold
         }
     }
     // 菜单展开时页面通常停在顶部（没滚动过），录制层默认是卸载的 → 玻璃采
@@ -327,7 +336,7 @@ fun ResultScreen(
                     if (!uiState.isLoading) {
                         LaunchedEffect(Unit) { onBack() }
                     }
-                    Box(modifier = Modifier.fillMaxSize().padding(top = topInset + IOS26HeaderHeight)) {
+                    Box(modifier = Modifier.fillMaxSize().padding(top = topInset + pageHeaderHeight())) {
                         ResultLoadingSkeleton()
                     }
                 } else {
@@ -401,11 +410,6 @@ fun ResultScreen(
                                 indication = null,
                                 interactionSource = remember { MutableInteractionSource() },
                             ) { showMenu = false },
-                    )
-                    // 类 HyperOS 弹菜单时整窗压暗（miuix ListPopup 的 windowDimming）
-                    com.linkgrab.app.ui.liquid.HyperMenuDim(
-                        visible = menuVisible,
-                        onDismiss = { showMenu = false },
                     )
                 }
                 Box(
@@ -533,7 +537,7 @@ private fun ImageResultBody(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = topInset + IOS26HeaderHeight)
+            .padding(top = topInset + pageHeaderHeight())
             .padding(horizontal = 20.dp),
     ) {
         ResultMetaCard(result = result)
@@ -633,7 +637,7 @@ private fun VideoResultBody(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = topInset + IOS26HeaderHeight)
+            .padding(top = topInset + pageHeaderHeight())
             .padding(horizontal = 20.dp)
             .verticalScroll(scrollState),
     ) {
@@ -1098,6 +1102,11 @@ private fun ResultBottomBar(
     // 必须显式关掉，否则全宽矩形会在底边画出一条描边「线」。
     val barTint = iosBackground().copy(alpha = 0.70f)
     val barSolid = iosBackground().copy(alpha = 0.92f)
+    val softGlass = LocalUnifiedUi.current
+    val softInset = softGlassDockInset()
+    val background = iosBackground()
+    var barHeightPx by remember { mutableIntStateOf(0) }
+    val blurHeight = with(LocalDensity.current) { barHeightPx.toDp() } + 32.dp
     val baseModifier = if (backdrop != null) {
         Modifier.drawBackdrop(
             backdrop = backdrop,
@@ -1111,12 +1120,22 @@ private fun ResultBottomBar(
         Modifier.background(barSolid)
     }
 
+    Box(Modifier.fillMaxWidth().onSizeChanged { barHeightPx = it.height }) {
+    if (softGlass && backdrop != null && barHeightPx > 0) {
+        Box(Modifier.matchParentSize(), contentAlignment = Alignment.BottomCenter) {
+            SoftGlassBlur(
+                backdrop, blurHeight, background,
+                modifier = Modifier.wrapContentHeight(Alignment.Bottom, unbounded = true),
+                fromBottom = true,
+            )
+        }
+    }
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .then(baseModifier)
-            .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .then(if (softGlass && backdrop != null) Modifier else baseModifier)
+            .then(if (softGlass) Modifier.padding(bottom = softInset) else Modifier.navigationBarsPadding())
+            .padding(horizontal = if (softGlass) 16.dp else 20.dp, vertical = 12.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             IOS26OutlinedButton(
@@ -1177,6 +1196,7 @@ private fun ResultBottomBar(
                 }
             }
         }
+    }
     }
 }
 
@@ -1270,6 +1290,7 @@ private fun ImagePreviewOverlay(
     onDownloadLive: (Int) -> Unit,
 ) {
     val context = LocalContext.current
+    val softGlass = LocalUnifiedUi.current
     // 玻璃按钮的采样源：把翻页图片录成 backdrop 层，按钮才能做出
     // 真实的背景模糊 + 折射，而不是画在纯色上的假玻璃
     val previewBackdrop = rememberLayerBackdrop()
@@ -1278,11 +1299,9 @@ private fun ImagePreviewOverlay(
     var controlsVisible by remember { mutableStateOf(true) }
     val liveUrl = livePhotos[pagerState.currentPage]?.firstOrNull()
 
-    // 翻页/关闭预览时停掉实况播放；同步记录「当前页」，收回转场用
-    val heroIndex = remember { mutableIntStateOf(initialIndex) }
+    // 翻页时停掉上一页的实况播放。
     LaunchedEffect(pagerState.currentPage) {
         playingLive = false
-        heroIndex.intValue = pagerState.currentPage
     }
 
     val exoPlayer = remember(pagerState.currentPage, playingLive) {
@@ -1302,37 +1321,46 @@ private fun ImagePreviewOverlay(
     // ---- 转场进度：0 = 缩略图原位，1 = 全屏展开 ----
     val progress = remember { Animatable(0f) }
     var dismissing by remember { mutableStateOf(false) }
+    var fadeDismiss by remember { mutableStateOf(false) }
     var screenSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
+    val hasSource = originBounds.width > 0f && originBounds.height > 0f
     // 当前图的真实宽高比（加载成功后回填），决定全屏态的 Fit 矩形
     var imageAspect by remember { mutableStateOf<Float?>(null) }
 
     val scope = rememberCoroutineScope()
     fun close() {
         if (dismissing) return
+        fadeDismiss = !hasSource || pagerState.currentPage != initialIndex ||
+            pagerState.currentPageOffsetFraction != 0f ||
+            (previewScaleRegistry[pagerState.currentPage] ?: 1f) > 1f || playingLive
         dismissing = true
         controlsVisible = true
         // 清掉上一轮预览遗留的缩放状态，否则放大过的页
         // 会让下次打开的 Pager 一直处于 userScrollEnabled=false
-        previewScaleRegistry.clear()
+        if (!fadeDismiss) previewScaleRegistry.clear()
         scope.launch {
             progress.animateTo(
                 0f,
-                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+                if (softGlass) tween(320, easing = Easing { 1f - (1f - it).pow(3) })
+                else spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
             )
+            previewScaleRegistry.clear()
             onClose()
         }
     }
     LaunchedEffect(Unit) {
         progress.animateTo(
             1f,
-            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+            if (softGlass) tween(540, easing = Easing { 1f - (1f - it).pow(4.5f) })
+            else spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
         )
     }
     // 后注册的 BackHandler 优先：预览期间系统返回走带转场的 close()
     BackHandler { close() }
 
     val p = progress.value
-    val pagerReady = p >= 1f
+    val pagerReady = p >= 1f || fadeDismiss
     // 全屏 Fit 矩形：按图片比例在屏幕内居中；比例未知时先按整屏算
     val targetRect = remember(imageAspect, screenSize) {
         val w = screenSize.width.toFloat()
@@ -1350,22 +1378,23 @@ private fun ImagePreviewOverlay(
             Rect((w - iw) / 2f, (h - ih) / 2f, (w + iw) / 2f, (h + ih) / 2f)
         }
     }
-    // 用户翻到了别的页时，收回动画对不准原缩略图 —— 整层淡出代替收回
-    val fadeDismiss = dismissing && heroIndex.intValue != initialIndex
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { screenSize = it }
+            .onGloballyPositioned { overlayOrigin = it.positionInRoot() }
             // 半透明着色而非纯黑：背后页面已做实时 blur，透出毛玻璃质感；
             // 转场展开时随 p 同步加深
-            .drawBehind { drawRect(Color.Black.copy(alpha = 0.42f * p.coerceIn(0f, 1f))) },
+            .drawBehind {
+                val color = if (softGlass) Color(0xFF1A1A18) else Color.Black
+                drawRect(color.copy(alpha = p.coerceIn(0f, 1f) * if (softGlass) 1f else 0.42f))
+            },
     ) {
         // ---- hero 转场层：动画期间承载当前图，展开完成后交给 Pager ----
-        if (!pagerReady && targetRect != Rect.Zero && originBounds != Rect.Zero) {
-            val heroRect = lerp(originBounds, targetRect, p)
+        if (!pagerReady && targetRect != Rect.Zero) {
+            val heroRect = if (hasSource) lerp(originBounds.translate(-overlayOrigin), targetRect, p) else targetRect
             AsyncImage(
-                model = ImageRequest.Builder(context).data(images[heroIndex.intValue]).crossfade(false).build(),
+                model = ImageRequest.Builder(context).data(images[initialIndex]).crossfade(false).build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 onState = { state ->
@@ -1379,29 +1408,29 @@ private fun ImagePreviewOverlay(
                 modifier = Modifier
                     .fillMaxSize()
                     .morphRect(heroRect)
-                    .graphicsLayer { if (fadeDismiss) alpha = p.coerceIn(0f, 1f) }
-                    // 起点圆角对齐网格缩略图（IOSCornerSmall=16dp），随展开收平
-                    .clip(RoundedCornerShape(16.dp * (1f - p)))
+                    .graphicsLayer { if (!hasSource) alpha = p.coerceIn(0f, 1f) }
+                    .clip(RoundedCornerShape(if (softGlass) 12.dp + 10.dp * p else 16.dp * (1f - p)))
                     .clipToBounds(),
             )
         }
 
         // ---- 展开完成后的正式预览层：翻页 + 缩放 + 实况 ----
-        if (pagerReady && !dismissing) {
+        if (pagerReady && (!dismissing || fadeDismiss)) {
             // 被录进 backdrop 的内容层：只有图片/视频本体。
             // 玻璃控件本身不放进录制层，避免「玻璃采样玻璃」。
             // 控件隐藏时不录，省一次全屏离屏合成。
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .graphicsLayer { if (fadeDismiss) alpha = p }
                     .then(if (controlsVisible) Modifier.layerBackdrop(previewBackdrop) else Modifier),
             ) {
                 // 翻页：HorizontalPager，左右滑动切换（之前只能点箭头）
                 androidx.compose.foundation.pager.HorizontalPager(
                     state = pagerState,
-                    key = { images[it] },
+                    key = { it },
                     // 放大状态下禁用翻页，把手势让给图片拖动（观察 snapshot map，状态可响应）
-                    userScrollEnabled = (previewScaleRegistry[pagerState.currentPage] ?: 1f) <= 1f,
+                    userScrollEnabled = !dismissing && (previewScaleRegistry[pagerState.currentPage] ?: 1f) <= 1f,
                 ) { page ->
                     ZoomablePreviewImage(
                         url = images[page],

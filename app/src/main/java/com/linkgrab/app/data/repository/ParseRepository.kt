@@ -13,18 +13,14 @@ import com.linkgrab.app.data.api.XhsParser
 import com.linkgrab.app.data.model.MediaResult
 import com.linkgrab.app.data.model.MediaType
 import com.linkgrab.app.data.model.Platform
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Parse pipeline (v2):
@@ -50,23 +46,9 @@ class ParseRepository(context: Context) {
         )
         val GENERIC_URL_PATTERN = """https?://[^\s\u3000\"'<>()（）【】\[\]{}]+""".toRegex()
 
-        /** 抖音两条通道都失败后，第三方接口兜底的时间预算。 */
-        const val DOUYIN_FALLBACK_BUDGET_MS = 8_000L
-
-        /**
-         * 原生通道「还没有任何结论」时最多等多久再起 WebView。
-         *
-         * 正常情况下这个分支根本走不到 —— 原生第一层被风控打空会立刻发信号，
-         * 我们马上就起 WebView。只有网络本身慢（原生还卡在等响应）才会等满，
-         * 那种情况下 WebView 也一样慢，所以不必提前抢跑。
-         */
-        const val DOUYIN_PROBE_WAIT_MS = 4_000L
-
-        /**
-         * 原生通道的总预算。超过就按失败处理，不让它把用户时间拖到十几秒 ——
-         * 它后面还有 HTML SSR 完整重试这种长尾路径。
-         */
-        const val DOUYIN_NATIVE_TOTAL_BUDGET_MS = 10_000L
+        const val DOUYIN_FALLBACK_BUDGET_MS = 5_000L
+        const val DOUYIN_PROBE_WAIT_MS = 2_000L
+        const val DOUYIN_NATIVE_TOTAL_BUDGET_MS = 8_000L
 
         /**
          * 笔记页的 SSR 数据标志。Shield 拦下来的页面（登录页 / 验证码页 / 404 页）
@@ -75,7 +57,6 @@ class ParseRepository(context: Context) {
         fun hasNotePayload(html: String): Boolean = "noteDetailMap" in html
     }
 
-    private val douyinParser = DouyinParser()
     private val xhsParser = XhsParser()
     private val bilibiliParser = BilibiliParser()
     private val weiboParser = WeiboParser()
@@ -245,97 +226,73 @@ class ParseRepository(context: Context) {
             .replace("&amp;", "&")
     }
 
-    /**
-     * 抖音解析：原生 HTTP 通道与 WebView 真浏览器通道并行赛跑。
-     *
-     * ① 原生 HTTP 一条 slidesinfo 就能出结果，通常 1 秒内；
-     * ② WebView 要装页面 + 跑 JS，慢，但被风控时最稳。
-     *
-     * 什么时候起 WebView 不再靠「等 N 秒没结果就猜它失败」——那个猜测两头都错：
-     * 猜早了（1.5s）正常链接也被拖上 WebView（反而更慢），猜晚了风控链接就得干等
-     * 原生把重试跑完。现在由原生自己在**第一层被风控打空的那一刻**发信号，WebView
-     * 立刻起跑，两边谁先出结果用谁。
-     *
-     * 独立作用域是为了**输家立刻收掉**：协程取消阻塞中的 OkHttp 调用不会即时
-     * 生效，若挂在调用方的作用域里，WebView 3 秒出结果也会被原生那条 12 秒
-     * 读超时拖到 12 秒才返回。
-     */
-    private suspend fun parseDouyin(cleanUrl: String): Result<MediaResult> {
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        try {
-            val fastPathMissed = CompletableDeferred<Unit>()
-            val native = scope.async {
-                douyinParser.parse(cleanUrl) {
-                    if (!fastPathMissed.isCompleted) fastPathMissed.complete(Unit)
-                }
-            }
+    /** Native has priority. A slow or unsuccessful first attempt starts the browser. */
+    private suspend fun parseDouyin(cleanUrl: String): Result<MediaResult> = coroutineScope {
+        val parser = DouyinParser()
+        val nativeMissed = CompletableDeferred<Unit>()
+        val native = async {
+            withTimeoutOrNull(DOUYIN_NATIVE_TOTAL_BUDGET_MS) {
+                parser.parse(cleanUrl) { nativeMissed.complete(Unit) }
+            } ?: Result.failure(Exception("抖音解析超时"))
+        }
 
-            // 三种早期结局：0 = 原生已成功，1 = 原生第一层被截，2 = 原生已失败。
-            // 一个都没等到就说明是网络本身慢（原生还卡在等响应上），此时起 WebView
-            // 同样慢，先让它继续跑，最多再等 DOUYIN_PROBE_WAIT_MS。
-            val early = withTimeoutOrNull(DOUYIN_PROBE_WAIT_MS) {
-                select<Int> {
-                    native.onAwait { if (it.isSuccess) 0 else 2 }
-                    fastPathMissed.onAwait { 1 }
-                }
+        val earlySuccess = withTimeoutOrNull(DOUYIN_PROBE_WAIT_MS) {
+            select<Result<MediaResult>?> {
+                native.onAwait { it.takeIf { result -> result.isSuccess } }
+                nativeMissed.onAwait { null }
             }
-            if (early == 0) return native.await()
-            if (early == 2) {
-                val done = runCatching { native.await() }.getOrNull()
-                if (done != null) {
-                    if (done.isSuccess) return done
-                    // 链接里根本没有作品 ID：WebView 也救不了，直接返回比白起一个
-                    // 隐藏 WebView 更快。其它失败原因仍然让 WebView 试一把。
-                    if (done.exceptionOrNull()?.message?.contains("作品 ID") == true) return done
-                }
-            }
+        }
+        if (earlySuccess != null) return@coroutineScope earlySuccess
 
-            val web = scope.async {
-                runCatching { legacyParser.parseDouyinInWebView(cleanUrl) }.getOrNull()
+        val browser = async {
+            try {
+                legacyParser.parseDouyinInWebView(cleanUrl)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
             }
-            val results = Channel<MediaResult?>(Channel.UNLIMITED)
-            // 原生通道的最终结论存这里。不能在收尾时再 await 一次 —— 那条协程
-            // 已经被预算放弃，await 会重新挂起，等于把刚省下的时间又还回去。
-            val nativeOutcome = AtomicReference<Result<MediaResult>?>(null)
-            scope.launch {
-                // 原生到点还没结论就按失败算，别让它把用户的时间拖到十几秒
-                val r = withTimeoutOrNull(DOUYIN_NATIVE_TOTAL_BUDGET_MS) { native.await() }
-                val outcome = r ?: Result.failure(Exception("抖音解析超时"))
-                nativeOutcome.set(outcome)
-                results.send(outcome.getOrNull())
-            }
-            scope.launch { results.send(runCatching { web.await() }.getOrNull()) }
-            var received = 0
-            var winner: MediaResult? = null
-            while (winner == null && received < 2) {
-                winner = results.receive()
-                received++
-            }
-            if (winner != null) return Result.success(winner)
-
-            // 两条通道都没成功 → 第三方接口兜底。
-            // 只打 ucmao 一家，不再走 legacyParser.parse 的整条链 —— 那条链
-            // 开头的 WebView 通道刚刚已经失败过，再跑一遍等于把 12 秒超时又付一次。
-            val nativeResult = nativeOutcome.get()
-                ?: Result.failure(Exception("抖音解析超时"))
-            val nativeMessage = nativeResult.exceptionOrNull()?.message.orEmpty()
-            val fallback = runCatching {
-                withTimeoutOrNull(DOUYIN_FALLBACK_BUDGET_MS) { ucmaoParser.parse(cleanUrl) }
-            }.getOrNull()
-            val fallbackResult = fallback?.getOrNull()
-            return if (fallback != null && fallback.isSuccess &&
-                fallbackResult?.type == MediaType.VIDEO && "图集" in nativeMessage
+        }
+        val fallback = async {
+            val result = native.await()
+            if (result.isSuccess || parser.sawNote || "/note/" in cleanUrl ||
+                result.exceptionOrNull()?.message?.contains("图集") == true
             ) {
-                // 原生已确认这是图集（接口被风控打薄）——降级链拿到的只可能是
-                // 图集自带的预览视频，宁可失败也别给「点不动的下载视频」。
-                nativeResult
-            } else if (fallback?.isSuccess == true) {
-                fallback
+                null
             } else {
-                nativeResult
+                withTimeoutOrNull(DOUYIN_FALLBACK_BUDGET_MS) { ucmaoParser.parse(cleanUrl) }?.getOrNull()
             }
+        }
+
+        try {
+            // A third-party video cannot win until native has finished its album checks.
+            var nativePending = true
+            var browserPending = true
+            var fallbackPending = true
+            var failure: Result<MediaResult>? = null
+            while (nativePending || browserPending || fallbackPending) {
+                val media = select<MediaResult?> {
+                    if (nativePending) native.onAwait {
+                        nativePending = false
+                        failure = it
+                        it.getOrNull()
+                    }
+                    if (browserPending) browser.onAwait {
+                        browserPending = false
+                        it
+                    }
+                    if (fallbackPending) fallback.onAwait {
+                        fallbackPending = false
+                        it
+                    }
+                }
+                if (media != null) return@coroutineScope Result.success(media)
+            }
+            failure ?: Result.failure(Exception("未找到作品信息"))
         } finally {
-            scope.cancel()
+            native.cancel()
+            browser.cancel()
+            fallback.cancel()
         }
     }
 }

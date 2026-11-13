@@ -45,7 +45,6 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Shape
-import com.linkgrab.app.ui.hyper.hyperSquircle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -62,45 +61,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.linkgrab.app.ui.designsystem.LocalUnifiedUi
+import com.linkgrab.app.ui.designsystem.LinkGrabUi
+import com.linkgrab.app.ui.designsystem.SettingsCard
+import com.linkgrab.app.ui.designsystem.PreferenceRow
+import com.linkgrab.app.ui.designsystem.SoftGlassBlur
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
-import com.linkgrab.app.ui.hyper.HyperCard
-import com.linkgrab.app.ui.hyper.HyperDimens
-import com.linkgrab.app.ui.hyper.HyperPrimaryButton
-import com.linkgrab.app.ui.coloros.CouiCorners
-import com.linkgrab.app.ui.coloros.CouiCard
-import com.linkgrab.app.ui.coloros.CouiDimens
-import com.linkgrab.app.ui.coloros.CouiPrimaryButton
-import com.linkgrab.app.ui.coloros.CouiRow
-import com.linkgrab.app.ui.coloros.CouiSecondaryButton
-import com.linkgrab.app.ui.coloros.CouiSectionTitle
-import com.linkgrab.app.ui.coloros.couiAmbientGlow
-import com.linkgrab.app.ui.coloros.couiBackground
-import com.linkgrab.app.ui.coloros.couiDivider
-import com.linkgrab.app.ui.coloros.couiError
-import com.linkgrab.app.ui.coloros.couiPrimary
-import com.linkgrab.app.ui.coloros.couiSquircle
-import com.linkgrab.app.ui.coloros.couiSummary
-import com.linkgrab.app.ui.coloros.couiSurface
-import com.linkgrab.app.ui.coloros.couiSurfaceVariant
-import com.linkgrab.app.ui.coloros.couiTertiary
-import com.linkgrab.app.ui.coloros.couiTitle
-import com.linkgrab.app.ui.hyper.HyperRow
-import com.linkgrab.app.ui.hyper.HyperSecondaryButton
-import com.linkgrab.app.ui.hyper.HyperSectionTitle
-import com.linkgrab.app.ui.hyper.hyperBackground
-import com.linkgrab.app.ui.hyper.hyperDivider
-import com.linkgrab.app.ui.hyper.hyperError
-import com.linkgrab.app.ui.hyper.hyperPrimary
-import com.linkgrab.app.ui.hyper.hyperSectionColor
-import com.linkgrab.app.ui.hyper.hyperSummary
-import com.linkgrab.app.ui.hyper.hyperSurface
-import com.linkgrab.app.ui.hyper.hyperSurfaceVariant
-import com.linkgrab.app.ui.hyper.hyperTitle
 import com.linkgrab.app.ui.liquid.InteractiveHighlight
 import com.linkgrab.app.ui.liquid.computeLiquidDragTransform
 import kotlinx.coroutines.delay
@@ -196,95 +170,80 @@ val IOSGlassStrokeDark = Color.White.copy(alpha = 0.10f)
 
 @Composable
 fun iosBlue(): Color = when {
-    isHyperOsStyle() -> hyperPrimary()
-    isColorOsStyle() -> couiPrimary()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.primary
     isInDarkTheme() -> IOSBlueDark
     else -> IOSBlue
 }
 
 @Composable
 fun iosBackground(): Color = when {
-    isHyperOsStyle() -> hyperBackground()
-    isColorOsStyle() -> couiBackground()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.background
     isInDarkTheme() -> IOSBackgroundDark
     else -> IOSBackgroundLight
 }
 
 @Composable
 fun iosGroupedBackground(): Color = when {
-    isHyperOsStyle() -> hyperBackground()
-    isColorOsStyle() -> couiBackground()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.surface
     isInDarkTheme() -> IOSGroupedBackgroundDark
     else -> IOSGroupedBackgroundLight
 }
 
 @Composable
 fun iosSecondaryBackground(): Color = when {
-    isHyperOsStyle() -> hyperSurfaceVariant()
-    isColorOsStyle() -> couiSurfaceVariant()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.surfaceVariant
     isInDarkTheme() -> IOSSecondaryBackgroundDark
     else -> IOSSecondaryBackgroundLight
 }
 
 @Composable
 fun iosTertiaryBackground(): Color = when {
-    isHyperOsStyle() -> hyperSurfaceVariant()
-    isColorOsStyle() -> couiSurfaceVariant()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.surfaceVariant
     isInDarkTheme() -> IOSTertiaryBackgroundDark
     else -> IOSTertiaryBackgroundLight
 }
 
 @Composable
 fun iosLabel(): Color = when {
-    isHyperOsStyle() -> hyperTitle()
-    isColorOsStyle() -> couiTitle()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.onSurface
     isInDarkTheme() -> IOSLabelDark
     else -> IOSLabelLight
 }
 
 @Composable
 fun iosSecondaryLabel(): Color = when {
-    isHyperOsStyle() -> hyperSummary()
-    isColorOsStyle() -> couiSummary()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.onSurfaceVariant
     isInDarkTheme() -> IOSSecondaryLabelDark
     else -> IOSSecondaryLabelLight
 }
 
 @Composable
 fun iosTertiaryLabel(): Color = when {
-    // miuix onSurfaceContainerVariant
-    isHyperOsStyle() -> if (isInDarkTheme()) Color(0xFF737373) else Color(0xFF959595)
-    isColorOsStyle() -> couiTertiary()
     isInDarkTheme() -> IOSTertiaryLabelDark
     else -> IOSTertiaryLabelLight
 }
 
 @Composable
 fun iosSeparator(): Color = when {
-    isHyperOsStyle() -> hyperDivider()
-    isColorOsStyle() -> couiDivider()
     isInDarkTheme() -> IOSSeparatorDark
     else -> IOSSeparatorLight
 }
 
 @Composable
 fun iosGlass(): Color = when {
-    isHyperOsStyle() -> hyperSurface()
-    isColorOsStyle() -> couiSurface()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.surface
     isInDarkTheme() -> IOSGlassDark
     else -> IOSGlassLight
 }
 
 @Composable
-// HyperOS 的卡片没有描边（miuix Card 只有填充）。这里返回透明，
 // 调用点上的 border() 自然什么都不画，不必逐个页面去删。
-fun iosGlassStroke(): Color = if (isSystemStyle()) Color.Transparent
+fun iosGlassStroke(): Color = if (LocalUnifiedUi.current) Color.Transparent
 else if (isInDarkTheme()) IOSGlassStrokeDark else IOSGlassStrokeLight
 
 @Composable
 fun iosError(): Color = when {
-    isHyperOsStyle() -> hyperError()
-    isColorOsStyle() -> couiError()
+    LocalUnifiedUi.current -> MaterialTheme.colorScheme.error
     isInDarkTheme() -> IOSRedDark
     else -> IOSRed
 }
@@ -299,32 +258,13 @@ fun iosError(): Color = when {
  * `createOutline` 里读不到 CompositionLocal。调用点语法不用改。
  */
 val IOSCornerLarge: Shape
-    @Composable get() = when {
-        isHyperOsStyle() -> hyperSquircle(26.dp)
-        isColorOsStyle() -> couiSquircle(CouiCorners.Large)
-        else -> ContinuousRoundedRectangle(32.dp)
-    }
+    @Composable get() = ContinuousRoundedRectangle(if (LocalUnifiedUi.current) 20.dp else 32.dp)
 
 val IOSCornerMedium: Shape
-    @Composable get() = when {
-        isHyperOsStyle() -> hyperSquircle(20.dp)
-        isColorOsStyle() -> couiSquircle(CouiCorners.Card)
-        else -> ContinuousRoundedRectangle(24.dp)
-    }
+    @Composable get() = ContinuousRoundedRectangle(if (LocalUnifiedUi.current) 20.dp else 24.dp)
 
-val IOSCornerSmall: Shape
-    @Composable get() = when {
-        isHyperOsStyle() -> hyperSquircle(16.dp)
-        isColorOsStyle() -> couiSquircle(CouiCorners.Small)
-        else -> ContinuousRoundedRectangle(16.dp)
-    }
-
-val IOSCornerXSmall: Shape
-    @Composable get() = when {
-        isHyperOsStyle() -> hyperSquircle(12.dp)
-        isColorOsStyle() -> couiSquircle(CouiCorners.XSmall)
-        else -> ContinuousRoundedRectangle(12.dp)
-    }
+val IOSCornerSmall: Shape = ContinuousRoundedRectangle(16.dp)
+val IOSCornerXSmall: Shape = ContinuousRoundedRectangle(12.dp)
 
 // MARK: - Icon Tokens
 
@@ -366,7 +306,7 @@ fun iosDisclosureColor(): Color = iosSecondaryLabel()
 fun IOS26Canvas(content: @Composable () -> Unit) {
     val bg = iosBackground()
     Box(
-        modifier = if (isSystemStyle()) Modifier.background(bg) else Modifier.background(
+        modifier = if (LocalUnifiedUi.current) Modifier.background(bg) else Modifier.background(
             Brush.verticalGradient(listOf(bg, bg, bg.copy(alpha = 0.98f)))
         ),
         content = { content() },
@@ -380,18 +320,8 @@ fun IOS26Panel(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    if (isColorOsStyle()) {
-        // ColorOS：超椭圆 12dp 白卡，深色下是半透明白 + 顶边高光，内边距 16dp。
-        CouiCard(modifier = modifier) {
-            Column(Modifier.padding(CouiDimens.CardInner), content = content)
-        }
-        return
-    }
-    if (isHyperOsStyle()) {
-        // HyperOS：miuix Card，连续曲率 20dp、无描边、内边距 16dp。
-        HyperCard(modifier = modifier) {
-            Column(Modifier.padding(16.dp), content = content)
-        }
+    if (LocalUnifiedUi.current) {
+        SettingsCard(modifier, content)
         return
     }
     val glass = iosGlass()
@@ -422,26 +352,8 @@ fun IOS26ListRow(
     onClick: (() -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
 ) {
-    if (isColorOsStyle()) {
-        // ColorOS：coui 行（最小 48dp、标题 17sp Medium、摘要 14sp、四边 16/10）
-        CouiRow(
-            title = title,
-            subtitle = subtitle,
-            modifier = modifier,
-            onClick = onClick,
-            trailing = trailing,
-        )
-        return
-    }
-    if (isHyperOsStyle()) {
-        // HyperOS：miuix 偏好行（最小 56dp、标题 17sp、摘要 14sp、四边 16dp）
-        HyperRow(
-            title = title,
-            subtitle = subtitle,
-            modifier = modifier,
-            onClick = onClick,
-            trailing = trailing,
-        )
+    if (LocalUnifiedUi.current) {
+        PreferenceRow(title, subtitle, modifier, onClick, trailing)
         return
     }
     val source = remember { MutableInteractionSource() }
@@ -505,16 +417,6 @@ fun IOS26Button(
     enabled: Boolean = true,
     backdrop: Backdrop? = null,
 ) {
-    if (isColorOsStyle()) {
-        // ColorOS：coui 主按钮（蓝底白字、高 44dp 胶囊、按面积缩放）
-        CouiPrimaryButton(text, onClick, modifier, enabled)
-        return
-    }
-    if (isHyperOsStyle()) {
-        // HyperOS：miuix 主按钮（蓝底白字、圆角 16dp、最小高 40dp）
-        HyperPrimaryButton(text, onClick, modifier, enabled)
-        return
-    }
     // 按压形变学习自 Nexio 课程表按钮：整体生长 + 沿拖动方向拉伸 + tanh 阻尼
     // 跟手 + 触摸点高光 + Confirm 触感（替代旧的 collectIsPressed 纯缩放）。
     val animationScope = rememberCoroutineScope()
@@ -522,7 +424,7 @@ fun IOS26Button(
     val interactiveHighlight = remember(animationScope) { InteractiveHighlight(animationScope) }
     val interactionSource = remember { MutableInteractionSource() }
     val isLight = !isInDarkTheme()
-    val buttonCorner = if (isHyperOsStyle()) 18.dp else 24.dp
+    val buttonCorner = if (LocalUnifiedUi.current) 16.dp else 24.dp
     val buttonGlassShape: () -> androidx.compose.ui.graphics.Shape = remember(buttonCorner) {
         { RoundedRectangle(buttonCorner, RoundedCornerStyle.Continuous) }
     }
@@ -593,7 +495,7 @@ fun IOS26Button(
     ) {
         Text(
             text,
-            color = Color.White,
+            color = if (LocalUnifiedUi.current) MaterialTheme.colorScheme.onPrimary else Color.White,
             fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp,
             letterSpacing = (-0.2).sp,
@@ -608,20 +510,12 @@ fun IOS26OutlinedButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    if (isColorOsStyle()) {
-        CouiSecondaryButton(text, onClick, modifier, enabled)
-        return
-    }
-    if (isHyperOsStyle()) {
-        HyperSecondaryButton(text, onClick, modifier, enabled)
-        return
-    }
     val animationScope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     val interactiveHighlight = remember(animationScope) { InteractiveHighlight(animationScope) }
     val interactionSource = remember { MutableInteractionSource() }
     val glass = iosGlass()
-    val shape = if (isHyperOsStyle()) RoundedCornerShape(18.dp) else IOSCornerMedium
+    val shape = if (LocalUnifiedUi.current) ContinuousRoundedRectangle(16.dp) else IOSCornerMedium
     Box(
         modifier = modifier
             .graphicsLayer {
@@ -680,16 +574,18 @@ fun IOS27TextField(
     singleLine: Boolean = true,
     keyboardOptions: androidx.compose.foundation.text.KeyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default,
 ) {
+    val unified = LocalUnifiedUi.current
+    val fieldShape = if (unified && singleLine && label == null) ContinuousCapsule else IOSCornerXSmall
     TextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier
             .fillMaxWidth()
-            .clip(IOSCornerXSmall),
+            .clip(fieldShape),
         singleLine = singleLine,
         keyboardOptions = keyboardOptions,
         label = label?.let { { Text(it) } },
-        placeholder = placeholder?.let { { Text(it, color = iosTertiaryLabel()) } },
+        placeholder = placeholder?.let { { Text(it, color = if (unified) iosSecondaryLabel() else iosTertiaryLabel()) } },
         colors = TextFieldDefaults.colors(
             focusedContainerColor = iosTertiaryBackground(),
             unfocusedContainerColor = iosTertiaryBackground(),
@@ -706,7 +602,7 @@ fun IOS27TextField(
             focusedTrailingIconColor = iosSecondaryLabel(),
             unfocusedTrailingIconColor = iosSecondaryLabel(),
         ),
-        shape = IOSCornerXSmall,
+        shape = fieldShape,
     )
 }
 
@@ -734,32 +630,36 @@ fun IOS26Choice(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val unified = LocalUnifiedUi.current
+    val colors = MaterialTheme.colorScheme
+    val shape = if (unified) ContinuousCapsule else IOSCornerSmall
     val background by animateColorAsState(
-        if (selected) iosBlue() else iosTertiaryBackground(),
+        if (selected && unified) colors.primaryContainer else if (selected) iosBlue() else iosTertiaryBackground(),
         tween(180),
         label = "ios26ChoiceBg",
     )
     val haptic = LocalHapticFeedback.current
     Box(
         modifier = modifier
-            .clip(IOSCornerSmall)
+            .clip(shape)
             .background(background)
-            .border(
+            .then(if (unified) Modifier.heightIn(min = 35.dp) else Modifier.border(
                 0.5.dp,
                 if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
                 IOSCornerSmall,
-            )
+            ))
+            .semantics { this.selected = selected }
             .clickable {
                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 onClick()
             }
-            .padding(horizontal = 14.dp, vertical = 9.dp),
+            .padding(horizontal = 14.dp, vertical = if (unified) 6.dp else 9.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            color = if (selected) Color.White else iosLabel(),
-            fontWeight = FontWeight.Medium,
+            color = if (selected && unified) colors.onPrimaryContainer else if (selected) Color.White else iosLabel(),
+            fontWeight = if (selected && unified) FontWeight.SemiBold else FontWeight.Medium,
             fontSize = 14.sp,
             letterSpacing = (-0.1).sp,
         )
@@ -796,23 +696,20 @@ fun IOS26Switch(
 
     // miuix 的开关弹簧带一点点回弹（0.7 / 0.6），iOS 那边是不回弹。
     // 这是 fork 相对上游改过的地方之一，两个主题各自保留自己的手感。
-    val hyperSwitch = isHyperOsStyle()
-    val colorSwitch = isColorOsStyle()
-    val thumbOffsetSpring = remember(hyperSwitch) {
-        spring<Dp>(dampingRatio = if (hyperSwitch) 0.7f else Spring.DampingRatioNoBouncy, stiffness = 987f)
+    val softGlass = LocalUnifiedUi.current
+    val thumbOffsetSpring = remember(softGlass) {
+        spring<Dp>(dampingRatio = if (softGlass) 0.7f else Spring.DampingRatioNoBouncy, stiffness = 987f)
     }
-    val thumbScaleSpring = remember(hyperSwitch) {
-        spring<Float>(dampingRatio = if (hyperSwitch) 0.6f else Spring.DampingRatioNoBouncy, stiffness = 987f)
+    val thumbScaleSpring = remember(softGlass) {
+        spring<Float>(dampingRatio = if (softGlass) 0.6f else Spring.DampingRatioNoBouncy, stiffness = 987f)
     }
 
-    // coui 的开关比 iOS 小一圈：轨道 38×24、拇指 18、内边距 3（travel 14）；
-    // iOS 是 49×28、拇指 20、4 / 25（travel 21）。HyperOS 沿用 iOS 尺寸。
-    val trackWidth = if (colorSwitch) 38.dp else 49.dp
-    val trackHeight = if (colorSwitch) 24.dp else 28.dp
-    val thumbSize = if (colorSwitch) 18.dp else 20.dp
-    val thumbStart = if (colorSwitch) 3.dp else 4.dp
-    val thumbEnd = if (colorSwitch) 17.dp else 25.dp
-    val travel = if (colorSwitch) 14f else 21f
+    val trackWidth = 49.dp
+    val trackHeight = 28.dp
+    val thumbSize = 20.dp
+    val thumbStart = 4.dp
+    val thumbEnd = 25.dp
+    val travel = 21f
 
     val thumbOffset by animateDpAsState(
         targetValue = (if (checked) thumbEnd else thumbStart) + dragOffset.dp,
@@ -828,10 +725,7 @@ fun IOS26Switch(
             if (enabled) iosBlue() else iosBlue().copy(alpha = 0.4f)
         } else {
             if (enabled) {
-                // miuix 关态轨道：暗 #424242 / 亮 #ECECEC；coui 用 secondary #757575 / #E5E5E5
-                if (colorSwitch) {
-                    if (isInDarkTheme()) Color(0xFF757575) else Color(0xFFE5E5E5)
-                } else if (hyperSwitch) {
+                if (softGlass) {
                     if (isInDarkTheme()) Color(0xFF424242) else Color(0xFFECECEC)
                 } else if (isInDarkTheme()) {
                     Color(0xFF48484A)
@@ -874,14 +768,6 @@ fun IOS26Switch(
                 .offset { IntOffset(thumbOffset.roundToPx(), 0) }
                 .graphicsLayer { scaleX = thumbScale; scaleY = thumbScale }
                 .drawBehind {
-                    // coui 的拇指带一枚很浅的投影（#19000000、下移 1dp），没有它深色下是贴纸
-                    if (colorSwitch) {
-                        drawCircle(
-                            color = Color.Black.copy(alpha = 0.10f),
-                            radius = size.minDimension / 2f,
-                            center = center.copy(y = center.y + 1.dp.toPx() * 0.6f),
-                        )
-                    }
                     drawCircle(thumbColor)
                 }
                 .then(
@@ -943,33 +829,23 @@ fun IOS26Switch(
 
 /** 卡片内标题：iOS 20sp SemiBold；HyperOS 16sp Medium（miuix 卡片内不放大标题）。 */
 @Composable
-fun iosCardTitleSize(): androidx.compose.ui.unit.TextUnit = when {
-    isHyperOsStyle() -> 16.sp
-    isColorOsStyle() -> 17.sp
-    else -> 20.sp
-}
+fun iosCardTitleSize(): androidx.compose.ui.unit.TextUnit = if (LocalUnifiedUi.current) 17.sp else 20.sp
 
 @Composable
-fun iosCardTitleWeight(): FontWeight = if (isSystemStyle()) FontWeight.Medium else FontWeight.SemiBold
+fun iosCardTitleWeight(): FontWeight = if (LocalUnifiedUi.current) FontWeight.Medium else FontWeight.SemiBold
 
 // MARK: - Typography
 
 @Composable
 fun IOS26LargeTitle(title: String, subtitle: String? = null) {
-    // miuix 大标题 30sp Normal；coui Title1 32sp Normal；iOS 34sp Bold
-    val titleSize = when {
-        isHyperOsStyle() -> 30.sp
-        isColorOsStyle() -> 32.sp
-        else -> 34.sp
-    }
-    val titleWeight = if (isSystemStyle()) FontWeight.Normal else FontWeight.Bold
+    val titleWeight = FontWeight.Bold
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             title,
-            fontSize = titleSize,
+            fontSize = 34.sp,
             fontWeight = titleWeight,
             color = iosLabel(),
-            letterSpacing = (if (isSystemStyle()) 0.0 else -0.8).sp,
+            letterSpacing = (if (LocalUnifiedUi.current) 0.0 else -0.8).sp,
         )
         subtitle?.let {
             Text(
@@ -984,41 +860,13 @@ fun IOS26LargeTitle(title: String, subtitle: String? = null) {
 
 @Composable
 fun IOS26PageHeader(title: String, subtitle: String? = null, topPadding: androidx.compose.ui.unit.Dp = 16.dp) {
-    Column(Modifier.padding(top = topPadding, bottom = 8.dp)) {
+    Column(Modifier.padding(start = if (LocalUnifiedUi.current) 12.dp else 0.dp, top = topPadding, bottom = 8.dp)) {
         IOS26LargeTitle(title, subtitle)
     }
 }
 
 @Composable
 fun IOS26SectionHeader(title: String, subtitle: String? = null) {
-    if (isColorOsStyle()) {
-        Column {
-            CouiSectionTitle(title)
-            subtitle?.let {
-                Text(
-                    it,
-                    fontSize = 13.sp,
-                    color = couiSummary(),
-                    modifier = Modifier.padding(start = 12.dp, bottom = 6.dp),
-                )
-            }
-        }
-        return
-    }
-    if (isHyperOsStyle()) {
-        Column {
-            HyperSectionTitle(title)
-            subtitle?.let {
-                Text(
-                    it,
-                    fontSize = 13.sp,
-                    color = hyperSummary(),
-                    modifier = Modifier.padding(start = 12.dp, bottom = 8.dp),
-                )
-            }
-        }
-        return
-    }
     Column(Modifier.padding(top = 8.dp, bottom = 8.dp)) {
         Text(
             title,
@@ -1066,15 +914,12 @@ fun IOS26IconCapsule(
 
 @Composable
 fun IOS26Divider(modifier: Modifier = Modifier) {
-    if (isSystemStyle()) {
-        // 两个系统主题下选项行之间都不加分割线，靠行高和留白分隔
-    } else {
-        androidx.compose.material3.HorizontalDivider(
-            modifier = modifier,
-            thickness = 0.5.dp,
-            color = iosSeparator().copy(alpha = 0.5f),
-        )
-    }
+    if (LocalUnifiedUi.current) return
+    androidx.compose.material3.HorizontalDivider(
+        modifier = modifier,
+        thickness = 0.5.dp,
+        color = iosSeparator().copy(alpha = 0.5f),
+    )
 }
 
 // MARK: - Sticky Blur Header (iOS 26 navigation bar)
@@ -1093,6 +938,15 @@ val LocalTopBarMaterialAlpha = staticCompositionLocalOf { 1f }
 
 /** 滚动超过这段距离后，吸顶模糊才开始出现。 */
 val IOS26HeaderScrollThreshold = 56.dp
+
+@Composable
+fun pageHeaderHeight(): Dp = if (LocalUnifiedUi.current) LinkGrabUi.TopBarHeight else IOS26HeaderHeight
+
+@Composable
+fun pageHeaderScrollThresholdPx(): Int {
+    val threshold = if (LocalUnifiedUi.current) LinkGrabUi.MaterialThreshold else IOS26HeaderScrollThreshold
+    return with(LocalDensity.current) { threshold.roundToPx() }
+}
 
 /**
  * iOS 26-style pinned navigation bar. It stays attached to the top of the
@@ -1118,13 +972,14 @@ fun IOS26BlurHeader(
 ) {
     val progress by animateFloatAsState(
         targetValue = if (scrolled) 1f else 0f,
-        animationSpec = tween(260),
+        animationSpec = tween(if (LocalUnifiedUi.current) LinkGrabUi.MaterialDuration else 260),
         label = "ios26HeaderProgress",
     )
     val bg = iosBackground()
     val titleColor = iosLabel()
     val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val blurHeight = topInset + IOS26HeaderHeight + IOS26HeaderFade
+    val unified = LocalUnifiedUi.current
+    val blurHeight = topInset + if (unified) 80.dp else IOS26HeaderHeight + IOS26HeaderFade
     // 糊层底边溶解曲线（参照 Nexio edgeFadeStart=0.88 的多档缓收）
     val fadeBrush = remember(bg) {
         Brush.verticalGradient(
@@ -1141,11 +996,15 @@ fun IOS26BlurHeader(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(blurHeight + (gradientMaskHeight - IOS26HeaderHeight - IOS26HeaderFade).coerceAtLeast(0.dp)),
+            .height(if (unified) blurHeight else blurHeight + (gradientMaskHeight - IOS26HeaderHeight - IOS26HeaderFade).coerceAtLeast(0.dp)),
     ) {
         // 1) 渐进糊层：blur 采样 + DstIn 垂直淡出，底边溶进页面。
         //    Offscreen 合成是 DstIn 生效的前提。
-        Box(
+        if (unified) {
+            if (scrolled || progress > 0f) {
+                SoftGlassBlur(backdrop, blurHeight, bg, alpha = { progress })
+            }
+        } else Box(
             Modifier
                 .fillMaxWidth()
                 .height(blurHeight)
@@ -1177,13 +1036,13 @@ fun IOS26BlurHeader(
                         val p = progress
                         if (p > 0.01f) {
                             // 着色提到 0.55：模糊内容透得出来，又不糊住标题
-                            drawRect(bg.copy(alpha = 0.55f * p))
+                            drawRect(bg.copy(alpha = if (unified) 0.2f else 0.55f * p))
                         }
                     },
                 )
         )
         // 2) surface 渐变遮罩：随滚动淡入，软化顶部边缘
-        Box(
+        if (!unified) Box(
             Modifier
                 .fillMaxWidth()
                 .height(gradientMaskHeight)
@@ -1207,13 +1066,30 @@ fun IOS26BlurHeader(
         // 顶栏圆钮的玻璃底常驻：以前这里跟着滚动进度从 0 淡入，页面停在顶部时
         // alpha=0，按钮只剩一个光秃秃的箭头，像丢了圆形遮罩。滚动只该决定背后
         // 那层模糊出不出，按钮本身不该消失。
-        CompositionLocalProvider(LocalTopBarMaterialAlpha provides 1f) {
+        CompositionLocalProvider(LocalTopBarMaterialAlpha provides if (unified) progress else 1f) {
+        if (unified) {
+            Box(
+                Modifier.fillMaxWidth().padding(top = topInset).height(LinkGrabUi.TopBarHeight)
+                    .padding(horizontal = LinkGrabUi.PageHorizontal),
+            ) {
+                Text(
+                    title, color = titleColor, fontSize = 19.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 84.dp)
+                        .graphicsLayer { alpha = progress },
+                )
+                if (onBack != null) {
+                    IOS26BackButton(onClick = onBack, backdrop = backdrop, modifier = Modifier.align(Alignment.CenterStart))
+                }
+                Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically, content = actions)
+            }
+        } else {
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(top = topInset)
-                .height(IOS26HeaderHeight)
-                .padding(horizontal = if (isSystemStyle()) 16.dp else 20.dp),
+                .height(if (unified) LinkGrabUi.TopBarHeight else IOS26HeaderHeight)
+                .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
@@ -1223,21 +1099,17 @@ fun IOS26BlurHeader(
             Text(
                 title,
                 // miuix 折叠后的小标题是 19sp Medium（不是 title3 的 20sp）
-                // miuix 折叠标题 19sp Medium；coui TopAppBar 用 Title3 20sp Medium
-                fontSize = when {
-                    isHyperOsStyle() -> 19.sp
-                    isColorOsStyle() -> 20.sp
-                    else -> 17.sp
-                },
-                fontWeight = if (isSystemStyle()) FontWeight.Medium else FontWeight.SemiBold,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = titleColor,
-                letterSpacing = if (isSystemStyle()) 0.sp else (-0.2).sp,
+                letterSpacing = (-0.2).sp,
                 maxLines = 1,
                 modifier = Modifier
                     .weight(1f)
                     .graphicsLayer { alpha = progress },
             )
             actions()
+        }
         }
         }
     }
@@ -1299,11 +1171,12 @@ fun IOS26StickyPage(
     content: LazyListScope.() -> Unit,
 ) {
     val listState = rememberLazyListState()
-    val scrollThreshold = with(LocalDensity.current) { IOS26HeaderScrollThreshold.roundToPx() }
+    val unified = LocalUnifiedUi.current
+    val scrollThreshold = pageHeaderScrollThresholdPx()
     val scrolled by remember(scrollThreshold) {
         derivedStateOf {
             listState.firstVisibleItemIndex > 0 ||
-                listState.firstVisibleItemScrollOffset > scrollThreshold
+                listState.firstVisibleItemScrollOffset >= scrollThreshold
         }
     }
     val backdrop = rememberLayerBackdrop()
@@ -1320,9 +1193,7 @@ fun IOS26StickyPage(
                 .fillMaxSize()
                 .then(if (layerActive) Modifier.layerBackdrop(backdrop) else Modifier)
                 .then(if (contentBackdrop != null) Modifier.layerBackdrop(contentBackdrop) else Modifier)
-                .background(iosBackground())
-                // ColorOS：顶部落一层极淡的主色环境光
-                .then(if (isColorOsStyle()) Modifier.couiAmbientGlow(isInDarkTheme()) else Modifier),
+                .background(iosBackground()),
         ) {
             LazyColumn(
                 state = listState,
@@ -1331,20 +1202,17 @@ fun IOS26StickyPage(
                     .then(if (applyImePadding) Modifier.imePadding() else Modifier)
                     .padding(
                         horizontal = when {
-                            isHyperOsStyle() -> HyperDimens.PageHorizontal
-                            isColorOsStyle() -> CouiDimens.PageHorizontal
+                            unified -> LinkGrabUi.PageHorizontal
                             else -> 20.dp
                         },
                     ),
                 verticalArrangement = Arrangement.spacedBy(
-                    if (isHyperOsStyle()) spacedBy.coerceAtMost(12.dp)
-                    else if (isColorOsStyle()) spacedBy.coerceAtMost(10.dp)
+                    if (unified) LinkGrabUi.SectionGap
                     else spacedBy,
                 ),
                 contentPadding = PaddingValues(
                     top = topInset + when {
-                        isHyperOsStyle() -> HyperDimens.TopBarHeight + 8.dp
-                        isColorOsStyle() -> CouiDimens.TopBarHeight + 8.dp
+                        unified -> LinkGrabUi.TopBarHeight + 10.dp
                         else -> IOS26HeaderHeight + 10.dp
                     },
                     bottom = bottomSpacing,

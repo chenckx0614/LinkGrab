@@ -4,6 +4,7 @@ import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -33,6 +39,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
@@ -43,6 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material3.MaterialTheme
+import com.kyant.capsule.ContinuousRoundedRectangle
+import com.linkgrab.app.ui.designsystem.LocalUnifiedUi
 import com.linkgrab.app.ui.theme.IOSCornerSmall
 import com.linkgrab.app.ui.theme.IOSGreen
 import com.linkgrab.app.ui.theme.IOSRed
@@ -79,7 +90,11 @@ fun IOS26GlassDialog(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismissRequest) {
+    val unified = LocalUnifiedUi.current
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = !unified, decorFitsSystemWindows = !unified),
+    ) {
         val view = LocalView.current
         val density = LocalDensity.current
         val dark = isInDarkTheme()
@@ -100,24 +115,47 @@ fun IOS26GlassDialog(
 
         val glassBase = iosGlass()
         val stroke = iosGlassStroke()
-        val glassColor = glassBase.copy(alpha = if (blurEnabled) 0.72f else 0.96f)
+        val glassColor = glassBase.copy(alpha = when {
+            !blurEnabled -> if (unified) 1f else 0.96f
+            !unified -> 0.72f
+            dark -> 0.87f
+            else -> 0.78f
+        })
         // 玻璃高光：顶部一道淡白渐变，模拟液态玻璃的受光面
         val highlightBrush = Brush.verticalGradient(
             0f to Color.White.copy(alpha = if (dark) 0.08f else 0.16f),
             1f to Color.Transparent,
         )
+        val shape = if (unified) ContinuousRoundedRectangle(32.dp) else RoundedCornerShape(28.dp)
+        val panel: @Composable () -> Unit = {
         Column(
             modifier = modifier
+                .then(if (unified) Modifier.widthIn(max = 420.dp) else Modifier)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp))
+                .clip(shape)
                 .background(glassColor)
                 .drawBehind { drawRect(highlightBrush) }
-                .border(1.dp, stroke, RoundedCornerShape(28.dp))
+                .then(if (unified) Modifier else Modifier.border(1.dp, stroke, shape))
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             content()
         }
+        }
+        if (unified) {
+            Box(Modifier.fillMaxSize().imePadding().navigationBarsPadding()) {
+                Box(
+                    Modifier.matchParentSize().clickable(
+                        interactionSource = null, indication = null, onClick = onDismissRequest,
+                    ),
+                )
+                Box(Modifier.align(Alignment.BottomCenter).padding(horizontal = 12.dp, vertical = 12.dp)
+                    .pointerInput(Unit) { detectTapGestures(onTap = {}) }) {
+                    // Consume taps on the panel's blank space before they reach the dismiss layer.
+                    panel()
+                }
+            }
+        } else panel()
     }
 }
 
@@ -136,7 +174,7 @@ fun GlassDialogButton(
     val haptic = LocalHapticFeedback.current
     Box(
         modifier = modifier
-            .height(46.dp)
+            .heightIn(min = 46.dp)
             .clip(IOSCornerSmall)
             .then(
                 if (primary) {
@@ -155,7 +193,8 @@ fun GlassDialogButton(
     ) {
         Text(
             text,
-            color = if (primary) Color.White else iosLabel().copy(alpha = if (enabled) 1f else 0.4f),
+            color = if (primary && LocalUnifiedUi.current) MaterialTheme.colorScheme.onPrimary
+                else if (primary) Color.White else iosLabel().copy(alpha = if (enabled) 1f else 0.4f),
             fontWeight = FontWeight.SemiBold,
             fontSize = 16.sp,
         )
@@ -384,15 +423,16 @@ fun GlassDialogDangerButton(
     val haptic = LocalHapticFeedback.current
     Box(
         modifier = modifier
-            .height(46.dp)
+            .heightIn(min = 46.dp)
             .clip(IOSCornerSmall)
-            .background(IOSRed)
+            .background(if (LocalUnifiedUi.current) MaterialTheme.colorScheme.error else IOSRed)
             .clickable {
                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 onClick()
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        Text(text, color = if (LocalUnifiedUi.current) MaterialTheme.colorScheme.onError else Color.White,
+            fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
     }
 }
