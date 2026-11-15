@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -318,16 +320,29 @@ fun IOS26UpdateDialog(
             textAlign = TextAlign.Center,
         )
 
-        // 更新说明：参照 Nexio，只在待下载时展示，下载/安装时让位给进度条
+        // 更新说明：参照 Nexio，只在待下载时展示，下载/安装时让位给进度条。
+        //
+        // 正文限高 + 可滚动：线上 release 说明可能很长（带 markdown 标题和列表），
+        // 以前直接整段塞进 Text，条数一多弹窗就高出屏幕，按钮被顶到屏幕外，
+        // 点不到「更新」也滑不动。限高后按钮位置固定，长说明在框内滚动。
         if (releaseNotes.isNotBlank() && downloadStatus is com.linkgrab.app.update.UpdateDownloadStatus.Idle) {
             Spacer(modifier = Modifier.height(14.dp))
-            Text(
-                releaseNotes.take(300),
-                fontSize = 14.sp,
-                color = iosSecondaryLabel(),
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            val notes = remember(releaseNotes) { releaseNotesForDisplay(releaseNotes) }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 160.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    notes,
+                    fontSize = 14.sp,
+                    color = iosSecondaryLabel(),
+                    textAlign = TextAlign.Start,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -435,4 +450,26 @@ fun GlassDialogDangerButton(
         Text(text, color = if (LocalUnifiedUi.current) MaterialTheme.colorScheme.onError else Color.White,
             fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
     }
+}
+
+/**
+ * 线上 release 说明是 markdown，直接塞进 Text 会把 `##`、`- `、`**` 原样显示。
+ * 这里压成纯文本并去掉多余空行，超长截断兜底（正常新版本说明只写几条短句）。
+ */
+private fun releaseNotesForDisplay(raw: String): String {
+    val cleaned = raw.lineSequence()
+        .map { line ->
+            line.trim()
+                .removePrefix("- ")
+                .removePrefix("* ")
+                .removePrefix("+ ")
+                .replace(Regex("^#{1,6}\\s*"), "")
+                .replace(Regex("^\\d+\\.\\s+"), "")
+                .replace("**", "")
+                .replace("`", "")
+        }
+        .joinToString("\n")
+        .replace(Regex("\\n{3,}"), "\n\n")
+        .trim()
+    return if (cleaned.length > 600) cleaned.take(600).trimEnd() + "…" else cleaned
 }
