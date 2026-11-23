@@ -1,15 +1,12 @@
 package com.linkgrab.app.ui.screens
 
-import android.content.ContentValues
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.content.Context
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
-import android.widget.Toast
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,246 +15,298 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.ExperimentalMaterial3Api
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.linkgrab.app.ui.theme.IOS26BlurHeader
+import com.linkgrab.app.data.convert.ConvertedFile
+import com.linkgrab.app.data.convert.ImageConverter
+import com.linkgrab.app.data.convert.ImageTarget
+import com.linkgrab.app.data.repository.SettingsRepository
 import com.linkgrab.app.ui.theme.IOS26Button
-import com.linkgrab.app.ui.theme.pageHeaderHeight
-import com.linkgrab.app.ui.theme.pageHeaderScrollThresholdPx
-import com.linkgrab.app.ui.theme.IOS26IconCapsule
 import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26Panel
-import com.linkgrab.app.ui.theme.IOS27CircularProgressIndicator
 import com.linkgrab.app.ui.theme.IOSCornerSmall
-import com.linkgrab.app.ui.theme.iosBackground
 import com.linkgrab.app.ui.theme.iosBlue
 import com.linkgrab.app.ui.theme.iosError
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
-import com.linkgrab.app.ui.theme.iosTertiaryBackground
 import com.linkgrab.app.ui.theme.iosSeparator
+import com.linkgrab.app.ui.theme.iosTertiaryBackground
+import com.linkgrab.app.ui.util.MediaActions
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
-data class ImageFormat(val name: String, val ext: String, val mimeType: String)
-
-private val imageFormats = listOf(
-    ImageFormat("JPG", "jpg", "image/jpeg"),
-    ImageFormat("PNG", "png", "image/png"),
-    ImageFormat("WebP", "webp", "image/webp"),
-    ImageFormat("BMP", "bmp", "image/bmp"),
-)
+private const val MAX_BATCH = 30
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 fun ImageConvertScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    var selectedUri by remember { mutableStateOf<Uri?>(null) }
-    var isProcessing by remember { mutableStateOf(false) }
-    var statusText by remember { mutableStateOf("选择图片文件") }
-    var selectedFormat by remember { mutableStateOf(imageFormats[0]) }
+    val settings = remember { SettingsRepository(context) }
+    val saveTree by settings.customSaveTree.collectAsState(initial = null)
+    val scope = rememberCoroutineScope()
 
-    val imagePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        selectedUri = uri
-        statusText = "已选择图片"
+    var sources by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var target by remember { mutableStateOf(ImageTarget.JPG) }
+    var running by remember { mutableStateOf(false) }
+    var fraction by remember { mutableStateOf(0f) }
+    var status by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var results by remember { mutableStateOf<List<ConvertedFile>>(emptyList()) }
+    var job by remember { mutableStateOf<Job?>(null) }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { picked ->
+        if (picked.isNotEmpty()) {
+            sources = picked.take(MAX_BATCH)
+            results = emptyList()
+            error = null
+            status = ""
+            fraction = 0f
+        }
     }
 
-    val headerBackdrop = rememberLayerBackdrop()
-    val scrollState = rememberScrollState()
-    val headerScrolled = scrollState.value > pageHeaderScrollThresholdPx()
-    val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val startConversion = {
+        val list = sources
+        if (list.isNotEmpty() && !running) {
+            running = true
+            error = null
+            results = emptyList()
+            fraction = 0f
+            status = "准备转换"
+            val format = target
+            job = scope.launch {
+                val done = mutableListOf<ConvertedFile>()
+                try {
+                    list.forEachIndexed { index, uri ->
+                        status = "正在转换 ${index + 1}/${list.size}"
+                        fraction = index.toFloat() / list.size
+                        val dest = ImageConverter.convert(context, uri, format, saveTree)
+                        val (name, size) = describe(context, dest, format)
+                        done += ConvertedFile(name, dest.toString(), size)
+                        results = done.toList()
+                        fraction = (index + 1).toFloat() / list.size
+                    }
+                    status = "已保存 ${done.size} 个文件"
+                } catch (cancel: CancellationException) {
+                    status = "已取消"
+                    fraction = 0f
+                    throw cancel
+                } catch (e: Exception) {
+                    error = e.message ?: "转换失败"
+                    status = if (done.isEmpty()) "没有转换成功" else "已保存 ${done.size} 个，后面的失败了"
+                } catch (e: Throwable) {
+                    // 解码超大图可能抛 OutOfMemoryError：它是 Error 不是 Exception，
+                    // 不接住会直接把应用带走，这里降级成一条提示。
+                    error = "这张图太大，手机内存不够，换张小一点的试试"
+                    status = if (done.isEmpty()) "没有转换成功" else "已保存 ${done.size} 个，后面的失败了"
+                } finally {
+                    running = false
+                    job = null
+                }
+            }
+        }
+    }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        containerColor = iosBackground(),
-    ) { _ ->
-        Box(Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = topInset + pageHeaderHeight())
-                .padding(horizontal = 20.dp)
-                .layerBackdrop(headerBackdrop)
-                .verticalScroll(scrollState),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(modifier = Modifier.height(20.dp))
-
-            IOS26IconCapsule("🖼", iosBlue())
-
-            Spacer(modifier = Modifier.height(20.dp))
-
+    ConvertPage(
+        title = "图片转换",
+        subtitle = "一次可以转多张，格式随你挑",
+        emoji = "🖼",
+        onBack = onBack,
+    ) {
+        IOS26Panel(Modifier.fillMaxWidth()) {
             Text(
-                text = "图片转格式",
-                fontSize = 22.sp,
+                text = "目标格式",
+                fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = iosLabel(),
-                letterSpacing = (-0.4).sp,
+                modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "转换图片格式 (JPG/PNG/WebP/BMP)",
-                color = iosSecondaryLabel(),
-                fontSize = 14.sp,
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            selectedUri?.let { uri ->
-                AsyncImage(
-                    model = uri,
-                    contentDescription = "预览",
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(IOSCornerSmall),
-                )
-                Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ImageTarget.entries.forEach { format ->
+                    ImageTargetChip(
+                        format = format,
+                        selected = target == format,
+                        enabled = !running,
+                        onClick = { target = format },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = if (saveTree.isNullOrBlank()) "保存到 图片/LinkGrab/转换" else "保存到你选的文件夹",
+                color = iosSecondaryLabel(),
+                fontSize = 13.sp,
+            )
+        }
 
-            IOS26Panel(Modifier.fillMaxWidth()) {
+        Spacer(Modifier.height(14.dp))
+
+        IOS26Panel(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    text = "目标格式",
+                    text = "待转换",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.fillMaxWidth(),
                     color = iosLabel(),
+                    modifier = Modifier.weight(1f),
                 )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    imageFormats.forEach { format ->
-                        FormatChipSmall(
-                            format = format,
-                            selected = selectedFormat == format,
-                            onClick = { selectedFormat = format },
-                            modifier = Modifier.weight(1f),
+                if (sources.isNotEmpty() && !running) {
+                    Text(
+                        text = "清空",
+                        fontSize = 14.sp,
+                        color = iosBlue(),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                sources = emptyList()
+                                results = emptyList()
+                                status = ""
+                                error = null
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            if (sources.isEmpty()) {
+                Text(
+                    text = "还没选图片，一次最多 $MAX_BATCH 张",
+                    color = iosSecondaryLabel(),
+                    fontSize = 14.sp,
+                )
+            } else {
+                Text(
+                    text = "已选 ${sources.size} 张",
+                    color = iosSecondaryLabel(),
+                    fontSize = 14.sp,
+                )
+                Spacer(Modifier.height(10.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(sources) { uri ->
+                        AsyncImage(
+                            model = uri,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(IOSCornerSmall),
                         )
                     }
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text(
-                    text = statusText,
-                    color = if (statusText.contains("失败")) iosError()
-                    else iosSecondaryLabel(),
-                    fontSize = 14.sp,
-                )
-
-                if (isProcessing) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    IOS27CircularProgressIndicator(modifier = Modifier, size = 40.dp)
-                }
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                IOS26OutlinedButton(
-                    text = "选择图片",
-                    onClick = { imagePicker.launch("image/*") },
-                    modifier = Modifier.weight(1f),
-                )
-
-                IOS26Button(
-                    text = "转换",
-                    onClick = {
-                        selectedUri?.let { uri ->
-                            isProcessing = true
-                            statusText = "转换为 ${selectedFormat.name} 中..."
-                            CoroutineScope(Dispatchers.IO).launch {
-                                try {
-                                    convertImage(context, uri, selectedFormat)
-                                    withContext(Dispatchers.Main) {
-                                        isProcessing = false
-                                        statusText = "转换完成！"
-                                        Toast.makeText(context, "${selectedFormat.name} 已保存", Toast.LENGTH_SHORT).show()
-                                    }
-                                } catch (e: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        isProcessing = false
-                                        statusText = "转换失败: ${e.message}"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = selectedUri != null && !isProcessing,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(40.dp))
         }
 
-        // Pinned iOS 26 blur header
-        IOS26BlurHeader(
-            title = "图片转格式",
-            backdrop = headerBackdrop,
-            scrolled = headerScrolled,
-            modifier = Modifier.align(Alignment.TopCenter),
-            onBack = onBack,
-        )
+        Spacer(Modifier.height(14.dp))
+
+        if (running) {
+            IOS26Panel(Modifier.fillMaxWidth()) {
+                ConvertProgress(fraction, status)
+            }
+            Spacer(Modifier.height(14.dp))
+        }
+
+        if (!error.isNullOrBlank()) {
+            Text(
+                text = error.orEmpty(),
+                color = iosError(),
+                fontSize = 14.sp,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(14.dp))
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (running) {
+                IOS26OutlinedButton(
+                    text = "取消",
+                    onClick = { job?.cancel() },
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                IOS26OutlinedButton(
+                    text = "选择图片",
+                    onClick = { picker.launch("image/*") },
+                    modifier = Modifier.weight(1f),
+                )
+                IOS26Button(
+                    text = if (sources.size > 1) "转成 ${target.label}" else "转换",
+                    onClick = { startConversion() },
+                    modifier = Modifier.weight(1f),
+                    enabled = sources.isNotEmpty(),
+                )
+            }
+        }
+
+        if (results.isNotEmpty()) {
+            Spacer(Modifier.height(20.dp))
+            IOS26Panel(Modifier.fillMaxWidth()) {
+                Text(
+                    text = "已保存 ${results.size} 个文件",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = iosLabel(),
+                )
+                Spacer(Modifier.height(4.dp))
+                results.forEach { file ->
+                    ConvertFileRow(
+                        name = file.name,
+                        detail = file.detail,
+                        onOpen = { runCatching { MediaActions.open(context, Uri.parse(file.uri)) } },
+                        onShare = { runCatching { MediaActions.share(context, Uri.parse(file.uri)) } },
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun FormatChipSmall(
-    format: ImageFormat,
+private fun ImageTargetChip(
+    format: ImageTarget,
     selected: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val background by androidx.compose.animation.animateColorAsState(
-        if (selected) iosBlue() else iosTertiaryBackground(),
-        animationSpec = androidx.compose.animation.core.tween(180),
-        label = "formatChipBg",
+    val background by animateColorAsState(
+        targetValue = if (selected) iosBlue() else iosTertiaryBackground(),
+        animationSpec = tween(180),
+        label = "imageTargetChip",
     )
     val haptic = LocalHapticFeedback.current
     Box(
@@ -265,11 +314,11 @@ private fun FormatChipSmall(
             .clip(RoundedCornerShape(12.dp))
             .background(background)
             .border(
-                width = if (selected) 0.5.dp else 0.5.dp,
+                width = 0.5.dp,
                 color = if (selected) iosBlue() else iosSeparator().copy(alpha = 0.5f),
                 shape = RoundedCornerShape(12.dp),
             )
-            .clickable {
+            .clickable(enabled = enabled) {
                 haptic.performHapticFeedback(HapticFeedbackType.Confirm)
                 onClick()
             }
@@ -277,7 +326,7 @@ private fun FormatChipSmall(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = format.name,
+            text = format.label,
             fontWeight = FontWeight.SemiBold,
             fontSize = 14.sp,
             color = if (selected) Color.White else iosLabel(),
@@ -285,45 +334,22 @@ private fun FormatChipSmall(
     }
 }
 
-private suspend fun convertImage(
-    context: android.content.Context,
-    imageUri: Uri,
-    format: ImageFormat,
-) = withContext(Dispatchers.IO) {
-    val inputStream = context.contentResolver.openInputStream(imageUri)
-    val bitmap = BitmapFactory.decodeStream(inputStream)
-    inputStream?.close()
-
-    if (bitmap == null) throw Exception("无法解码图片")
-
-    val contentValues = ContentValues().apply {
-        put(MediaStore.Images.Media.DISPLAY_NAME, "LinkGrab_${System.currentTimeMillis()}.${format.ext}")
-        put(MediaStore.Images.Media.MIME_TYPE, format.mimeType)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/LinkGrab")
-            put(MediaStore.Images.Media.IS_PENDING, 1)
+/** 从落盘后的 uri 读真实文件名和大小 —— MediaStore 遇到重名会自动加后缀，不能拿原名字猜。 */
+private fun describe(context: Context, uri: Uri, format: ImageTarget): Pair<String, String> {
+    var name = "LinkGrab.${format.ext}"
+    var size = 0L
+    runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+            null, null, null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                cursor.getString(0)?.let { name = it }
+                if (!cursor.isNull(1)) size = cursor.getLong(1)
+            }
         }
     }
-
-    val resolver = context.contentResolver
-    val outputUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-        ?: throw Exception("无法创建文件")
-
-    resolver.openOutputStream(outputUri)?.use { outputStream ->
-        val compressFormat = when (format.ext) {
-            "jpg" -> Bitmap.CompressFormat.JPEG
-            "png" -> Bitmap.CompressFormat.PNG
-            "webp" -> Bitmap.CompressFormat.WEBP_LOSSY
-            else -> Bitmap.CompressFormat.JPEG
-        }
-        bitmap.compress(compressFormat, 95, outputStream)
-    }
-
-    bitmap.recycle()
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        contentValues.clear()
-        contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-        resolver.update(outputUri, contentValues, null, null)
-    }
+    val detail = if (size > 0) "${format.label} · ${fmtBytes(size)}" else format.label
+    return name to detail
 }

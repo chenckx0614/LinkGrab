@@ -60,6 +60,7 @@ import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
 import com.linkgrab.app.ui.theme.IOSGreen
 import com.linkgrab.app.ui.theme.iosTertiaryBackground
+import com.linkgrab.app.ui.util.MediaActions
 import com.linkgrab.app.viewmodel.DownloadStatus
 import com.linkgrab.app.viewmodel.DownloadTaskItem
 import com.linkgrab.app.viewmodel.MainViewModel
@@ -412,51 +413,15 @@ private fun formatBytes(bytes: Long): String = when {
 
 /** 打开已保存的图片/视频：MediaStore uri 直接交给系统（相册、视频播放器都认）。 */
 private fun openSavedMedia(context: Context, uriString: String) {
-    val uri = Uri.parse(uriString)
-    val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: "*/*"
-    val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, mime)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    val ok = runCatching { context.startActivity(intent) }.isSuccess
-    if (!ok) Toast.makeText(context, "没有能打开这个文件的应用", Toast.LENGTH_SHORT).show()
+    MediaActions.open(context, Uri.parse(uriString))
 }
 
 /** 分享已保存的文件。 */
 private fun shareSavedMedia(context: Context, uriString: String) {
-    val uri = Uri.parse(uriString)
-    val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: "*/*"
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = mime
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    val ok = runCatching {
-        context.startActivity(Intent.createChooser(intent, "分享到"))
-    }.isSuccess
-    if (!ok) Toast.makeText(context, "没有可用的分享方式", Toast.LENGTH_SHORT).show()
+    MediaActions.share(context, Uri.parse(uriString))
 }
 
 /** 复制形如 “Pictures/LinkGrab/抖音/20261123/xxx.jpg” 的位置，方便去文件管理器里找。 */
 private fun copySavedLocation(context: Context, uriString: String) {
-    val uri = Uri.parse(uriString)
-    val location = runCatching {
-        context.contentResolver.query(
-            uri,
-            arrayOf(MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.DISPLAY_NAME),
-            null, null, null,
-        )?.use { cursor ->
-            if (!cursor.moveToFirst()) return@use null
-            val dir = cursor.getString(0).orEmpty().trimEnd('/')
-            val name = cursor.getString(1).orEmpty()
-            listOf(dir, name).filter { it.isNotBlank() }.joinToString("/").ifBlank { null }
-        }
-    }.getOrNull()
-    if (location == null) {
-        Toast.makeText(context, "读不到保存位置", Toast.LENGTH_SHORT).show()
-        return
-    }
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-    clipboard?.setPrimaryClip(ClipData.newPlainText("path", location))
-    Toast.makeText(context, "已复制：$location", Toast.LENGTH_SHORT).show()
+    MediaActions.copyLocation(context, Uri.parse(uriString))
 }

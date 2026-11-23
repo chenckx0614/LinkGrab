@@ -15,8 +15,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 400
-        versionName = "3.4.7"
+        versionCode = 401
+        versionName = "3.4.8"
     }
 
     // 永久签名：密钥在 app/linkgrab-sign.jks（已 gitignore），密码在 local.properties
@@ -133,8 +133,8 @@ dependencies {
     // Shimmer - Loading Animation
     implementation(libs.compose.shimmer)
 
-    // FFmpeg Kit - Media processing (min variant for smaller size)
-    implementation(libs.ffmpeg.kit.min)
+    // 视频转音频不再依赖 ffmpeg-kit：作者已归档，aar 也从 Maven Central 全部下架（连本地缓存
+    // 之外的干净环境都拉不到），改用 MediaExtractor / MediaMuxer / MediaCodec 走平台能力。
 
     // ZXing core：从相册图片里识别二维码（纯 Java，约 0.5MB，不需要相机权限）
     implementation("com.google.zxing:core:3.5.3")

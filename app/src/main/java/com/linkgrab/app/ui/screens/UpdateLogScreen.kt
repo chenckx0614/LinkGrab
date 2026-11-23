@@ -24,6 +24,14 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.4.8", "2026-11-23", listOf(
+        "图片转换可以一次选多张",
+        "转出来的 BMP 能正常打开了",
+        "大图转换不会再把应用撑崩",
+        "视频转音频快了很多，中途可以取消",
+        "转换完的文件能直接打开或分享",
+        "安装包小了十几兆",
+    )),
     UpdateLogItem("3.4.7", "2026-11-23", listOf(
         "下载完成的文件可以直接打开或分享",
         "下载失败会自动重试两次",
