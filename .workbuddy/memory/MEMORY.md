@@ -27,5 +27,6 @@
 - ResultScreen 底栏 backdrop 必须用独立的 contentBackdrop，不能采样整个 NavHost（循环引用会崩溃）。
 - 图标处理先看像素数据再看视觉：用户给的"透明图标"可能烙有棋盘格假透明（20px 白灰格、全不透明）；Launcher 图标正确做法=前景完整卡片居中(视口96%)+透明背景，禁止自己拟合渐变/抠 logo 重建（已被用户否掉两次）。
 - **自适应图标安全区规则**（3.0.34/3.0.35 踩坑）：系统只显示 108dp 画布中央 72dp，再叠启动器遮罩。前景 logo 必须整体落在圆心半径 66dp（432px 画布上 ≤132px/对角≤264px）内，否则必被裁。前景只放 logo（透明底），渐变放背景层铺满；旧版 mipmap 内容缩进内切圆（对角≤边长，约 70%）。验证要模拟"视口裁切+遮罩"双重裁切，且只验前景像素（背景铺满被裁是正常的）。
+- **ffmpeg-kit 不要再引入**（3.4.8）：作者已归档，`com.arthenica:ffmpeg-kit-*` 的 aar/pom 已从 Maven Central 全部下架（6.0-2、6.0.LTS 均 404），只剩本机 ~/.gradle 缓存 → 新克隆和 CI 必然构建失败。工具箱的转码已改为平台能力：MediaExtractor/MediaMuxer 直搬 AAC 出 M4A，MediaCodec 解码 PCM + 手写 RIFF 出 WAV，BMP 用手写 24 位编码器。MP3/OGG/FLAC 因此无法支持（纯 Java LAME 移植依赖 javax.sound.sampled，Android 没有）。
 ## 发布约定\n- Gitee 仓库附件配额 1GB：Release 附件只保留最近两个版本，发新包前删旧附件（本地 dist/ 有全量备份）。
 - 签名：release 用固定 keystore app/linkgrab-sign.jks（gitignored），密码在 local.properties 的 LINKGRAB_*（gitignored，路径用正斜杠）。**此 keystore 丢失 = 所有用户必须卸载重装，务必备份**（建议复制到云盘/安全位置）。
