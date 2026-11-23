@@ -88,10 +88,11 @@ class ParseRepository(context: Context) {
     /**
      * Parse media from a share URL. Native parser first, legacy chain as fallback.
      */
-    suspend fun parse(url: String): Result<MediaResult> {
+    suspend fun parse(url: String, onStage: (String) -> Unit = {}): Result<MediaResult> {
         val cleanUrl = extractUrl(url)
+        onStage("正在获取内容")
         return when (detectPlatform(cleanUrl)) {
-            Platform.DOUYIN -> parseDouyin(cleanUrl)
+            Platform.DOUYIN -> parseDouyin(cleanUrl, onStage)
             Platform.XIAOHONGSHU -> withContext(Dispatchers.IO) {
                 // 注意：整个 XHS 分支必须在 IO 线程 —— expandShareLink 是阻塞
                 // 网络请求，在主线程协程里调用会抛 NetworkOnMainThreadException。
@@ -227,7 +228,11 @@ class ParseRepository(context: Context) {
     }
 
     /** Native has priority. A slow or unsuccessful first attempt starts the browser. */
-    private suspend fun parseDouyin(cleanUrl: String): Result<MediaResult> = coroutineScope {
+    private suspend fun parseDouyin(
+        cleanUrl: String,
+        onStage: (String) -> Unit = {},
+    ): Result<MediaResult> = coroutineScope {
+        onStage("正在获取作品信息")
         val parser = DouyinParser()
         val nativeMissed = CompletableDeferred<Unit>()
         val native = async {
@@ -244,6 +249,8 @@ class ParseRepository(context: Context) {
         }
         if (earlySuccess != null) return@coroutineScope earlySuccess
 
+        // 原生这一枪没打中（多半是被风控拦了），接下来要让用户知道在换路子
+        onStage("正在打开作品页")
         val browser = async {
             try {
                 legacyParser.parseDouyinInWebView(cleanUrl)
@@ -254,6 +261,7 @@ class ParseRepository(context: Context) {
             }
         }
         val fallback = async {
+            onStage("正在尝试备用接口")
             val result = native.await()
             if (result.isSuccess || parser.sawNote || "/note/" in cleanUrl ||
                 result.exceptionOrNull()?.message?.contains("图集") == true

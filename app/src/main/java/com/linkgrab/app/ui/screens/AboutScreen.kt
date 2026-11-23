@@ -8,6 +8,10 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,8 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -45,15 +53,19 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalUriHandler
 import com.linkgrab.app.BuildConfig
 import com.linkgrab.app.R
+import com.linkgrab.app.ui.liquid.IOS26GlassDialog
+import com.linkgrab.app.ui.theme.IOS26Button
 import com.linkgrab.app.ui.theme.IOS26Canvas
 import com.linkgrab.app.ui.theme.IOS26Divider
 import com.linkgrab.app.ui.theme.IOS26IconSize
+import com.linkgrab.app.ui.theme.IOS26OutlinedButton
 import com.linkgrab.app.ui.theme.IOS26PageHeader
 import com.linkgrab.app.ui.theme.IOS26Panel
 import com.linkgrab.app.ui.theme.IOS26StickyPage
 import com.linkgrab.app.ui.theme.iosDisclosureColor
 import com.linkgrab.app.ui.theme.iosLabel
 import com.linkgrab.app.ui.theme.iosSecondaryLabel
+import com.linkgrab.app.util.CrashLogger
 
 /**
  * 关于应用（「我的」→ 二级页）：信息架构移植自 Nexio 课程表的 AboutActivity——
@@ -90,6 +102,10 @@ fun AboutScreen(
         drawable.draw(canvas)
         bitmap.asImageBitmap()
     }
+
+    // 崩溃日志：有记录时在页面里露出入口，方便复制后附在反馈里
+    var crashLog by remember { mutableStateOf(CrashLogger.read(context)) }
+    var showCrashLog by remember { mutableStateOf(false) }
 
     IOS26Canvas {
         IOS26StickyPage(
@@ -214,6 +230,46 @@ fun AboutScreen(
                 }
             }
 
+            // ===== 上次崩溃（仅在有记录时出现） =====
+            crashLog?.let { log ->
+                item {
+                    IOS26Panel(Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    showCrashLog = true
+                                }
+                                .padding(horizontal = 4.dp, vertical = 13.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "上次运行出过错",
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = iosLabel(),
+                                )
+                                Text(
+                                    "点击查看错误信息，复制后可以附在反馈里",
+                                    fontSize = 14.sp,
+                                    color = iosSecondaryLabel(),
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = iosDisclosureColor(),
+                                modifier = Modifier.size(IOS26IconSize.Disclosure),
+                            )
+                        }
+                    }
+                }
+            }
+
             // ===== 卡片2：更新日志入口 + 内嵌最近 3 条（第一条默认展开） =====
             item {
                 val recent = recentLogs.take(3)
@@ -305,6 +361,63 @@ fun AboutScreen(
                     fontSize = 12.sp,
                     color = iosSecondaryLabel(),
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
+
+    if (showCrashLog) {
+        val log = crashLog.orEmpty()
+        IOS26GlassDialog(onDismissRequest = { showCrashLog = false }) {
+            Text(
+                "错误日志",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = iosLabel(),
+            )
+            Text(
+                "把这段内容复制到反馈里，能让问题定位快很多",
+                fontSize = 13.sp,
+                color = iosSecondaryLabel(),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Spacer(Modifier.size(12.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    log,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    color = iosSecondaryLabel(),
+                )
+            }
+            Spacer(Modifier.size(16.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                IOS26OutlinedButton(
+                    text = "清空",
+                    onClick = {
+                        CrashLogger.clear(context)
+                        crashLog = null
+                        showCrashLog = false
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                IOS26Button(
+                    text = "复制",
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        clipboard?.setPrimaryClip(ClipData.newPlainText("crash", log))
+                        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+                        showCrashLog = false
+                    },
+                    modifier = Modifier.weight(1f),
                 )
             }
         }

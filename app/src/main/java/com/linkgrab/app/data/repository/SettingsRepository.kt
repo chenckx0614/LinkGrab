@@ -29,6 +29,8 @@ class SettingsRepository(private val context: Context) {
         private val CLIPBOARD_DETECT_KEY = intPreferencesKey("clipboard_auto_detect")
         private val SWIPE_SWITCH_KEY = intPreferencesKey("swipe_switch_pages")
         private val QUALITY_LABEL_KEY = stringPreferencesKey("preferred_quality_label")
+        /** 用户用系统文件选择器挑的保存目录（SAF tree uri）；空 = 存到相册默认位置。 */
+        private val SAVE_TREE_KEY = stringPreferencesKey("custom_save_tree")
     }
 
     val colorMode: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -183,6 +185,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun setPreferredQuality(label: String) {
         context.dataStore.edit { preferences ->
             preferences[QUALITY_LABEL_KEY] = label
+        }
+    }
+
+    /** 自定义保存目录（SAF）；null 表示存到相册/视频库的默认位置。 */
+    val customSaveTree: Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[SAVE_TREE_KEY]?.takeIf { it.isNotBlank() }
+    }
+
+    suspend fun setCustomSaveTree(treeUri: String?) {
+        context.dataStore.edit { preferences ->
+            if (treeUri.isNullOrBlank()) preferences.remove(SAVE_TREE_KEY) else preferences[SAVE_TREE_KEY] = treeUri
         }
     }
 }

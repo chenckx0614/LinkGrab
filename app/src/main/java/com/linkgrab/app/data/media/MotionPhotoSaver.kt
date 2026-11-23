@@ -32,6 +32,9 @@ internal class MotionPhotoSaver(
         relativePath: String,
         checkpoint: () -> Unit,
         onProgress: suspend (Int) -> Unit,
+        /** 用户挑的自定义目录（SAF）；null = 存相册。 */
+        customTree: Uri? = null,
+        customSubDirs: List<String> = emptyList(),
     ): Uri = withContext(Dispatchers.IO) {
         val job = currentCoroutineContext()
         val check = { job.ensureActive(); checkpoint() }
@@ -86,7 +89,13 @@ internal class MotionPhotoSaver(
                 put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
-            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            val custom = customTree?.let {
+                com.linkgrab.app.data.download.SaveLocation.createInTree(
+                    context, it, customSubDirs, filename, "image/jpeg",
+                )
+            }
+            val uri = custom
+                ?: resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                 ?: throw IOException("无法创建实况照片")
             pending = uri
             resolver.openOutputStream(uri)?.buffered()?.use { output ->
@@ -97,10 +106,13 @@ internal class MotionPhotoSaver(
                 }
             } ?: throw IOException("无法写入实况照片")
             check()
-            val updated = resolver.update(uri, ContentValues().apply {
-                put(MediaStore.Images.Media.IS_PENDING, 0)
-            }, null, null)
-            if (updated != 1) throw IOException("相册写入未完成")
+            // SAF 目录里的文件创建即完整可见，没有 IS_PENDING 这一步
+            if (com.linkgrab.app.data.download.SaveLocation.isMediaStoreUri(uri)) {
+                val updated = resolver.update(uri, ContentValues().apply {
+                    put(MediaStore.Images.Media.IS_PENDING, 0)
+                }, null, null)
+                if (updated != 1) throw IOException("相册写入未完成")
+            }
             pending = null
             uri
         } finally {

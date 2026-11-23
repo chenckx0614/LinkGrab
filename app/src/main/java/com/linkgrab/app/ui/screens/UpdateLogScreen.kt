@@ -24,6 +24,14 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
+    UpdateLogItem("3.4.7", "2026-11-23", listOf(
+        "下载完成的文件可以直接打开或分享",
+        "下载失败会自动重试两次",
+        "可以自己选保存文件夹",
+        "解析时会显示正在进行到哪一步",
+        "图集多的时候没那么容易闪退",
+        "出错后能在关于页查看错误日志",
+    )),
     UpdateLogItem("3.4.6", "2026-11-15", listOf(
         "更新说明太长时不再把按钮挤出屏幕",
     )),

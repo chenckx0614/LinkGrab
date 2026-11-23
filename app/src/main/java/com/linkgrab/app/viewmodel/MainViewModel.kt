@@ -12,6 +12,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.linkgrab.app.data.download.SaveLocation
 import com.linkgrab.app.data.history.HistoryItem
 import com.linkgrab.app.data.history.HistoryRepository
 import com.linkgrab.app.data.model.MediaResult
@@ -24,6 +25,7 @@ import com.linkgrab.app.update.UpdateChecker
 import com.linkgrab.app.update.UpdateDownloader
 import com.linkgrab.app.update.UpdateResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -97,6 +99,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** 队列并发数（1-4，默认 2），每批下载开始时生效。 */
     private val _downloadConcurrency = MutableStateFlow(2)
     val downloadConcurrency: StateFlow<Int> = _downloadConcurrency.asStateFlow()
+
+    /** 自定义保存目录（SAF tree uri）；null = 存相册/视频库。 */
+    private val _customSaveTree = MutableStateFlow<String?>(null)
+    val customSaveTree: StateFlow<String?> = _customSaveTree.asStateFlow()
 
     /** 下载完成按 平台/日期 自动归档子目录，默认开。 */
     private val _autoOrganize = MutableStateFlow(true)
@@ -239,6 +245,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             settingsRepository.downloadConcurrency.collect { _downloadConcurrency.value = it }
         }
         viewModelScope.launch {
+            settingsRepository.customSaveTree.collect { _customSaveTree.value = it }
+        }
+        viewModelScope.launch {
             settingsRepository.autoOrganize.collect { _autoOrganize.value = it }
         }
         viewModelScope.launch {
@@ -300,6 +309,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleLiveUpdates(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setLiveUpdatesEnabled(enabled) }
+    }
+
+    fun setCustomSaveTree(treeUri: String?) {
+        viewModelScope.launch { settingsRepository.setCustomSaveTree(treeUri) }
     }
 
     fun setDownloadConcurrency(n: Int) {
@@ -449,16 +462,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 url = url,
                 fromCache = false,
                 alreadyDownloaded = false,
+                parseStage = "正在识别链接",
             )
+            // 站点偶尔要等十几秒才回：超时前先给一句人话，别让转圈孤零零地转
+            val slowHint = launch {
+                delay(8_000)
+                if (_uiState.value.isLoading) {
+                    _uiState.value = _uiState.value.copy(parseStage = "站点响应慢，还在等")
+                }
+            }
 
             // ① 缓存命中（同一链接 45 分钟内解析过）→ 直接秒开，一次网络请求都不发
             val cached = historyRepository.cachedResult(url)
             if (cached != null) {
+                slowHint.cancel()
                 applyParsedResult(url, platform, cached, fromCache = true)
                 return@launch
             }
 
-            parseRepository.parse(url)
+            val outcome = parseRepository.parse(url) { stage ->
+                // 缓存/成功/失败都会盖掉它，这里只负责"正在进行到哪一步"
+                if (_uiState.value.isLoading) {
+                    _uiState.value = _uiState.value.copy(parseStage = stage)
+                }
+            }
+            slowHint.cancel()
+            outcome
                 .onSuccess { result ->
                     applyParsedResult(url, platform, result, fromCache = false)
                 }
@@ -473,6 +502,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = friendlyParseError(e),
+                        parseStage = "",
                     )
                 }
         }
@@ -505,6 +535,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             url = url,
             fromCache = fromCache,
             alreadyDownloaded = alreadyDownloaded,
+            parseStage = "",
         )
         // 用一次性事件驱动跳转：首页和历史页发起的解析都能到达
         _navigateToResult.tryEmit(Unit)
@@ -757,7 +788,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         pauseFlags.remove(id) // 清掉可能残留的旗标（暂停瞬间任务恰好完结等边界）
         cancelFlags.remove(id)
         viewModelScope.launch {
-            updateTask(id) { if (it.status == DownloadStatus.Paused || it.status == DownloadStatus.Failed) it.copy(status = DownloadStatus.Queued, error = null) else it }
+            updateTask(id) {
+                if (it.status == DownloadStatus.Paused || it.status == DownloadStatus.Failed) {
+                    // 手动重试重新给满自动重试额度
+                    it.copy(status = DownloadStatus.Queued, error = null, retryCount = 0)
+                } else it
+            }
         }
         viewModelScope.launch { runDownloadTask(context, id, fileIndex = 0, fileTotal = 1) }
     }
@@ -823,6 +859,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            // 网络抖动很常见：自动退避重试两次，仍失败才交给用户。
+            // 只重试网络类错误 —— 403/404 再试也不会变好，白等十几秒。
+            if (task.retryCount < MAX_AUTO_RETRIES && e.isRetryableDownloadError()) {
+                task.partialUri?.let { uri ->
+                    runCatching { context.contentResolver.delete(android.net.Uri.parse(uri), null, null) }
+                }
+                updateTask(taskId) {
+                    it.copy(
+                        status = DownloadStatus.Queued,
+                        retryCount = task.retryCount + 1,
+                        partialUri = null,
+                        downloadedBytes = 0,
+                        progress = 0,
+                        error = null,
+                    )
+                }
+                delay(AUTO_RETRY_DELAYS_MS[task.retryCount.coerceIn(0, AUTO_RETRY_DELAYS_MS.lastIndex)])
+                runDownloadTask(context, taskId, fileIndex, fileTotal)
+                return
+            }
             // 失败时丢弃半成品（与旧版行为一致），Failed 可手动重试
             task.partialUri?.let { uri ->
                 runCatching { context.contentResolver.delete(android.net.Uri.parse(uri), null, null) }
@@ -835,14 +891,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun runMotionPhotoTask(context: Context, task: DownloadTaskItem) {
         val saver = com.linkgrab.app.data.media.MotionPhotoSaver(httpClient) { buildMediaRequest(it, null) }
-        saver.save(context, requireNotNull(task.motionImageUrl), task.urls, task.filename,
+        val saved = saver.save(context, requireNotNull(task.motionImageUrl), task.urls, task.filename,
             organizeRelativePath(false, task.platform),
             checkpoint = { checkPauseCancel(task.id) },
             onProgress = { progress ->
                 updateTask(task.id) { it.copy(progress = progress) }
                 _downloadState.value = DownloadState.Downloading(progress)
-            })
-        updateTask(task.id) { it.copy(status = DownloadStatus.Success, progress = 100, partialUri = null) }
+            },
+            customTree = _customSaveTree.value?.let { android.net.Uri.parse(it) },
+            customSubDirs = organizeSubDirs(task.platform))
+        updateTask(task.id) {
+            it.copy(status = DownloadStatus.Success, progress = 100, partialUri = null, savedUri = saved.toString())
+        }
     }
 
     /**
@@ -885,16 +945,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 if (uri != null) runCatching { resolver.delete(uri, null, null) } // 不支持 Range，推倒重来
                 written = 0
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
-                    put(MediaStore.Images.Media.MIME_TYPE, mime)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        put(MediaStore.Images.Media.RELATIVE_PATH, organizeRelativePath(isVideo = false, platform = task.platform))
-                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                // 用户挑过保存目录就写那儿（SAF），失败/没挑就照旧进相册
+                val customUri = _customSaveTree.value
+                    ?.let { android.net.Uri.parse(it) }
+                    ?.let { tree ->
+                        SaveLocation.createInTree(
+                            context, tree, organizeSubDirs(task.platform), displayName, mime,
+                        )
                     }
+                uri = customUri ?: run {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                        put(MediaStore.Images.Media.MIME_TYPE, mime)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Images.Media.RELATIVE_PATH, organizeRelativePath(isVideo = false, platform = task.platform))
+                            put(MediaStore.Images.Media.IS_PENDING, 1)
+                        }
+                    }
+                    resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                        ?: throw Exception("Failed to create file")
                 }
-                uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                    ?: throw Exception("Failed to create file")
                 uriString = uri.toString()
                 updateTask(task.id) { it.copy(partialUri = uriString, downloadedBytes = 0) }
             }
@@ -922,12 +992,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && SaveLocation.isMediaStoreUri(uri!!)) {
                 val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
                 resolver.update(uri!!, done, null, null)
             }
             updateTask(task.id) {
-                it.copy(status = DownloadStatus.Success, partialUri = null, progress = 100, downloadedBytes = written, totalBytes = totalBytes)
+                it.copy(
+                    status = DownloadStatus.Success,
+                    partialUri = null,
+                    savedUri = uri.toString(),
+                    progress = 100,
+                    downloadedBytes = written,
+                    totalBytes = totalBytes,
+                )
             }
         }
     }
@@ -1003,12 +1080,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // 416 = 半成品其实已经写满（暂停时机踩在结尾），直接收尾成功
             if (resp.code == 416 && uriString != null) {
                 val uri = android.net.Uri.parse(uriString!!)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && SaveLocation.isMediaStoreUri(uri)) {
                     val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
                     resolver.update(uri, done, null, null)
                 }
                 updateTask(task.id) {
-                    it.copy(status = DownloadStatus.Success, partialUri = null, candidateIndex = 0, progress = 100)
+                    it.copy(
+                        status = DownloadStatus.Success,
+                        partialUri = null,
+                        savedUri = uri.toString(),
+                        candidateIndex = 0,
+                        progress = 100,
+                    )
                 }
                 return
             }
@@ -1026,16 +1109,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 if (uri != null) runCatching { resolver.delete(uri, null, null) }
                 written = 0
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.Video.Media.DISPLAY_NAME, task.filename)
-                    put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        put(MediaStore.Video.Media.RELATIVE_PATH, organizeRelativePath(isVideo = true, platform = task.platform))
-                        put(MediaStore.Video.Media.IS_PENDING, 1)
+                val customUri = _customSaveTree.value
+                    ?.let { android.net.Uri.parse(it) }
+                    ?.let { tree ->
+                        SaveLocation.createInTree(
+                            context, tree, organizeSubDirs(task.platform), task.filename, "video/mp4",
+                        )
                     }
+                uri = customUri ?: run {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Video.Media.DISPLAY_NAME, task.filename)
+                        put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Video.Media.RELATIVE_PATH, organizeRelativePath(isVideo = true, platform = task.platform))
+                            put(MediaStore.Video.Media.IS_PENDING, 1)
+                        }
+                    }
+                    resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
+                        ?: throw Exception("Failed to create file")
                 }
-                uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
-                    ?: throw Exception("Failed to create file")
                 uriString = uri.toString()
                 updateTask(task.id) { it.copy(partialUri = uriString, downloadedBytes = 0) }
             }
@@ -1063,14 +1155,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && SaveLocation.isMediaStoreUri(uri!!)) {
                 val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
                 resolver.update(uri!!, done, null, null)
             }
             updateTask(task.id) {
-                it.copy(status = DownloadStatus.Success, partialUri = null, candidateIndex = 0, progress = 100, downloadedBytes = written, totalBytes = totalBytes)
+                it.copy(
+                    status = DownloadStatus.Success,
+                    partialUri = null,
+                    savedUri = uri.toString(),
+                    candidateIndex = 0,
+                    progress = 100,
+                    downloadedBytes = written,
+                    totalBytes = totalBytes,
+                )
             }
         }
+    }
+
+    /** 自定义目录下的子目录（不含 Pictures/Movies 根）：`LinkGrab/平台/yyyyMMdd`。 */
+    private fun organizeSubDirs(platform: String?): List<String> {
+        val dirs = mutableListOf("LinkGrab")
+        if (_autoOrganize.value && platform != null) {
+            dirs += platform
+            dirs += java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.CHINA).format(java.util.Date())
+        }
+        return dirs
     }
 
     /** 3.0 自动归档：开且知道平台 → `LinkGrab/平台/yyyyMMdd`，否则 `LinkGrab`。 */
@@ -1192,6 +1302,8 @@ data class ParseUiState(
     val fromCache: Boolean = false,
     /** 这篇作品之前已经保存过了（结果页据此提示「再存一份」）。 */
     val alreadyDownloaded: Boolean = false,
+    /** 解析进行中的阶段提示：让几秒钟的等待不再是黑盒。 */
+    val parseStage: String = "",
 )
 
 sealed class DownloadState {
@@ -1227,12 +1339,35 @@ data class DownloadTaskItem(
     val partialUri: String? = null,
     /** 视频多候选时当前进行到的候选下标。 */
     val candidateIndex: Int = 0,
+    /** 完成后成品在 MediaStore 里的 uri：下载管理里可以直接打开/分享。 */
+    val savedUri: String? = null,
+    /** 已经自动重试过几次（手动重试会清零）。 */
+    val retryCount: Int = 0,
     val error: String? = null,
     /** Non-null for a JPEG + MP4 Motion Photo task. Pause/retry restarts packaging. */
     val motionImageUrl: String? = null,
 )
 
 data class MotionPhotoDownload(val imageUrl: String, val videoUrls: List<String>, val filename: String)
+
+/** 失败后自动重试次数与退避间隔（第 n 次失败后用第 n 个间隔）。 */
+private const val MAX_AUTO_RETRIES = 2
+private val AUTO_RETRY_DELAYS_MS = longArrayOf(1_200L, 3_500L)
+
+/**
+ * 只重试"等一会儿可能就好了"的错误：断连、超时、5xx。
+ * 403/404、返回网页、写入失败之类重试没意义。
+ */
+private fun Throwable.isRetryableDownloadError(): Boolean {
+    if (this is java.io.IOException) return true
+    val message = message.orEmpty()
+    val lower = message.lowercase()
+    return lower.startsWith("http 5") ||
+        "timeout" in lower ||
+        "timed out" in lower ||
+        "empty response" in lower ||
+        "connection" in lower
+}
 
 /** worker 内部控制流信号：不是错误，上层据此转成 Paused/Canceled 状态。 */
 private class TaskPausedSignal : Exception()

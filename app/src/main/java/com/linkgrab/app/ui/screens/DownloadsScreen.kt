@@ -1,5 +1,8 @@
 package com.linkgrab.app.ui.screens
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,10 +17,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.animation.core.animateFloatAsState
@@ -25,6 +31,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.documentfile.provider.DocumentFile
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +63,13 @@ import com.linkgrab.app.ui.theme.iosTertiaryBackground
 import com.linkgrab.app.viewmodel.DownloadStatus
 import com.linkgrab.app.viewmodel.DownloadTaskItem
 import com.linkgrab.app.viewmodel.MainViewModel
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.MediaStore
+import android.widget.Toast
 import java.util.Locale
 
 /**
@@ -67,6 +84,25 @@ fun DownloadsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
     val autoOrganize by viewModel.autoOrganize.collectAsState()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val customSaveTree by viewModel.customSaveTree.collectAsState()
+    val saveTreeName = remember(customSaveTree) {
+        customSaveTree?.let { tree ->
+            runCatching { DocumentFile.fromTreeUri(context, Uri.parse(tree))?.name }.getOrNull()
+        }
+    }
+    // 用系统文件选择器挑目录，并持久化读写权限（重启后还能往这个目录写）
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        }
+        viewModel.setCustomSaveTree(uri.toString())
+        Toast.makeText(context, "之后的下载会存到新目录", Toast.LENGTH_SHORT).show()
+    }
 
     IOS26Canvas {
         IOS26StickyPage(
@@ -117,6 +153,50 @@ fun DownloadsScreen(viewModel: MainViewModel, onBack: () -> Unit) {
                         "按平台/日期归档到子文件夹",
                     ) {
                         IOS26Switch(checked = autoOrganize, onCheckedChange = { viewModel.setAutoOrganize(it) })
+                    }
+                    IOS26Divider(Modifier.padding(vertical = 4.dp))
+                    IOS26ListRow(
+                        "保存位置",
+                        saveTreeName?.let { "自定义目录：$it" }
+                            ?: "默认存到相册 / 视频库的 LinkGrab 文件夹",
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (saveTreeName != null) {
+                                Text(
+                                    "恢复默认",
+                                    fontSize = 14.sp,
+                                    color = iosSecondaryLabel(),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                            viewModel.setCustomSaveTree(null)
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                )
+                            }
+                            Text(
+                                if (saveTreeName != null) "更改" else "选择",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = iosBlue(),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .clickable {
+                                        haptic.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                        pickFolder.launch(
+                                            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                                                addFlags(
+                                                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                                        Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                                                )
+                                            }
+                                        )
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -181,9 +261,17 @@ private fun TaskRow(
     onResume: () -> Unit,
     onCancel: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var showMenu by remember { mutableStateOf(false) }
+    // 已完成的任务点一下直接打开：以前这里四个按钮全空，存完还得自己去相册翻
+    val savedUri = task.savedUri?.takeIf { task.status == DownloadStatus.Success }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (savedUri != null) Modifier.clickable { openSavedMedia(context, savedUri) }
+                else Modifier
+            )
             .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -262,7 +350,34 @@ private fun TaskRow(
             DownloadStatus.Paused -> RowButton(Icons.Default.PlayArrow, "继续", onResume)
             DownloadStatus.Failed -> RowButton(Icons.Default.Refresh, "重试", onResume)
             DownloadStatus.Canceled -> {}
-            DownloadStatus.Success -> {}
+            DownloadStatus.Success -> if (savedUri != null) {
+                Box {
+                    RowButton(Icons.Default.MoreVert, "更多", onClick = { showMenu = true })
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("打开", fontSize = 15.sp) },
+                            onClick = {
+                                showMenu = false
+                                openSavedMedia(context, savedUri)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("分享", fontSize = 15.sp) },
+                            onClick = {
+                                showMenu = false
+                                shareSavedMedia(context, savedUri)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("复制保存位置", fontSize = 15.sp) },
+                            onClick = {
+                                showMenu = false
+                                copySavedLocation(context, savedUri)
+                            },
+                        )
+                    }
+                }
+            }
         }
         if (task.status == DownloadStatus.Downloading || task.status == DownloadStatus.Queued || task.status == DownloadStatus.Paused) {
             RowButton(Icons.Default.Close, "取消", onCancel, tint = iosSecondaryLabel())
@@ -293,4 +408,55 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1 shl 20 -> String.format(Locale.CHINA, "%.1fMB", bytes / 1048576.0)
     bytes >= 1 shl 10 -> String.format(Locale.CHINA, "%.0fKB", bytes / 1024.0)
     else -> "${bytes}B"
+}
+
+/** 打开已保存的图片/视频：MediaStore uri 直接交给系统（相册、视频播放器都认）。 */
+private fun openSavedMedia(context: Context, uriString: String) {
+    val uri = Uri.parse(uriString)
+    val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: "*/*"
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, mime)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val ok = runCatching { context.startActivity(intent) }.isSuccess
+    if (!ok) Toast.makeText(context, "没有能打开这个文件的应用", Toast.LENGTH_SHORT).show()
+}
+
+/** 分享已保存的文件。 */
+private fun shareSavedMedia(context: Context, uriString: String) {
+    val uri = Uri.parse(uriString)
+    val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: "*/*"
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = mime
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    val ok = runCatching {
+        context.startActivity(Intent.createChooser(intent, "分享到"))
+    }.isSuccess
+    if (!ok) Toast.makeText(context, "没有可用的分享方式", Toast.LENGTH_SHORT).show()
+}
+
+/** 复制形如 “Pictures/LinkGrab/抖音/20261123/xxx.jpg” 的位置，方便去文件管理器里找。 */
+private fun copySavedLocation(context: Context, uriString: String) {
+    val uri = Uri.parse(uriString)
+    val location = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.DISPLAY_NAME),
+            null, null, null,
+        )?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val dir = cursor.getString(0).orEmpty().trimEnd('/')
+            val name = cursor.getString(1).orEmpty()
+            listOf(dir, name).filter { it.isNotBlank() }.joinToString("/").ifBlank { null }
+        }
+    }.getOrNull()
+    if (location == null) {
+        Toast.makeText(context, "读不到保存位置", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+    clipboard?.setPrimaryClip(ClipData.newPlainText("path", location))
+    Toast.makeText(context, "已复制：$location", Toast.LENGTH_SHORT).show()
 }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -216,7 +218,18 @@ fun HomeScreen(
                     }
                     if (state.isLoading) {
                         Spacer(Modifier.height(14.dp))
-                        IOS27CircularProgressIndicator(modifier = Modifier.padding(top = 4.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IOS27CircularProgressIndicator(modifier = Modifier.padding(top = 4.dp))
+                            // 阶段提示：解析要几秒，光转圈用户不知道是不是卡死了
+                            if (state.parseStage.isNotBlank()) {
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    state.parseStage,
+                                    fontSize = 14.sp,
+                                    color = iosSecondaryLabel(),
+                                )
+                            }
+                        }
                     }
                 }
             }

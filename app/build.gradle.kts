@@ -15,8 +15,8 @@ android {
         applicationId = "com.linkgrab.app"
         minSdk = 31
         targetSdk = 36
-        versionCode = 399
-        versionName = "3.4.6"
+        versionCode = 400
+        versionName = "3.4.7"
     }
 
     // 永久签名：密钥在 app/linkgrab-sign.jks（已 gitignore），密码在 local.properties
@@ -123,6 +123,8 @@ dependencies {
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
+    // 自定义保存目录（SAF）用：DocumentFile 比手搓 DocumentsContract 稳
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Media3 (ExoPlayer)
     implementation(libs.media3.exoplayer)

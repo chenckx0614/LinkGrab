@@ -1,0 +1,101 @@
+name: Release
+
+# 推 v* tag 时自动：校验版本号 → 构建双 ABI → 发 GitHub Release。
+# 签名用的是仓库 Secrets 里的正式 keystore；没配 Secrets 时只构建 artifact，不发布
+#（避免把 debug 签名的包发出去害用户卸载重装）。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要构建的 tag（如 v3.4.6）'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify version matches tag
+        run: |
+          set -e
+          REF="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="${REF#v}"
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+          VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
+          echo "tag=$TAG versionName=$VERSION_NAME versionCode=$VERSION_CODE"
+          if [ "$VERSION_NAME" != "$TAG" ]; then
+            echo "::error::app/build.gradle.kts 的 versionName ($VERSION_NAME) 与 tag ($TAG) 不一致"
+            exit 1
+          fi
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_ENV"
+
+      - name: Prepare signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.LINKGRAB_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.LINKGRAB_STORE_PASS }}
+          KEY_PASS: ${{ secrets.LINKGRAB_KEY_PASS }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "signing=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::未配置签名 Secrets，本次只产出未签名/调试签名的构建，不发布 Release"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > app/linkgrab-sign.jks
+          cat > local.properties <<EOF
+          sdk.dir=$ANDROID_HOME
+          LINKGRAB_KEYSTORE=app/linkgrab-sign.jks
+          LINKGRAB_STORE_PASS=$STORE_PASS
+          LINKGRAB_KEY_PASS=$KEY_PASS
+          EOF
+          echo "signing=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build release APKs
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Collect APKs
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk "out/LinkGrab-${VERSION_NAME}-arm64-v8a.apk"
+          cp app/build/outputs/apk/release/app-armeabi-v7a-release.apk "out/LinkGrab-${VERSION_NAME}-armeabi-v7a.apk"
+          ls -l out
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: LinkGrab-${{ env.VERSION_NAME }}
+          path: out/*.apk
+
+      - name: Publish GitHub Release
+        if: steps.signing.outputs.signing == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          name: LinkGrab ${{ env.VERSION_NAME }}
+          files: out/*.apk
+          generate_release_notes: false
+          body: |
+            更新说明请见应用内「设置 → 更新说明」。
+            - arm64-v8a：绝大多数 64 位手机
+            - armeabi-v7a：较老的 32 位设备

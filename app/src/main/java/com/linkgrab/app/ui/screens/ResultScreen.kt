@@ -566,7 +566,10 @@ private fun ImageResultBody(
                 ) {
                     if (heavyContentReady) {
                         AsyncImage(
-                            model = ImageRequest.Builder(context).data(imageUrl).crossfade(true).build(),
+                            // 缩略图只需格子那么大：不设解码尺寸会按原图（常见 1080x1920+）
+                            // 解码，二三十张一起就是几百 MB 内存，低端机直接 OOM
+                            model = ImageRequest.Builder(context).data(imageUrl)
+                                .size(480, 480).crossfade(true).build(),
                             contentDescription = "图片 ${index + 1}",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
@@ -687,7 +690,8 @@ private fun VideoResultBody(
                 } else {
                     result.coverUrl?.let { coverUrl ->
                         AsyncImage(
-                            model = ImageRequest.Builder(context).data(coverUrl).crossfade(true).build(),
+                            model = ImageRequest.Builder(context).data(coverUrl)
+                                .size(720, 1280).crossfade(true).build(),
                             contentDescription = "视频封面",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
@@ -703,7 +707,8 @@ private fun VideoResultBody(
         } ?: run {
             result.coverUrl?.let { coverUrl ->
                 AsyncImage(
-                    model = ImageRequest.Builder(context).data(coverUrl).crossfade(true).build(),
+                    model = ImageRequest.Builder(context).data(coverUrl)
+                        .size(720, 1280).crossfade(true).build(),
                     contentDescription = "视频封面",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -1394,7 +1399,8 @@ private fun ImagePreviewOverlay(
         if (!pagerReady && targetRect != Rect.Zero) {
             val heroRect = if (hasSource) lerp(originBounds.translate(-overlayOrigin), targetRect, p) else targetRect
             AsyncImage(
-                model = ImageRequest.Builder(context).data(images[initialIndex]).crossfade(false).build(),
+                model = ImageRequest.Builder(context).data(images[initialIndex])
+                    .size(1600, 1600).crossfade(false).build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 onState = { state ->
@@ -1698,7 +1704,9 @@ private fun ZoomablePreviewImage(
         contentAlignment = Alignment.Center,
     ) {
         AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current).data(url).crossfade(true).build(),
+            // 预览允许放大，给到 1600px 解码上限：比原图省内存，放大两倍内仍清晰
+            model = ImageRequest.Builder(LocalContext.current).data(url)
+                .size(1600, 1600).crossfade(true).build(),
             contentDescription = contentDescription,
             contentScale = ContentScale.Fit,
             onState = { state ->
