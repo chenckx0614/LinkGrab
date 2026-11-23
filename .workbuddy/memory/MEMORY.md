@@ -5,6 +5,8 @@
 - 更新日志（UpdateLogScreen.recentLogs）随版本号一起加条目。**写作规范（扒了微信/B站/网易云/Hive 的真实日志总结，用户 2026-10-28 认可此方向）**：① 每条只说一件事，动词开头（"可XX""支持XX""修复XX"），微信式短句；② 只写用户能得到什么，**永不写实现原理**（禁出现 Motion Photo 目录、内置浏览器通道、ttwid 等术语）；③ 去 AI 味 ≠ 加口语表演——"这个修好了""随便选""换了条路"这种刻意腔也是 AI 味，平实直说才对；④ 禁止"全新升级：A、B、C、D"冒号排比和一句话塞多件事的复合长句。ai-text-humanizer skill（AI味去除器）作为辅助检查。
 - 交付链路：assembleRelease（release + debug 签名 + R8），出包后双 ABI 覆盖 dist/。
 - 推送节奏：本地 commit → 用户确认 → 代理 7897 push GitHub/Gitee；Release 需用户说一声才发。
+- 签名路径判空（3.4.7 踩坑，3.4.8 修）：`file(localProps.getProperty(...,""))` 在无 local.properties 的环境（CI/新克隆）会抛 "path may not be null or empty string" 打断配置阶段。必须空串时给必然不存在的占位路径再判 `exists()`。
+- CI（release.yml）只在配了 LINKGRAB_KEYSTORE_BASE64 等 Secrets 时才发 Release；未配则 `signing=false`，仅产 artifact（debug 签名），不会污染正式包。
 
 ## UI 约定
 - 图片展示一律原比例（FillWidth），禁止 FillBounds / 固定 aspectRatio 拉伸。
