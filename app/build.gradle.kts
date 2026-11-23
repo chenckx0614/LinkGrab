@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -26,7 +27,14 @@ android {
         val f = rootProject.file("local.properties")
         if (f.exists()) f.inputStream().use { load(it) }
     }
-    val keystoreFile = file(localProps.getProperty("LINKGRAB_KEYSTORE", ""))
+    val keystorePath = localProps.getProperty("LINKGRAB_KEYSTORE", "").trim()
+    // CI 和新克隆没有 local.properties：file("") 会抛 "path may not be null or empty string"，
+    // 配置阶段就把整个构建打断。给一个必然不存在的占位路径，后面 exists() 自然为 false。
+    val keystoreFile = if (keystorePath.isEmpty()) {
+        File(rootProject.projectDir, "build/no-signing-keystore.jks")
+    } else {
+        file(keystorePath)
+    }
     signingConfigs {
         create("linkgrab") {
             if (keystoreFile.exists()) {
