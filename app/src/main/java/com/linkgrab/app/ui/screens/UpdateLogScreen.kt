@@ -24,8 +24,9 @@ data class UpdateLogItem(val version: String, val date: String, val changes: Lis
 
 /** 最近几个版本，进页面就能看到。每条尽量一句话说清，改动少的版本统一写「修复已知问题」。 */
 val recentLogs = listOf(
-    UpdateLogItem("3.4.9", "2026-11-26", listOf(
+    UpdateLogItem("3.4.10", "2026-11-26", listOf(
         "赞赏页面加上了支持者名单",
+        "名单里能看到每个人赞赏了多少",
     )),
     UpdateLogItem("3.4.8", "2026-11-23", listOf(
         "图片转换可以一次选多张",

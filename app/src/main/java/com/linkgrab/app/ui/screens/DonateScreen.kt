@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.linkgrab.app.R
@@ -78,9 +79,9 @@ fun DonateScreen(onBack: () -> Unit) {
                 }
                 item {
                     IOS26Panel(Modifier.fillMaxWidth()) {
-                        supporters.forEachIndexed { index, name ->
+                        supporters.forEachIndexed { index, supporter ->
                             if (index > 0) IOS26Divider()
-                            SupporterRow(name)
+                            SupporterRow(supporter)
                         }
                     }
                 }
@@ -89,17 +90,24 @@ fun DonateScreen(onBack: () -> Unit) {
     }
 }
 
+/** 一位支持者。金额单位元，整数不显示小数。 */
+private data class Supporter(val name: String, val amount: Double)
+
 /**
  * 赞赏名单：手动维护，按时间先后追加（新的放最后）。
- * 不加日期和金额，只留名字——名单是心意，不是账本。
+ * 只记名字和金额，不记日期——名单是心意，不是账本。
  */
 private val supporters = listOf(
-    "田柒",
+    Supporter("田柒", 10.0),
 )
 
-/** 首字圆形头像 + 名字。颜色走设计系统，两种主题下都自适应。 */
+/** 10.0 → 「¥10」，8.8 → 「¥8.8」。 */
+private fun yuanText(amount: Double): String =
+    if (amount % 1.0 == 0.0) "¥${amount.toInt()}" else "¥$amount"
+
+/** 首字圆形头像 + 名字 + 金额。颜色走设计系统，两种主题下都自适应。 */
 @Composable
-private fun SupporterRow(name: String) {
+private fun SupporterRow(supporter: Supporter) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -114,18 +122,28 @@ private fun SupporterRow(name: String) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                name.take(1),
+                supporter.name.take(1),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
                 color = iosBlue(),
             )
         }
         Text(
-            name,
+            supporter.name,
             fontSize = 16.sp,
             color = iosLabel(),
             letterSpacing = (-0.2).sp,
-            modifier = Modifier.padding(start = 12.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp),
+        )
+        Text(
+            yuanText(supporter.amount),
+            fontSize = 15.sp,
+            color = iosSecondaryLabel(),
+            letterSpacing = (-0.1).sp,
         )
     }
 }
